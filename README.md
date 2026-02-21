@@ -8,8 +8,6 @@ A SharePoint Framework webpart that aggregates appointments from multiple calend
 
 ![My Calendars webpart in SharePoint](docs/images/my-calendars-screenshot.png "My Calendars webpart in SharePoint")
 
-> *Screenshot placeholder - Please add a screenshot of the webpart showing the month view or your preferred calendar display.*
-
 ## Video
 
 > *Video demonstration placeholder - Add a video showing the calendar views, source management, and key features.*
