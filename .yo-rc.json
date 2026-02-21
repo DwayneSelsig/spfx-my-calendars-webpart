@@ -1,0 +1,19 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "useGulp": false,
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.21.1",
+    "sdksVersions": {},
+    "version": "1.22.0",
+    "libraryName": "spfx-my-calendars-webpart",
+    "libraryId": "d0dfa000-63c5-4ab8-aa78-9e3512e55dcd",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "spfx-my-calendars-webpart",
+    "solutionShortDescription": "spfx-my-calendars-webpart description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}

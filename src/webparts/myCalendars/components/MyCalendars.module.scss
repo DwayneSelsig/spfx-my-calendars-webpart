@@ -1,0 +1,24 @@
+@import '~@fluentui/react/dist/sass/References.scss';
+
+.myCalendars {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: "[theme:bodyText, default: #323130]";
+  color: var(--bodyText);
+  
+  &.teams {
+    font-family: $ms-font-family-fallbacks;
+  }
+}
+
+.commandBar {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--neutralLight, #edebe9);
+}
+
+.calendarContainer {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}

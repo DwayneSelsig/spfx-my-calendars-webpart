@@ -1,0 +1,47 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx/client-side-web-part-manifest.schema.json",
+  "id": "9c86a7fd-8a26-4829-be28-0d4cb700f4e6",
+  "alias": "MyCalendarsWebPart",
+  "componentType": "WebPart",
+
+  // The "*" signifies that the version should be taken from the package.json
+  "version": "*",
+  "manifestVersion": 2,
+
+  // If true, the component can only be installed on sites where Custom Script is allowed.
+  // Components that allow authors to embed arbitrary script code should set this to true.
+  // https://support.office.com/en-us/article/Turn-scripting-capabilities-on-or-off-1f2c515f-5d7e-448a-9fd7-835da935584f
+  "requiresCustomScript": false,
+  "supportedHosts": ["SharePointWebPart", "TeamsPersonalApp", "TeamsTab", "SharePointFullPage"],
+  "supportsThemeVariants": true,
+
+  "webApiPermissionRequests": [
+    {
+      "resource": "Microsoft Graph",
+      "scope": "Files.ReadWrite.AppFolder"
+    },
+    {
+      "resource": "Microsoft Graph",
+      "scope": "Calendars.Read"
+    },
+    {
+      "resource": "Microsoft Graph",
+      "scope": "Calendars.Read.Shared"
+    },
+    {
+      "resource": "Microsoft Graph",
+      "scope": "Sites.Read.All"
+    }
+  ],
+
+  "preconfiguredEntries": [{
+    "groupId": "cf066440-0614-43d6-98ae-0b31cf14c7c3", // https://learn.microsoft.com/en-us/sharepoint/dev/spfx/web-parts/guidance/simplify-adding-web-parts-with-preconfigured-entries#predefined-modern-groups
+    "group": { "default": "Text, media, and content" },
+    "title": { "default": "My Calendars" },
+    "description": { "default": "My Calendars description" },
+    "officeFabricIconFontName": "Calendar",
+    "properties": {
+      "description": "My Calendars"
+    }
+  }]
+}

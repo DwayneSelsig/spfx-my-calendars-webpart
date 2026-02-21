@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Apply quick patch to MyCalendars.tsx",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"(Get-Content src/webparts/myCalendars/components/MyCalendars.tsx) -replace 'public componentDidUpdate\\(prevProps: IMyCalendarsProps\\): void \\{\\s*if \\(prevProps.settings.sources \\!== this.props.settings.sources\\) \\{\\s*void this.loadAppointments\\(\\);\\s*\\}\\s*\\}', 'public componentDidUpdate(prevProps: IMyCalendarsProps): void {\\n    try {\\n      const prevJson = JSON.stringify(prevProps.settings);\\n      const currJson = JSON.stringify(this.props.settings);\\n      if (prevJson !== currJson) {\\n        void this.loadAppointments();\\n      }\\n    } catch {\\n      // Fallback to sources change detection\\n      if (prevProps.settings.sources !== this.props.settings.sources) {\\n        void this.loadAppointments();\\n      }\\n    }\\n  }' | Set-Content src/webparts/myCalendars/components/MyCalendars.tsx\"",
+			"args": [],
+			"isBackground": false
+		}
+	]
+}
