@@ -1,38 +1,95 @@
-# My Calendars SPFx Web Part
+# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/icon-dark.svg"><img src="docs/images/icon.svg" alt="icon" width="32" height="32"></picture> My Calendars
 
 ## Summary
 
-A fully customizable calendar web part for SharePoint built with SPFx and Fluent UI. This web part allows you to aggregate and display multiple ICS calendar feeds in different views including Day, Week, Month, and Schedule.
+A SharePoint Framework webpart that aggregates appointments from multiple calendar sources into unified, interactive calendar views. This solution integrates with Microsoft Exchange calendars, SharePoint lists, and ICS feeds, allowing users to visualize and manage events from diverse sources in a single interface. It supports multiple calendar views (day, week, month, schedule) with customizable work hours, time slot durations, and advanced filtering capabilities.
+
+## Screenshot
+
+![My Calendars webpart in SharePoint](docs/images/my-calendars-screenshot.png "My Calendars webpart in SharePoint")
+
+> *Screenshot placeholder - Please add a screenshot of the webpart showing the month view or your preferred calendar display.*
+
+## Video
+
+> *Video demonstration placeholder - Add a video showing the calendar views, source management, and key features.*
 
 ## Features
 
-### Multiple Calendar Views
-- **Day View**: Shows appointments for a single day with hourly time slots
-- **Week View**: Displays a full week with configurable weekend visibility
-- **Month View**: Traditional month calendar with appointment indicators
-- **Schedule View**: List-based view showing appointments chronologically
+The My Calendars webpart provides the following functionality:
 
-### Calendar Source Management
-- Add multiple ICS calendar feeds via URL
-- Configure custom colors for each calendar source
-- Enable/disable individual calendar sources
-- Support for standard ICS/iCalendar format
+- **Multi-Calendar View Support**: Display appointments in Day, Week, Month, Schedule, and Search views
+- **Multiple Calendar Sources**: Aggregate calendars from Exchange, SharePoint lists, and internet calendar feeds (ICS)
+- **Exchange Integration**: Add user's own calendars and shared mailboxes with color mapping from Outlook
+- **SharePoint Lists**: Support for custom SharePoint list calendars with configurable field mapping
+- **Internet Calendars**: Add ICS feeds with built-in CORS proxy support and fallback mechanisms
+- **Work Hours Configuration**: Set custom work day hours and time slot durations (15-60 minutes)
+- **Calendar Customization**: Toggle weekends, configure first day of week, and customize display settings
+- **Theme Support**: Light/dark theme awareness with organizational branding
+- **Calendar Management**: Enable/disable individual sources without removing them
+- **Search Functionality**: Search across all appointments from all sources
+- **User Preferences**: Store personal settings (work hours, calendar states) in OneDrive App Folder
+- **Localization Support**: English language with Dutch translations in progress
 
-### Customization Options
-- Configurable work hours (start/end time)
-- Adjustable time slot duration (15-60 minutes)
-- Show/hide weekends
-- First day of week setting
-- Default view selection
-- Color customization using CSS color-mix for semi-transparent backgrounds
+## Configuration
 
-### User Experience
-- Smooth animations and transitions
-- Skeleton loading states (Shimmer effects)
-- Responsive design
-- CommandBar for easy navigation
-- Debounced settings changes (500ms)
-- Regional date/time formatting support
+The webpart can be configured through the property pane with the following options:
+
+### View Settings
+- **Default View**: Select the initial calendar view (Day, Week, Month, or Schedule)
+- **Show Weekends**: Toggle to display or hide Saturday and Sunday
+- **Start Hour**: Configure work day start time (0-23 hours)
+- **End Hour**: Configure work day end time (0-23 hours)
+- **Slot Duration**: Set time block intervals (15, 30, 45, or 60 minutes)
+- **First Day of Week**: Choose which day to start the week on (Sunday through Saturday)
+
+### Calendar Sources
+- **Add Calendar**: Add Exchange calendars, SharePoint list calendars, or internet calendar feeds
+- **Manage Sources**: View, enable/disable, or remove calendar sources
+- **Assign Colors**: Customize the color for each calendar source
+- **Field Mapping**: Configure custom field mappings for SharePoint list calendars
+
+### ICS Proxy Settings
+- **Use Custom Proxy**: Enable a custom proxy for CORS-enabled ICS feeds
+- **Custom Proxy URL**: Specify your custom proxy endpoint
+- **Use whateverorigin.org**: Enable the free whateverorigin.org CORS proxy as a fallback
+- **Proxy Priority**: Configure the order of proxy fallbacks
+
+## Installation and Upgrades
+
+### Download or compile
+[Download the latest release](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/releases) or compile the solution (`npm run build`). The `.sppkg` file will be in `sharepoint/solution/`.
+
+### Installation
+Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions (`Calendars.Read`, `Calendars.Read.Shared`, `Files.ReadWrite.AppFolder`, and `Sites.Read.All`) when prompted.
+
+### Upgrades
+Upload the new `.sppkg` file and overwrite the existing one when prompted.
+
+> **Note:** SharePoint add-ins are being retired, but SharePoint Framework (SPFx) solutions like this one are not affected and remain fully supported.
+
+For more information, see the SharePoint App Catalog documentation:
+https://learn.microsoft.com/sharepoint/use-app-catalog
+
+## Contributing
+
+We welcome contributions from the community! Here are some ways you can help:
+
+- **Translations**: Help translate the webpart into additional languages. Dutch translations are currently in progress. If you'd like to contribute translations, please submit a pull request with the updated localization files in the `loc` folder.
+- **Feature Suggestions**: Have an idea for a new feature or improvement? Please open an issue to share your suggestion. We'd love to hear about features you'd like to see in the My Calendars webpart, such as new calendar sources, view options, or advanced filtering capabilities.
+- **Bug Reports**: Found a bug? Please open an issue with detailed steps to reproduce and your environment details.
+
+## Solution
+
+| Solution    | Author(s)                                               |
+| ----------- | ------------------------------------------------------- |
+| spfx-my-calendars-webpart | Dwayne Selsig |
+
+## Version history
+
+| Version | Date             | Comments        |
+| ------- | ---------------- | --------------- |
+| 0.0.1 | 2026-02-21          | Initial release |
 
 ## Used SharePoint Framework Version
 
@@ -47,19 +104,13 @@ A fully customizable calendar web part for SharePoint built with SPFx and Fluent
 
 ## Prerequisites
 
-None
+Before getting started, ensure your development environment is properly set up by following the [SharePoint Framework development environment setup guide](https://learn.microsoft.com/en-us/sharepoint/dev/spfx/set-up-your-development-environment).
 
-## Solution
-
-| Solution    | Author(s)                                               |
-| ----------- | ------------------------------------------------------- |
-| spfx-my-calendars-webpart | Your Name |
-
-## Version history
-
-| Version | Date             | Comments        |
-| ------- | ---------------- | --------------- |
-| 1.0     | January 7, 2026 | Initial release |
+Additional requirements:
+- Node.js version 22.14.0 or higher (and lower than 23.0.0)
+- Appropriate Microsoft Graph permissions configured in your SharePoint tenant
+- Access to a SharePoint site where the webpart can be deployed
+- Configured calendar sources (Exchange, SharePoint lists, or internet calendars)
 
 ## Disclaimer
 
@@ -71,136 +122,35 @@ None
 
 - Clone this repository
 - Ensure that you are at the solution folder
-- in the command-line run:
+- In the command-line run:
+  - `npm install @rushstack/heft --global`
   - `npm install`
-  - `npm run start` (for local testing)
-  - `npm run build` (for production build)
+  - `heft start`
 
-## Configuration
+Other build commands can be listed using `heft --help`.
 
-### Adding Calendar Sources
+To build the solution for production:
+- `npm run build`
 
-1. Edit the web part in SharePoint
-2. Open the property pane
-3. Under "Calendar Sources", click "Add Calendar Source"
-4. Configure:
-   - **Name**: Display name for the calendar
-   - **ICS URL**: Full URL to the ICS calendar feed
-   - **Color**: Hex color code for this calendar's events
-   - **Enabled**: Toggle to show/hide this calendar
+## Microsoft Graph Permissions
 
-### View Settings
+This solution requires the following Microsoft Graph permissions:
 
-Configure the following in the property pane:
+- `Calendars.Read` - To read the current user's calendars
+- `Calendars.Read.Shared` - To read calendars that have been shared with the user
+- `Files.ReadWrite.AppFolder` - To store and retrieve user settings from OneDrive App Folder
+- `Sites.Read.All` - To discover and read SharePoint list calendars
 
-- **Default View**: Choose Day, Week, Month, or Schedule
-- **Show Weekends**: Toggle weekend display in Week view
-- **Start Hour**: First hour shown in Day/Week views (0-23)
-- **End Hour**: Last hour shown in Day/Week views (0-23)
-- **Slot Duration**: Time slot size in minutes (15, 30, 45, or 60)
-- **First Day of Week**: 0=Sunday, 1=Monday, etc.
-
-### ICS Proxy (CORS)
-
-Sommige ICS-bestanden kunnen niet direct opgehaald worden door CORS-beperkingen. De webpart probeert altijd eerst de rechtstreekse URL. Als dat faalt (bijv. CORS), worden proxies geprobeerd in de volgorde die de beheerder instelt.
-
-In het property pane kun je:
-- Een of meer proxy-opties inschakelen:
-  - Eigen proxy (met invulveld voor de proxy-URL)
-  - Openbare proxy: `https://www.whateverorigin.org/`
-- De fallback-volgorde bepalen (Eerste/Tweede proxy)
-
-Tip: Voor het opzetten van een eigen CORS-proxy kun je ook deze oplossing bekijken: https://github.com/Zibri/cloudflare-cors-anywhere
-
-## Technical Details
-
-### Architecture
-
-```
-src/webparts/myCalendars/
-├── components/
-│   ├── views/
-│   │   ├── DayView.tsx
-│   │   ├── WeekView.tsx
-│   │   ├── MonthView.tsx
-│   │   ├── ScheduleView.tsx
-│   │   └── CalendarView.module.scss
-│   ├── MyCalendars.tsx (Main component)
-│   ├── MyCalendars.module.scss
-│   └── IMyCalendarsProps.ts
-├── models/
-│   ├── IAppointment.ts (Calendar event model)
-│   └── ICalendarSettings.ts (Settings interface)
-├── services/
-│   └── IcsParser.ts (ICS file parser)
-├── propertyPane/
-│   └── PropertyPaneCalendarSources.tsx (Custom property pane control)
-└── MyCalendarsWebPart.ts
-```
-
-### Settings Storage
-
-Settings are stored as a JSON string in the web part properties:
-
-```json
-{
-  "defaultView": "month",
-  "sources": [
-    {
-      "id": "source_123",
-      "name": "My Calendar",
-      "url": "https://example.com/calendar.ics",
-      "color": "#0078d4",
-      "isEnabled": true
-    }
-  ],
-  "showWeekends": true,
-  "startHour": 8,
-  "endHour": 18,
-  "slotDuration": 30,
-  "firstDayOfWeek": 1
-}
-```
-
-### ICS Parser
-
-The custom ICS parser supports:
-- Standard VEVENT format
-- All-day events (VALUE=DATE)
-- UTC and local timezones
-- Event properties: UID, SUMMARY, DESCRIPTION, LOCATION, DTSTART, DTEND, ORGANIZER
-- Line continuation
-- Escaped values
-
-### Styling
-
-Uses Fluent UI components and CSS variables for theming:
-- Respects SharePoint theme colors
-- CSS `color-mix()` for semi-transparent event backgrounds
-- Smooth animations with CSS transitions
-- Responsive layouts with Flexbox and CSS Grid
-
-## Features
-
-This web part illustrates the following concepts:
-
-- Custom ICS/iCalendar feed parsing
-- Multiple calendar aggregation
-- Fluent UI integration
-- Custom property pane controls
-- SharePoint theme integration
-- Responsive calendar layouts
-- Debounced user input
-- Skeleton loading states
-- Language-independent date/time formatting
+`Calendars.Read` and `Calendars.Read.Shared` are covered by basic calendar access consent; `Files.ReadWrite.AppFolder` and `Sites.Read.All` must be approved by a tenant admin via the API access page.
 
 ## References
 
 - [Getting started with SharePoint Framework](https://docs.microsoft.com/sharepoint/dev/spfx/set-up-your-developer-tenant)
-- [Building for Microsoft teams](https://docs.microsoft.com/sharepoint/dev/spfx/build-for-teams-overview)
+- [Building for Microsoft Teams](https://docs.microsoft.com/sharepoint/dev/spfx/build-for-teams-overview)
 - [Use Microsoft Graph in your solution](https://docs.microsoft.com/sharepoint/dev/spfx/web-parts/get-started/using-microsoft-graph-apis)
+- [Microsoft Graph Calendar API](https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0)
 - [Publish SharePoint Framework applications to the Marketplace](https://docs.microsoft.com/sharepoint/dev/spfx/publish-to-marketplace-overview)
-- [Microsoft 365 Patterns and Practices](https://aka.ms/m365pnp)
+- [Microsoft 365 Patterns and Practices](https://aka.ms/m365pnp) - Guidance, tooling, samples and open-source controls for your Microsoft 365 development
 - [Heft Documentation](https://heft.rushstack.io/)
-- [Fluent UI React](https://developer.microsoft.com/fluentui)
-- [iCalendar (RFC 5545)](https://datatracker.ietf.org/doc/html/rfc5545)
+
+Icon from [Microsoft Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT License)
