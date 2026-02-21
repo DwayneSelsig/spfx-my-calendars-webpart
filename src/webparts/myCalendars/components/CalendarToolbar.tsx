@@ -4,12 +4,10 @@ import {
     DefaultButton,
     SearchBox,
     Callout,
-    Stack,
     Text,
     IconButton
 } from '@fluentui/react';
 import { mergeStyles } from '@fluentui/react/lib/Styling';
-import styles from './MyCalendars.module.scss';
 
 export interface ICalendarToolbarProps {
     currentDate: Date;
@@ -43,7 +41,7 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
         };
     }
 
-    private handleSearchChange = (_event?: any, newValue?: string): void => {
+    private handleSearchChange = (_event?: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string): void => {
         const value = newValue || '';
         this.setState({ searchQuery: value });
         if (this.props.onSearch) {
@@ -285,7 +283,7 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
     };
 
     private renderMonthPicker = (): React.ReactElement => {
-        const { pickerMonth, pickerYear } = this.state;
+        const { pickerYear } = this.state;
         const { currentDate } = this.props;
         const currentMonth = currentDate.getMonth();
         const currentYear = currentDate.getFullYear();
@@ -480,7 +478,7 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
     };
 
     public render(): React.ReactElement {
-        const { currentDate, onToday, onNavigate, dateRangeText, viewType } = this.props;
+        const { onToday, onNavigate, dateRangeText } = this.props;
         const { isDatePickerOpen, searchQuery } = this.state;
 
         const toolbarTopStyle = mergeStyles({

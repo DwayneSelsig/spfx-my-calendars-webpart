@@ -15,7 +15,7 @@ export interface ICalendarViewProps {
 }
 
 export const DayView: React.FC<ICalendarViewProps> = (props) => {
-  const { appointments, currentDate, isLoading, startHour, endHour } = props;
+  const { appointments, currentDate, isLoading, startHour } = props;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Render full day (0-24) to allow scrolling

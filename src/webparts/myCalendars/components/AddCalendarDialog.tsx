@@ -36,7 +36,7 @@ export class AddCalendarDialog extends React.Component<IAddCalendarDialogProps> 
           <Stack.Item>
             <PrimaryButton
               text="SharePoint Calendar"
-              description="Select a calendar from a SharePoint site"
+              secondaryText="Select a calendar from a SharePoint site"
               onClick={() => handleSelectType('sharepoint')}
               style={{ width: '100%', height: 'auto', padding: '16px', textAlign: 'left' }}
             />
@@ -45,7 +45,7 @@ export class AddCalendarDialog extends React.Component<IAddCalendarDialogProps> 
           <Stack.Item>
             <PrimaryButton
               text="Exchange Calendar"
-              description="Add a calendar from your mailbox or another mailbox"
+              secondaryText="Add a calendar from your mailbox or another mailbox"
               onClick={() => handleSelectType('exchange')}
               style={{ width: '100%', height: 'auto', padding: '16px', textAlign: 'left' }}
             />
@@ -54,7 +54,7 @@ export class AddCalendarDialog extends React.Component<IAddCalendarDialogProps> 
           <Stack.Item>
             <PrimaryButton
               text="Online Calendar (ICS)"
-              description="Add a calendar from an ICS URL or paste content"
+              secondaryText="Add a calendar from an ICS URL or paste content"
               onClick={() => handleSelectType('ics')}
               style={{ width: '100%', height: 'auto', padding: '16px', textAlign: 'left' }}
             />

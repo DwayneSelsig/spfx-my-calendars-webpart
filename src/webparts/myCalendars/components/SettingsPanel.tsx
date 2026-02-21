@@ -6,7 +6,6 @@ import { ColorPicker } from '@fluentui/react/lib/ColorPicker';
 import { Toggle } from '@fluentui/react/lib/Toggle';
 import { Stack } from '@fluentui/react/lib/Stack';
 import { Label } from '@fluentui/react/lib/Label';
-import { Slider } from '@fluentui/react/lib/Slider';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Icon } from '@fluentui/react/lib/Icon';
@@ -331,7 +330,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4'
     }, () => {
       // Fetch available fields from first item
-      void this.fetchSharePointListFields(list);
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      this.fetchSharePointListFields(list);
     });
   };
 
@@ -810,8 +810,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     cursor: 'pointer',
                     transition: 'background-color 0.2s'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e1dfdd'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f2f1'}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#e1dfdd'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f3f2f1'; }}
                 >
                   <div style={{ flex: 1 }}>
                     <strong>{site.name}</strong>

@@ -36,17 +36,6 @@ interface IGraphList {
   };
 }
 
-
-
-interface ISharePointFields {
-  Title?: string;
-  Description?: string;
-  Location?: string;
-  EventDate?: string;
-  EndDate?: string;
-  fAllDayEvent?: boolean;
-}
-
 interface IGraphListItemWithFields {
   id: string;
   fields?: Record<string, unknown>;
