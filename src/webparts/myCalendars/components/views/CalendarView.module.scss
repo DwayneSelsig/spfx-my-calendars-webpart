@@ -19,6 +19,30 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  position: relative;
+}
+
+.appointmentsLayerDay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.appointmentsLayerDay .appointment {
+  pointer-events: auto;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.appointmentsLayerDay .appointmentTime {
+  font-size: 10px;
+  color: var(--neutralSecondary, #605e5c);
+  margin-top: 2px;
+  line-height: 1.2;
 }
 
 .hourRow {
@@ -45,6 +69,9 @@
 .weekView {
   overflow-x: auto;
   background: var(--neutralLighterAlt, #faf9f8);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .weekGrid {
@@ -54,7 +81,7 @@
   border: 1px solid var(--neutralLight, #edebe9);
   border-radius: 10px;
   background: var(--white, #ffffff);
-  overflow: hidden;
+  max-height: calc(100vh - 200px);
 }
 
 .timeColumn {
@@ -62,14 +89,19 @@
   flex-shrink: 0;
   background: var(--neutralLighterAlt, #faf9f8);
   border-right: 1px solid var(--neutralLight, #edebe9);
+  display: flex;
+  flex-direction: column;
 }
 
 .dayColumn {
   flex: 1;
-  min-width: 140px;
+  min-width: 0;
+  width: 140px;
   border-left: 1px solid var(--neutralLight, #edebe9);
   background: var(--white, #ffffff);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .weekendColumn {
@@ -88,6 +120,9 @@
   position: sticky;
   top: 0;
   z-index: 2;
+  min-height: 66px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .dayName {
@@ -109,15 +144,63 @@
 }
 
 .daySlots {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  display: grid;
+  grid-auto-rows: 60px;
+}
+
+.daySlotsWrapper {
+  position: relative;
+  flex: 1;
+}
+
+.appointmentsLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.appointmentsLayer .appointment {
+  pointer-events: auto;
+  margin-bottom: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.appointmentsLayer .appointmentTime {
+  font-size: 10px;
+  color: var(--neutralSecondary, #605e5c);
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+.hourBorders {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.hourBorderLine {
+  height: 60px;
+  border-top: 1px solid var(--neutralLight, #edebe9);
+  width: 100%;
 }
 
 .daySlots .hourSlot {
   height: 60px;
-  border-bottom: 1px solid var(--neutralLight, #edebe9);
   position: relative;
-  padding: 6px 8px;
+  padding: 4px 6px;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: repeat(60, minmax(1px, auto));
+  grid-auto-flow: dense;
 }
 
 .daySlots .hourSlot::after {
@@ -131,6 +214,12 @@
   z-index: 0;
 }
 
+.timeColumnSlots {
+  display: grid;
+  grid-auto-rows: 60px;
+  flex: 1;
+}
+
 .weekView .hourLabel {
   padding: 6px 8px;
   font-size: 11px;
@@ -139,10 +228,58 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
+  position: relative;
 }
 
 .weekView .appointment {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* All-Day Appointments in Week View */
+.allDaySection {
+  background-color: color-mix(in srgb, var(--neutralLighter, #f3f2f1) 50%, var(--white, #ffffff) 50%);
+  border-bottom: 1px solid var(--neutralLight, #edebe9);
+  padding: 8px;
+  min-height: 48px;
+  height: 48px;
+  max-height: 100px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.allDayPlaceholder {
+  border-bottom: 1px solid var(--neutralLight, #edebe9);
+  height: 48px;
+  min-height: 48px;
+  background-color: var(--neutralLighterAlt, #faf9f8);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.allDayAppointment {
+  font-size: 11px;
+  padding: 4px 6px;
+  margin-bottom: 3px;
+  border-radius: 3px;
+  border-left: 3px solid;
+  cursor: pointer;
+  transition: transform 0.1s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.allDayAppointment:hover {
+  transform: scale(1.02);
+}
+
+.allDayAppointment .appointmentTitle {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Month View */
@@ -167,6 +304,7 @@
 .dayCell {
   background-color: var(--white, #ffffff);
   min-height: 100px;
+  min-width: 0;
   padding: 8px;
   cursor: pointer;
   transition: background-color 0.2s;

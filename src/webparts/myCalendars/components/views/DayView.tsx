@@ -77,29 +77,53 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
               <div className={styles.hourLabel}>
                 {hour.toString().length === 1 ? `0${hour}:00` : `${hour}:00`}
               </div>
-              <div className={styles.hourSlot}>
-                {dayAppointments
-                  .filter(apt => {
-                    const aptHour = new Date(apt.startDate).getHours();
-                    const aptEndHour = new Date(apt.endDate).getHours();
-                    return aptHour === hour || (aptHour < hour && aptEndHour > hour);
-                  })
-                  .map(apt => (
-                    <div
-                      key={apt.id}
-                      className={styles.appointment}
-                      style={{
-                        backgroundColor: `color-mix(in srgb, ${apt.color} 20%, transparent)`,
-                        borderLeftColor: apt.color
-                      }}
-                    >
-                      <div className={styles.appointmentTitle}>{apt.title}</div>
-                      {apt.location && <div className={styles.appointmentLocation}>{apt.location}</div>}
-                    </div>
-                  ))}
-              </div>
+              <div className={styles.hourSlot} />
             </div>
           ))}
+          {/* Appointments layer with absolute positioning */}
+          <div className={styles.appointmentsLayerDay}>
+            {dayAppointments.map(apt => {
+              const aptStartDate = new Date(apt.startDate);
+              const aptEndDate = new Date(apt.endDate);
+              const aptStartHour = aptStartDate.getHours();
+              const aptStartMinutes = aptStartDate.getMinutes();
+              const aptEndHour = aptEndDate.getHours();
+              const aptEndMinutes = aptEndDate.getMinutes();
+              
+              // Calculate position from midnight (hour 0)
+              const minutesFromMidnight = aptStartHour * 60 + aptStartMinutes;
+              const minutesFromMidnightEnd = aptEndHour * 60 + aptEndMinutes;
+              const durationMinutes = minutesFromMidnightEnd - minutesFromMidnight;
+              
+              // Position from the top (61px per hour due to 1px border = 61/60 px per minute)
+              const topPosition = minutesFromMidnight * (61 / 60);
+              const height = durationMinutes * (61 / 60);
+              
+              return (
+                <div
+                  key={apt.id}
+                  className={styles.appointment}
+                  style={{
+                    position: 'absolute',
+                    top: `${topPosition}px`,
+                    height: `${height}px`,
+                    left: '88px', // Account for hourLabel width (60px) + padding + 20px
+                    right: '8px',
+                    backgroundColor: `color-mix(in srgb, ${apt.color} 20%, transparent)`,
+                    borderLeftColor: apt.color,
+                    margin: 0
+                  }}
+                  title={`${apt.title} (${aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${aptEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
+                >
+                  <div className={styles.appointmentTitle}>{apt.title}</div>
+                  <div className={styles.appointmentTime}>
+                    {aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                  {apt.location && <div className={styles.appointmentLocation}>{apt.location}</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
