@@ -17,10 +17,11 @@ A SharePoint Framework webpart that aggregates appointments from multiple calend
 The My Calendars webpart provides the following functionality:
 
 - **Multi-Calendar View Support**: Display appointments in Day, Week, Month, Schedule, and Search views
-- **Multiple Calendar Sources**: Aggregate calendars from Exchange, SharePoint lists, Microsoft Planner tasks, and internet calendar feeds (ICS)
+- **Multiple Calendar Sources**: Aggregate calendars from Exchange, SharePoint lists, Microsoft Planner tasks, Teams Shifts, and internet calendar feeds (ICS)
 - **Exchange Integration**: Add user's own calendars and shared mailboxes with color mapping from Outlook
 - **SharePoint Lists**: Support for custom SharePoint list calendars with configurable field mapping
 - **Microsoft Planner Integration**: View Planner tasks as calendar appointments with filtering options (assigned to me, show completed tasks)
+- **Teams Shifts Integration**: View Shifts from joined Teams, including draft shifts (shown in italics)
 - **Internet Calendars**: Add ICS feeds with built-in CORS proxy support and fallback mechanisms
 - **Work Hours Configuration**: Set custom work day hours and time slot durations (15-60 minutes)
 - **Calendar Customization**: Toggle weekends, configure first day of week, and customize display settings
@@ -44,12 +45,12 @@ The webpart can be configured through the property pane with the following optio
 - **First Day of Week**: Choose which day to start the week on (Sunday through Saturday)
 
 ### Calendar Sources
-- **Add Calendar**: Add Exchange calendars, SharePoint list calendars, Microsoft Planner tasks, or internet calendar feeds
+- **Add Calendar**: Add Exchange calendars, SharePoint list calendars, Microsoft Planner tasks, Teams Shifts, or internet calendar feeds
 - **Manage Sources**: View, enable/disable, or remove calendar sources
 - **Assign Colors**: Customize the color for each calendar source
 - **Field Mapping**: Configure custom field mappings for SharePoint list calendars
 - **Planner Filters**: Filter Planner tasks by assignment (assigned to me only) and completion status
-- **Logo Display**: Toggle visibility of service logos per source type (Exchange, SharePoint, Planner)
+- **Logo Display**: Toggle visibility of service logos per source type (Exchange, SharePoint, Planner, Teams Shifts)
 
 ### ICS Proxy Settings
 - **Use Custom Proxy**: Enable a custom proxy for CORS-enabled ICS feeds
@@ -63,7 +64,7 @@ The webpart can be configured through the property pane with the following optio
 [Download the latest release](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/releases) or compile the solution (`npm run build`). The `.sppkg` file will be in `sharepoint/solution/`.
 
 ### Installation
-Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions (`Calendars.Read`, `Calendars.Read.Shared`, `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, and `Group.Read.All`) when prompted.
+Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions (`Calendars.Read`, `Calendars.Read.Shared`, `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All`) when prompted.
 
 ### Upgrades
 Upload the new `.sppkg` file and overwrite the existing one when prompted.
@@ -144,8 +145,10 @@ This solution requires the following Microsoft Graph permissions:
 - `Sites.Read.All` - To discover and read SharePoint list calendars
 - `Tasks.Read` - To read Planner tasks from plans the user has access to
 - `Group.Read.All` - To discover Microsoft 365 Groups and their associated Planner plans
+- `Team.ReadBasic.All` - To discover joined Teams
+- `Schedule.Read.All` - To read Teams Shifts
 
-`Calendars.Read` and `Calendars.Read.Shared` are covered by basic calendar access consent; `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, and `Group.Read.All` must be approved by a tenant admin via the API access page.
+`Calendars.Read` and `Calendars.Read.Shared` are covered by basic calendar access consent; `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All` must be approved by a tenant admin via the API access page.
 
 ## References
 

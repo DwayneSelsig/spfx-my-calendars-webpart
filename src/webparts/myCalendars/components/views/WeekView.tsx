@@ -8,8 +8,6 @@ import { IAppointment } from '../../models/IAppointment';
 
 export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, isLoading, startHour, endHour, showWeekends } = props;
-  const weekGridRef = React.useRef<HTMLDivElement>(null);
-  const [pixelsPerMinute, setPixelsPerMinute] = React.useState(1);
 
   const getWeekDays = (): Date[] => {
     const days: Date[] = [];
@@ -31,33 +29,6 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   for (let h = startHour; h < endHour; h++) {
     hours.push(h);
   }
-
-  React.useLayoutEffect(() => {
-    if (!weekGridRef.current) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      if (!weekGridRef.current) {
-        return;
-      }
-
-      const hourLines = weekGridRef.current.querySelectorAll(`.${styles.hourBorderLine}`) as NodeListOf<HTMLElement>;
-      if (hourLines.length >= 2) {
-        const firstTop = hourLines[0].getBoundingClientRect().top;
-        const secondTop = hourLines[1].getBoundingClientRect().top;
-        const hourHeight = secondTop - firstTop;
-        setPixelsPerMinute(hourHeight / 60);
-        return;
-      }
-
-      const firstHourLine = hourLines[0];
-      const fallbackHeight = firstHourLine?.offsetHeight ?? 60;
-      setPixelsPerMinute(fallbackHeight / 60);
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [startHour, endHour, showWeekends]);
 
   // Helper function to check if appointment is all-day (starts at 00:00 or spans entire day)
   const isAllDayAppointment = (apt: IAppointment): boolean => {
@@ -99,7 +70,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
 
   return (
     <div className={styles.weekView}>
-      <div className={styles.weekGrid} ref={weekGridRef}>
+      <div className={styles.weekGrid}>
         <div className={styles.timeColumn}>
           <div className={styles.dayHeader} />
           {/* Placeholder for all-day section to keep alignment */}
@@ -191,9 +162,9 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                     const minutesFromViewEnd = (aptEndHour - startHour) * 60 + aptEndMinutes;
                     const durationMinutes = minutesFromViewEnd - minutesFromViewStart;
                     
-                    // Position from the top of the day slots using measured hour height
-                    const topPosition = minutesFromViewStart * pixelsPerMinute;
-                    const height = durationMinutes * pixelsPerMinute;
+                    // Position from the top of the day slots (60px per hour)
+                    const topPosition = minutesFromViewStart * (60 / 60); // 60px per hour = 1px per minute
+                    const height = durationMinutes * (60 / 60); // 60px per hour = 1px per minute
                     
                     return (
                       <div
