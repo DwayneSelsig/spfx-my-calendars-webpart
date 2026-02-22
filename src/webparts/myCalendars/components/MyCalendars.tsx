@@ -7,6 +7,7 @@ import { IcsParser } from '../services/IcsParser';
 import { ExchangeCalendarService } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService } from '../services/SharePointCalendarService';
 import { PlannerTaskService } from '../services/PlannerTaskService';
+import { TeamsShiftsService } from '../services/TeamsShiftsService';
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
@@ -85,6 +86,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     sharePointService.setGraphClient(graphClient);
     const plannerService = new PlannerTaskService(httpClient, graphClient);
     plannerService.setGraphClient(graphClient);
+    const teamsShiftsService = new TeamsShiftsService(httpClient, graphClient);
+    teamsShiftsService.setGraphClient(graphClient);
     
     // Calculate date range for filtering (current month ± 3 months)
     const today = new Date();
@@ -182,6 +185,18 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               }
             } catch (error) {
               console.error(`Failed to load Planner tasks ${source.name}:`, error);
+            }
+          } else if (source.sourceType === 'teamsShifts') {
+            // Load from Teams Shifts
+            try {
+              appointments = await teamsShiftsService.getShiftsForJoinedTeams(
+                startDate,
+                endDate,
+                source,
+                source.showSourceLogo ?? true
+              );
+            } catch (error) {
+              console.error(`Failed to load Teams shifts ${source.name}:`, error);
             }
           }
           

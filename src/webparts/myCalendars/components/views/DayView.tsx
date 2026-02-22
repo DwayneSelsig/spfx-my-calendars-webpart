@@ -121,7 +121,7 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
                     {apt.showSourceLogo && apt.sourceType && (
                       <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
                     )}
-                    {apt.title}
+                    <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                   </div>
                   <div className={styles.appointmentTime}>
                     {aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

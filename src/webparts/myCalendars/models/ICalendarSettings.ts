@@ -1,5 +1,5 @@
 export type CalendarViewType = 'day' | 'week' | 'month' | 'schedule' | 'search';
-export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner';
+export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' | 'teamsShifts';
 
 export interface ISharePointFieldMapping {
   titleField?: string;        // e.g., "Title"

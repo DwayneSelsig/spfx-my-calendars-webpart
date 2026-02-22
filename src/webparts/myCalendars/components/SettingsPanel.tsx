@@ -39,7 +39,7 @@ interface ISettingsPanelState {
   userExchangeCalendarsLoading: boolean;
   // Add calendar flow state
   addingCalendarType: CalendarSourceType | undefined;
-  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options';
+  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options' | 'teams-shifts';
   // SharePoint flow
   spSites: ISharePointSite[];
   spSitesLoading: boolean;
@@ -74,6 +74,7 @@ interface ISettingsPanelState {
   plannerAssignedToMeOnly: boolean;
   plannerShowCompleted: boolean;
   plannerShowLogo: boolean;
+  teamsShiftsShowLogo: boolean;
   // Color for new calendar
   newCalendarColor: string;
   newCalendarName: string;
@@ -143,6 +144,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       plannerAssignedToMeOnly: false,
       plannerShowCompleted: true,
       plannerShowLogo: true,
+      teamsShiftsShowLogo: true,
       // New calendar
       newCalendarColor: props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
@@ -236,6 +238,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       exchangeMailboxResolved: false,
       exchangeSelectedCalendarId: undefined,
       icsUrl: '',
+      teamsShiftsShowLogo: true,
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
     });
@@ -254,6 +257,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.setState({ addingCalendarType: type, addingCalendarStep: 'planner-plan', plannerPlansLoading: true });
       const plans = await this.plannerService?.getUserPlans() || [];
       this.setState({ plannerPlans: plans, plannerPlansLoading: false });
+    } else if (type === 'teamsShifts') {
+      this.setState({
+        addingCalendarType: type,
+        addingCalendarStep: 'teams-shifts',
+        newCalendarName: 'Teams Shifts',
+        newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
+        teamsShiftsShowLogo: true
+      });
     }
   };
 
@@ -280,6 +291,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       plannerAssignedToMeOnly: false,
       plannerShowCompleted: true,
       plannerShowLogo: true,
+      teamsShiftsShowLogo: true,
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
     });
@@ -310,6 +322,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       } else if (addingCalendarStep === 'planner-plan') {
         this.handleBackToTypeSelection();
       }
+    } else if (addingCalendarType === 'teamsShifts') {
+      this.handleBackToTypeSelection();
     }
   };
 
@@ -1096,6 +1110,69 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     this.setState({ settings }, () => this.handleCloseAddDialog());
   };
 
+  private handleConfirmTeamsShifts = (): void => {
+    if (!this.state.newCalendarName.trim()) {
+      return;
+    }
+
+    const newSource: ICalendarSource = {
+      id: this.generateId(),
+      sourceType: 'teamsShifts',
+      name: this.state.newCalendarName.trim(),
+      color: this.state.newCalendarColor,
+      isEnabled: true,
+      showSourceLogo: this.state.teamsShiftsShowLogo
+    };
+
+    const settings = {
+      ...this.state.settings,
+      sources: [...this.state.settings.sources, newSource]
+    };
+
+    this.setState({ settings }, () => this.handleCloseAddDialog());
+  };
+
+  private renderTeamsShiftsFlow = (): React.ReactElement => {
+    const hasValidInput = this.state.newCalendarName.trim();
+
+    return (
+      <Stack tokens={{ childrenGap: 12 }}>
+        <Label>Teams Shifts</Label>
+        <TextField
+          label="Calendar Name"
+          value={this.state.newCalendarName}
+          onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+          placeholder="e.g. Teams Shifts"
+          required
+        />
+
+        <Toggle
+          label="Bron logo tonen"
+          checked={this.state.teamsShiftsShowLogo}
+          onChange={(_, checked) => this.setState({ teamsShiftsShowLogo: checked || false })}
+          onText="Ja"
+          offText="Nee"
+        />
+
+        <ColorPicker
+          color={this.state.newCalendarColor}
+          onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+          alphaType="none"
+          showPreview={true}
+        />
+
+        <Stack horizontal tokens={{ childrenGap: 8 }}>
+          <PrimaryButton
+            text="Add Calendar"
+            onClick={this.handleConfirmTeamsShifts}
+            disabled={!hasValidInput}
+          />
+          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+        </Stack>
+      </Stack>
+    );
+  };
+
   private renderPlannerFlow = (): React.ReactElement => {
     const { addingCalendarStep, plannerPlans, plannerPlansLoading } = this.state;
 
@@ -1246,6 +1323,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
+              text="Teams Shifts"
+              secondaryText="Toon diensten uit Teams shifts"
+              iconProps={{ iconName: 'Clock' }}
+              onClick={() => this.handleSelectAddType('teamsShifts')}
+              style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
+            />
+            <PrimaryButton
               text="Internet Calendar"
               secondaryText="Add calendar from URL or paste ICS content"
               iconProps={{ iconName: 'World' }}
@@ -1271,6 +1355,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         {addingCalendarType === 'sharepoint' && this.renderSharePointFlow()}
         {addingCalendarType === 'exchange' && this.renderExchangeFlow()}
         {addingCalendarType === 'planner' && this.renderPlannerFlow()}
+        {addingCalendarType === 'teamsShifts' && this.renderTeamsShiftsFlow()}
         {addingCalendarType === 'ics' && this.renderIcsFlow()}
       </Stack>
     );
@@ -1531,6 +1616,21 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     </Stack>
                     <Stack tokens={{ childrenGap: 10 }}>
                       {settings.sources.filter(s => s.sourceType === 'planner').map(source => (
+                        this.renderCalendarSource(source)
+                      ))}
+                    </Stack>
+                  </div>
+                )}
+
+                {/* Teams Shifts */}
+                {settings.sources.filter(s => s.sourceType === 'teamsShifts').length > 0 && (
+                  <div>
+                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
+                      <Icon iconName="Clock" style={{ fontSize: 16 }} />
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Teams Shifts</Label>
+                    </Stack>
+                    <Stack tokens={{ childrenGap: 10 }}>
+                      {settings.sources.filter(s => s.sourceType === 'teamsShifts').map(source => (
                         this.renderCalendarSource(source)
                       ))}
                     </Stack>

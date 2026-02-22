@@ -11,6 +11,8 @@ export function getSourceIcon(sourceType: CalendarSourceType | undefined): strin
       return 'SharepointLogo';
     case 'planner':
       return 'PlannerLogo';
+    case 'teamsShifts':
+      return 'Clock';
     case 'ics':
       return 'Calendar';
     default:

@@ -35,6 +35,14 @@
     {
       "resource": "Microsoft Graph",
       "scope": "Tasks.Read"
+    },
+    {
+      "resource": "Microsoft Graph",
+      "scope": "Team.ReadBasic.All"
+    },
+    {
+      "resource": "Microsoft Graph",
+      "scope": "Schedule.Read.All"
     }
   ],
 

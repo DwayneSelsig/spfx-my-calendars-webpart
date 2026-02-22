@@ -17,4 +17,6 @@ export interface IAppointment {
   showSourceLogo?: boolean;
   // Planner-specific fields
   percentComplete?: number;
+  // Teams Shifts-specific fields
+  isDraft?: boolean;
 }

@@ -36,6 +36,7 @@
   pointer-events: auto;
   box-sizing: border-box;
   overflow: hidden;
+  min-height: 28px;
 }
 
 .appointmentsLayerDay .appointmentTime {
@@ -169,6 +170,7 @@
   margin-bottom: 0;
   box-sizing: border-box;
   overflow: hidden;
+  min-height: 28px;
 }
 
 .appointmentsLayer .appointmentTime {

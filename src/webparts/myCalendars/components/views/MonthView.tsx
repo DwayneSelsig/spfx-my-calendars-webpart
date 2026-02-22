@@ -79,7 +79,7 @@ export const MonthView: React.FC<ICalendarViewProps> = (props) => {
                     {apt.showSourceLogo && apt.sourceType && (
                       <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
                     )}
-                    {apt.title}
+                    <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                   </div>
                 ))}
                 {dayAppointments.length > 3 && (
