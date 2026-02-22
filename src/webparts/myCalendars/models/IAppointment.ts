@@ -1,3 +1,5 @@
+import { CalendarSourceType } from './ICalendarSettings';
+
 export interface IAppointment {
   id: string;
   title: string;
@@ -10,4 +12,9 @@ export interface IAppointment {
   color: string;
   organizer?: string;
   attendees?: string[];
+  // Source metadata for display
+  sourceType?: CalendarSourceType;
+  showSourceLogo?: boolean;
+  // Planner-specific fields
+  percentComplete?: number;
 }

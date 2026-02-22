@@ -1,7 +1,10 @@
 import * as React from 'react';
 import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
+import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { ICalendarViewProps } from './DayView';
+import { getSourceIcon } from '../../utils/sourceIconHelper';
+import { IAppointment } from '../../models/IAppointment';
 
 export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, isLoading, startHour, endHour, showWeekends } = props;
@@ -28,7 +31,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   }
 
   // Helper function to check if appointment is all-day (starts at 00:00 or spans entire day)
-  const isAllDayAppointment = (apt: any): boolean => {
+  const isAllDayAppointment = (apt: IAppointment): boolean => {
     if (!apt.endDate) return false;
     const start = apt.startDate; // Already a Date object
     const end = apt.endDate; // Already a Date object
@@ -123,7 +126,12 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                       }}
                       title={apt.title}
                     >
-                      <div className={styles.appointmentTitle}>{apt.title}</div>
+                      <div className={styles.appointmentTitle}>
+                        {apt.showSourceLogo && apt.sourceType && (
+                          <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                        )}
+                        {apt.title}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -173,7 +181,12 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                         }}
                         title={`${apt.title} (${apt.startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${apt.endDate?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
                       >
-                        <div className={styles.appointmentTitle}>{apt.title}</div>
+                        <div className={styles.appointmentTitle}>
+                          {apt.showSourceLogo && apt.sourceType && (
+                            <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                          )}
+                          {apt.title}
+                        </div>
                         <div className={styles.appointmentTime}>
                           {apt.startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>

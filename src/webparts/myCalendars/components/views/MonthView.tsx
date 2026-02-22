@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
+import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { ICalendarViewProps } from './DayView';
+import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export const MonthView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, isLoading, onDateChange } = props;
@@ -74,6 +76,9 @@ export const MonthView: React.FC<ICalendarViewProps> = (props) => {
                       borderLeftColor: apt.color
                     }}
                   >
+                    {apt.showSourceLogo && apt.sourceType && (
+                      <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                    )}
                     {apt.title}
                   </div>
                 ))}

@@ -49,6 +49,14 @@
       {
         "resource": "Microsoft Graph",
         "scope": "Sites.Read.All"
+      },
+      {
+        "resource": "Microsoft Graph",
+        "scope": "Tasks.Read"
+      },
+      {
+        "resource": "Microsoft Graph",
+        "scope": "Group.Read.All"
       }
     ]
   },

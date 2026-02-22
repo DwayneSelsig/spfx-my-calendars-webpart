@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { IAppointment } from '../../models/IAppointment';
 import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
+import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
+import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export interface ISearchResultsViewProps {
   appointments: IAppointment[];
@@ -126,7 +128,12 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                       }
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div className={styles.appointmentTitle}>{apt.title}</div>
+                      <div className={styles.appointmentTitle}>
+                        {apt.showSourceLogo && apt.sourceType && (
+                          <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                        )}
+                        {apt.title}
+                      </div>
                       <div className={styles.appointmentTime}>
                         {getAppointmentDuration(apt)}
                       </div>

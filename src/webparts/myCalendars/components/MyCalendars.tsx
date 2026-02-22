@@ -6,6 +6,7 @@ import { CalendarViewType } from '../models/ICalendarSettings';
 import { IcsParser } from '../services/IcsParser';
 import { ExchangeCalendarService } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService } from '../services/SharePointCalendarService';
+import { PlannerTaskService } from '../services/PlannerTaskService';
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
@@ -15,6 +16,10 @@ import { CommandBar, ICommandBarItemProps } from '@fluentui/react/lib/CommandBar
 import { SettingsPanel } from './SettingsPanel';
 import { CalendarToolbar } from './CalendarToolbar';
 
+// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MSGraphClientV3 = any;
+
 interface IMyCalendarsState {
   appointments: IAppointment[];
   currentDate: Date;
@@ -23,6 +28,7 @@ interface IMyCalendarsState {
   isLoading: boolean;
   isSettingsPanelOpen: boolean;
   searchQuery: string;
+  graphClient: MSGraphClientV3 | undefined;
 }
 
 export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyCalendarsState> {
@@ -38,12 +44,17 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       previousView: props.settings.defaultView,
       isLoading: false,
       isSettingsPanelOpen: false,
-      searchQuery: ''
+      searchQuery: '',
+      graphClient: undefined
     };
   }
 
   public componentDidMount(): void {
     this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
+    // Resolve and store graphClient for use in SettingsPanel
+    this.props.context.msGraphClientFactory.getClient('3')
+      .then(client => this.setState({ graphClient: client }))
+      .catch(err => console.error('Failed to initialize graph client:', err));
   }
 
   public componentDidUpdate(prevProps: IMyCalendarsProps): void {
@@ -72,6 +83,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     exchangeService.setGraphClient(graphClient);
     const sharePointService = new SharePointCalendarService(httpClient, graphClient);
     sharePointService.setGraphClient(graphClient);
+    const plannerService = new PlannerTaskService(httpClient, graphClient);
+    plannerService.setGraphClient(graphClient);
     
     // Calculate date range for filtering (current month ± 3 months)
     const today = new Date();
@@ -98,7 +111,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             const appointments = events.map(event => ({
               ...event,
               sourceId: `exchange_${calendar.id}`,
-              color: calendar.hexColor
+              color: calendar.hexColor,
+              sourceType: 'exchange' as const,
+              showSourceLogo: this.props.settings.exchangeShowSourceLogo ?? true
             }));
             allAppointments.push(...appointments);
           } catch (error) {
@@ -123,6 +138,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             } else if (source.url) {
               appointments = await IcsParser.fetchAndParse(source.url, source.id, source.color, httpClient);
             }
+            // Add source metadata to ICS appointments
+            appointments = appointments.map(apt => ({
+              ...apt,
+              sourceType: 'ics' as const,
+              showSourceLogo: source.showSourceLogo ?? true
+            }));
           } else if (source.sourceType === 'sharepoint') {
             // Load from SharePoint list
             try {
@@ -137,11 +158,30 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 appointments = items.map(item => ({
                   ...item,
                   sourceId: source.id,
-                  color: source.color
+                  color: source.color,
+                  sourceType: 'sharepoint' as const,
+                  showSourceLogo: this.props.settings.sharePointShowSourceLogo ?? true
                 }));
               }
             } catch (error) {
               console.error(`Failed to load SharePoint calendar ${source.name}:`, error);
+            }
+          } else if (source.sourceType === 'planner') {
+            // Load from Planner plan
+            try {
+              if (source.plannerPlanId) {
+                appointments = await plannerService.getTasks(
+                  source.plannerPlanId,
+                  startDate,
+                  endDate,
+                  source.plannerAssignedToMeOnly ?? false,
+                  source.showCompletedTasks ?? true,
+                  source,
+                  this.props.settings.plannerShowSourceLogo ?? true
+                );
+              }
+            } catch (error) {
+              console.error(`Failed to load Planner tasks ${source.name}:`, error);
             }
           }
           
@@ -430,7 +470,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             }
           }}
           httpClient={this.props.context.httpClient}
-          graphClient={this.props.context.msGraphClientFactory.getClient('3')}
+          graphClient={this.state.graphClient}
         />
       </div>
     );

@@ -18,6 +18,7 @@ import * as strings from 'MyCalendarsWebPartStrings';
 type MSGraphClientV3 = any;
 import { ExchangeCalendarService, IExchangeCalendar } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../services/SharePointCalendarService';
+import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 
 export interface ISettingsPanelProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ interface ISettingsPanelState {
   userExchangeCalendarsLoading: boolean;
   // Add calendar flow state
   addingCalendarType: CalendarSourceType | undefined;
-  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics';
+  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options';
   // SharePoint flow
   spSites: ISharePointSite[];
   spSitesLoading: boolean;
@@ -66,6 +67,13 @@ interface ISettingsPanelState {
   };
   // ICS flow
   icsUrl: string;
+  // Planner flow
+  plannerPlans: IPlannerPlan[];
+  plannerPlansLoading: boolean;
+  plannerSelectedPlanId: string | undefined;
+  plannerAssignedToMeOnly: boolean;
+  plannerShowCompleted: boolean;
+  plannerShowLogo: boolean;
   // Color for new calendar
   newCalendarColor: string;
   newCalendarName: string;
@@ -80,6 +88,7 @@ interface IGraphColumn {
 export class SettingsPanel extends React.Component<ISettingsPanelProps, ISettingsPanelState> {
   private exchangeService: ExchangeCalendarService | null = null;
   private sharePointService: SharePointCalendarService | null = null;
+  private plannerService: PlannerTaskService | null = null;
   private readonly SITES_PER_PAGE = 20;
 
   constructor(props: ISettingsPanelProps) {
@@ -88,11 +97,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (props.httpClient) {
       this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
       this.sharePointService = new SharePointCalendarService(props.httpClient, props.graphClient);
+      this.plannerService = new PlannerTaskService(props.httpClient, props.graphClient);
       
       // If graphClient is provided, set it on the services
       if (props.graphClient) {
         this.exchangeService.setGraphClient(props.graphClient);
         this.sharePointService.setGraphClient(props.graphClient);
+        this.plannerService.setGraphClient(props.graphClient);
       }
     }
 
@@ -125,6 +136,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       spFieldMapping: {},
       // ICS
       icsUrl: '',
+      // Planner
+      plannerPlans: [],
+      plannerPlansLoading: false,
+      plannerSelectedPlanId: undefined,
+      plannerAssignedToMeOnly: false,
+      plannerShowCompleted: true,
+      plannerShowLogo: true,
       // New calendar
       newCalendarColor: props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
@@ -132,21 +150,45 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   }
 
   public componentDidMount(): void {
-    // Initialize GraphClient async from the promise
+    // Initialize GraphClient if available
     if (this.props.graphClient) {
-      Promise.resolve(this.props.graphClient).then((client) => {
-        if (client) {
-          if (this.sharePointService) {
-            this.sharePointService.setGraphClient(client);
-          }
-          if (this.exchangeService) {
-            this.exchangeService.setGraphClient(client);
-          }
-          // Load user's Exchange calendars automatically
-          this.loadUserExchangeCalendars().catch(err => console.error('Failed to load Exchange calendars:', err));
-        }
-      }).catch((err) => console.error('Failed to get GraphClient:', err));
+      this.initializeGraphClient(this.props.graphClient);
     }
+  }
+
+  public componentDidUpdate(prevProps: ISettingsPanelProps): void {
+    // If graphClient becomes available, initialize it
+    if (this.props.graphClient && !prevProps.graphClient) {
+      this.initializeGraphClient(this.props.graphClient);
+    }
+
+    // Reset state when panel is opened
+    if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
+      this.setState({
+        settings: JSON.parse(JSON.stringify(this.props.settings)),
+        editingSourceId: undefined,
+        showAddDialog: false,
+        addingCalendarType: undefined,
+        addingCalendarStep: 'initial',
+        spCurrentPage: 0
+      });
+      // Reload Exchange calendars when panel opens
+      this.loadUserExchangeCalendars().catch(err => console.error('Failed to reload Exchange calendars:', err));
+    }
+  }
+
+  private initializeGraphClient(client: MSGraphClientV3): void {
+    if (this.sharePointService) {
+      this.sharePointService.setGraphClient(client);
+    }
+    if (this.exchangeService) {
+      this.exchangeService.setGraphClient(client);
+    }
+    if (this.plannerService) {
+      this.plannerService.setGraphClient(client);
+    }
+    // Load user's Exchange calendars automatically
+    this.loadUserExchangeCalendars().catch(err => console.error('Failed to load Exchange calendars:', err));
   }
 
   private loadUserExchangeCalendars = async (): Promise<void> => {
@@ -169,21 +211,6 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       });
     }
   };
-
-  public componentDidUpdate(prevProps: ISettingsPanelProps): void {
-    if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
-      this.setState({
-        settings: JSON.parse(JSON.stringify(this.props.settings)),
-        editingSourceId: undefined,
-        showAddDialog: false,
-        addingCalendarType: undefined,
-        addingCalendarStep: 'initial',
-        spCurrentPage: 0
-      });
-      // Reload Exchange calendars when panel opens
-      this.loadUserExchangeCalendars().catch(err => console.error('Failed to reload Exchange calendars:', err));
-    }
-  }
 
   private generateId(): string {
     return `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -223,6 +250,10 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.setState({ addingCalendarType: type, addingCalendarStep: 'exchange-mailbox' });
     } else if (type === 'ics') {
       this.setState({ addingCalendarType: type, addingCalendarStep: 'ics' });
+    } else if (type === 'planner') {
+      this.setState({ addingCalendarType: type, addingCalendarStep: 'planner-plan', plannerPlansLoading: true });
+      const plans = await this.plannerService?.getUserPlans() || [];
+      this.setState({ plannerPlans: plans, plannerPlansLoading: false });
     }
   };
 
@@ -243,6 +274,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       exchangeMailboxResolved: false,
       exchangeSelectedCalendarId: undefined,
       icsUrl: '',
+      plannerPlans: [],
+      plannerPlansLoading: false,
+      plannerSelectedPlanId: undefined,
+      plannerAssignedToMeOnly: false,
+      plannerShowCompleted: true,
+      plannerShowLogo: true,
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
     });
@@ -267,6 +304,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       }
     } else if (addingCalendarType === 'ics') {
       this.handleBackToTypeSelection();
+    } else if (addingCalendarType === 'planner') {
+      if (addingCalendarStep === 'planner-options') {
+        this.setState({ addingCalendarStep: 'planner-plan' });
+      } else if (addingCalendarStep === 'planner-plan') {
+        this.handleBackToTypeSelection();
+      }
     }
   };
 
@@ -1017,6 +1060,161 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     );
   };
 
+  // Planner flow
+  private handleSelectPlannerPlan = (planId: string, planTitle: string): void => {
+    this.setState({ 
+      plannerSelectedPlanId: planId,
+      addingCalendarStep: 'planner-options',
+      newCalendarName: planTitle
+    });
+  };
+
+  private handleConfirmPlannerPlan = (): void => {
+    const selectedPlan = this.state.plannerPlans.find(p => p.id === this.state.plannerSelectedPlanId);
+    if (!selectedPlan || !this.state.newCalendarName.trim()) {
+      return;
+    }
+
+    const newSource: ICalendarSource = {
+      id: this.generateId(),
+      sourceType: 'planner',
+      name: this.state.newCalendarName,
+      color: this.state.newCalendarColor,
+      isEnabled: true,
+      plannerPlanId: selectedPlan.id,
+      plannerPlanTitle: selectedPlan.title,
+      plannerAssignedToMeOnly: this.state.plannerAssignedToMeOnly,
+      showCompletedTasks: this.state.plannerShowCompleted,
+      showSourceLogo: this.state.plannerShowLogo
+    };
+
+    const settings = {
+      ...this.state.settings,
+      sources: [...this.state.settings.sources, newSource]
+    };
+
+    this.setState({ settings }, () => this.handleCloseAddDialog());
+  };
+
+  private renderPlannerFlow = (): React.ReactElement => {
+    const { addingCalendarStep, plannerPlans, plannerPlansLoading } = this.state;
+
+    // Step 1: Select Plan
+    if (addingCalendarStep === 'planner-plan') {
+      if (plannerPlansLoading) {
+        return (
+          <Stack tokens={{ childrenGap: 12 }}>
+            <Label>Loading your Planner plans...</Label>
+            <Spinner size={SpinnerSize.large} />
+          </Stack>
+        );
+      }
+
+      if (plannerPlans.length === 0) {
+        return (
+          <Stack tokens={{ childrenGap: 12 }}>
+            <Label>No Planner plans found</Label>
+            <div>You don&apos;t have access to any Planner plans, or there are no plans in your organization.</div>
+            <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          </Stack>
+        );
+      }
+
+      return (
+        <Stack tokens={{ childrenGap: 12 }}>
+          <Label>Select a Planner plan to add:</Label>
+          <Stack tokens={{ childrenGap: 8 }}>
+            {plannerPlans.map(plan => (
+              <div
+                key={plan.id}
+                onClick={() => this.handleSelectPlannerPlan(plan.id, plan.title)}
+                style={{
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  backgroundColor: this.state.plannerSelectedPlanId === plan.id ? '#f3f2f1' : 'white'
+                }}
+              >
+                <Icon iconName="PlannerLogo" style={{ marginRight: 8, fontSize: 16 }} />
+                <strong>{plan.title}</strong>
+              </div>
+            ))}
+          </Stack>
+        </Stack>
+      );
+    }
+
+    // Step 2: Configure Options
+    if (addingCalendarStep === 'planner-options') {
+      const selectedPlan = plannerPlans.find(p => p.id === this.state.plannerSelectedPlanId);
+      const hasValidInput = this.state.newCalendarName.trim();
+
+      return (
+        <Stack tokens={{ childrenGap: 12 }}>
+          <Label>Configure Planner integration</Label>
+          
+          {selectedPlan && (
+            <div style={{ padding: '8px', backgroundColor: '#f3f2f1', borderRadius: '4px' }}>
+              <Icon iconName="PlannerLogo" style={{ marginRight: 8 }} />
+              <strong>{selectedPlan.title}</strong>
+            </div>
+          )}
+
+          <TextField
+            label="Calendar Name"
+            value={this.state.newCalendarName}
+            onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+            placeholder="e.g. Project Tasks"
+            required
+          />
+
+          <Toggle
+            label="Alleen aan mij toegewezen taken"
+            checked={this.state.plannerAssignedToMeOnly}
+            onChange={(_, checked) => this.setState({ plannerAssignedToMeOnly: checked || false })}
+            onText="Ja"
+            offText="Nee"
+          />
+
+          <Toggle
+            label="Voltooide taken weergeven"
+            checked={this.state.plannerShowCompleted}
+            onChange={(_, checked) => this.setState({ plannerShowCompleted: checked || false })}
+            onText="Ja"
+            offText="Nee"
+          />
+
+          <Toggle
+            label="Bron logo tonen"
+            checked={this.state.plannerShowLogo}
+            onChange={(_, checked) => this.setState({ plannerShowLogo: checked || false })}
+            onText="Ja"
+            offText="Nee"
+          />
+
+          <ColorPicker
+            color={this.state.newCalendarColor}
+            onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+            alphaType="none"
+            showPreview={true}
+          />
+
+          <Stack horizontal tokens={{ childrenGap: 8 }}>
+            <PrimaryButton
+              text="Add Calendar"
+              onClick={this.handleConfirmPlannerPlan}
+              disabled={!hasValidInput}
+            />
+            <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          </Stack>
+        </Stack>
+      );
+    }
+
+    return <div>Unknown step</div>;
+  };
+
   private renderAddCalendarFlow = (): React.ReactElement => {
     const { addingCalendarStep, addingCalendarType } = this.state;
 
@@ -1038,6 +1236,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               secondaryText="Manage Outlook calendars (opens in new window)"
               iconProps={{ iconName: 'OutlookLogo' }}
               onClick={() => this.handleSelectAddType('exchange')}
+              style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
+            />
+            <PrimaryButton
+              text="Microsoft Planner"
+              secondaryText="Voeg taken toe vanuit een Planner plan"
+              iconProps={{ iconName: 'PlannerLogo' }}
+              onClick={() => this.handleSelectAddType('planner')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
@@ -1065,6 +1270,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         {this.renderNavigationHeader()}
         {addingCalendarType === 'sharepoint' && this.renderSharePointFlow()}
         {addingCalendarType === 'exchange' && this.renderExchangeFlow()}
+        {addingCalendarType === 'planner' && this.renderPlannerFlow()}
         {addingCalendarType === 'ics' && this.renderIcsFlow()}
       </Stack>
     );
@@ -1242,16 +1448,24 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 {!userExchangeCalendarsLoading && userExchangeCalendars.length > 0 && (
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ margin: 0 }}>
-                        <Icon iconName="OutlookLogo" style={{ fontSize: 16 }} />&nbsp;
-                        <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Outlook</Label>
-                      </Stack>
+                      <Icon iconName="OutlookLogo" style={{ fontSize: 16 }} />
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Outlook</Label>
                       <DefaultButton
                         text="Manage"
                         iconProps={{ iconName: 'OpenInNewWindow' }}
                         onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
                         styles={{ root: { height: 24, minWidth: 0, padding: '0 8px' } }}
                       />
+                      <div style={{ flex: 1 }} />
+                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
+                        <Label style={{ margin: 0 }}>Show logos</Label>
+                        <Toggle
+                          checked={settings.exchangeShowSourceLogo ?? true}
+                          onChange={(_, checked) => this.setState({
+                            settings: { ...settings, exchangeShowSourceLogo: !!checked }
+                          })}
+                        />
+                      </Stack>
                     </Stack>
                     <Stack tokens={{ childrenGap: 10 }}>
                       {userExchangeCalendars.map(calendar => (
@@ -1265,9 +1479,17 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 {settings.sources.filter(s => s.sourceType === 'sharepoint').length > 0 && (
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ margin: 0 }}>
-                        <Icon iconName="SharepointLogo" style={{ fontSize: 16 }} />&nbsp;
-                        <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>SharePoint</Label>
+                      <Icon iconName="SharepointLogo" style={{ fontSize: 16 }} />
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>SharePoint</Label>
+                      <div style={{ flex: 1 }} />
+                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
+                        <Label style={{ margin: 0 }}>Show logos</Label>
+                        <Toggle
+                          checked={settings.sharePointShowSourceLogo ?? true}
+                          onChange={(_, checked) => this.setState({
+                            settings: { ...settings, sharePointShowSourceLogo: !!checked }
+                          })}
+                        />
                       </Stack>
                     </Stack>
                     <Stack tokens={{ childrenGap: 10 }}>
@@ -1284,6 +1506,31 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     <Label style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Web</Label>
                     <Stack tokens={{ childrenGap: 10 }}>
                       {settings.sources.filter(s => s.sourceType === 'ics').map(source => (
+                        this.renderCalendarSource(source)
+                      ))}
+                    </Stack>
+                  </div>
+                )}
+
+                {/* Planner Tasks */}
+                {settings.sources.filter(s => s.sourceType === 'planner').length > 0 && (
+                  <div>
+                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
+                      <Icon iconName="PlannerLogo" style={{ fontSize: 16 }} />
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Planner</Label>
+                      <div style={{ flex: 1 }} />
+                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
+                        <Label style={{ margin: 0 }}>Show logos</Label>
+                        <Toggle
+                          checked={settings.plannerShowSourceLogo ?? true}
+                          onChange={(_, checked) => this.setState({
+                            settings: { ...settings, plannerShowSourceLogo: !!checked }
+                          })}
+                        />
+                      </Stack>
+                    </Stack>
+                    <Stack tokens={{ childrenGap: 10 }}>
+                      {settings.sources.filter(s => s.sourceType === 'planner').map(source => (
                         this.renderCalendarSource(source)
                       ))}
                     </Stack>

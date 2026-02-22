@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { IAppointment } from '../../models/IAppointment';
 import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
+import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
+import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export interface ICalendarViewProps {
   appointments: IAppointment[];
@@ -115,7 +117,12 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
                   }}
                   title={`${apt.title} (${aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${aptEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
                 >
-                  <div className={styles.appointmentTitle}>{apt.title}</div>
+                  <div className={styles.appointmentTitle}>
+                    {apt.showSourceLogo && apt.sourceType && (
+                      <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                    )}
+                    {apt.title}
+                  </div>
                   <div className={styles.appointmentTime}>
                     {aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>

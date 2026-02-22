@@ -1,5 +1,5 @@
 export type CalendarViewType = 'day' | 'week' | 'month' | 'schedule' | 'search';
-export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint';
+export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner';
 
 export interface ISharePointFieldMapping {
   titleField?: string;        // e.g., "Title"
@@ -26,6 +26,13 @@ export interface ICalendarSource {
   sharePointSiteId?: string;
   sharePointListId?: string;
   sharePointFieldMapping?: ISharePointFieldMapping;
+  // Planner source properties
+  plannerPlanId?: string;
+  plannerPlanTitle?: string; // for display purposes
+  plannerAssignedToMeOnly?: boolean;
+  showCompletedTasks?: boolean; // default true
+  // Source display options
+  showSourceLogo?: boolean; // default true
 }
 
 export interface ICalendarSettings {
@@ -50,6 +57,10 @@ export interface ICalendarSettings {
   organizationPrimaryColor?: string;
   // Exchange calendar enabled states (keyed by calendar ID)
   exchangeCalendarStates?: { [calendarId: string]: boolean };
+  // Service-level logo display settings
+  exchangeShowSourceLogo?: boolean;
+  sharePointShowSourceLogo?: boolean;
+  plannerShowSourceLogo?: boolean;
 }
 
 export const defaultCalendarSettings: ICalendarSettings = {
@@ -66,5 +77,8 @@ export const defaultCalendarSettings: ICalendarSettings = {
   proxyPriority1: 'custom',
   proxyPriority2: 'whateverorigin',
   organizationPrimaryColor: '#0078d4', // M365 theme primary
-  exchangeCalendarStates: {} // All Exchange calendars enabled by default
+  exchangeCalendarStates: {}, // All Exchange calendars enabled by default
+  exchangeShowSourceLogo: true,
+  sharePointShowSourceLogo: true,
+  plannerShowSourceLogo: true
 };

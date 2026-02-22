@@ -152,6 +152,7 @@ export class PlannerTaskService {
    * @param assignedToMeOnly - If true, only return tasks assigned to current user
    * @param showCompleted - If true, include completed tasks
    * @param source - The calendar source configuration
+   * @param showSourceLogo - Whether to show source logo (service-level setting)
    */
   public async getTasks(
     planId: string,
@@ -159,7 +160,8 @@ export class PlannerTaskService {
     endDate: Date,
     assignedToMeOnly: boolean = false,
     showCompleted: boolean = true,
-    source: ICalendarSource
+    source: ICalendarSource,
+    showSourceLogo: boolean = true
   ): Promise<IAppointment[]> {
     try {
       if (!this.graphClient) {
@@ -194,7 +196,7 @@ export class PlannerTaskService {
 
       // Map to appointments and filter by date range
       const appointments = tasks
-        .map((task: IGraphPlannerTask) => this.mapPlannerTaskToAppointment(task, source))
+        .map((task: IGraphPlannerTask) => this.mapPlannerTaskToAppointment(task, source, showSourceLogo))
         .filter((apt: IAppointment | null): apt is IAppointment => apt !== null);
 
       // Client-side date filtering (only include tasks with dates in range)
@@ -212,7 +214,7 @@ export class PlannerTaskService {
    * Map Planner task to IAppointment
    * Returns null if the task has no usable date
    */
-  private mapPlannerTaskToAppointment(task: IGraphPlannerTask, source: ICalendarSource): IAppointment | null {
+  private mapPlannerTaskToAppointment(task: IGraphPlannerTask, source: ICalendarSource, showSourceLogo: boolean): IAppointment | null {
     // Determine dates - use both if available, otherwise use whichever is available
     let startDate: Date | null = null;
     let endDate: Date | null = null;
@@ -269,7 +271,7 @@ export class PlannerTaskService {
       organizer: undefined,
       attendees: assignments.length > 0 ? assignments : undefined,
       sourceType: 'planner',
-      showSourceLogo: source.showSourceLogo ?? true,
+      showSourceLogo: showSourceLogo,
       percentComplete: task.percentComplete
     };
   }
