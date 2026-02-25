@@ -1,12 +1,11 @@
 import * as React from 'react';
-import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
 import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { ICalendarViewProps } from './DayView';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export const MonthView: React.FC<ICalendarViewProps> = (props) => {
-  const { appointments, currentDate, isLoading, onDateChange } = props;
+  const { appointments, currentDate, onDateChange } = props;
 
   const getDaysInMonth = (): Date[] => {
     const year = currentDate.getFullYear();
@@ -31,18 +30,6 @@ export const MonthView: React.FC<ICalendarViewProps> = (props) => {
 
   const days = getDaysInMonth();
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  if (isLoading) {
-    return (
-      <div className={styles.monthView}>
-        {days.map((_, idx) => (
-          <Shimmer key={idx} className={styles.shimmerDay} shimmerElements={[
-            { type: ShimmerElementType.line, height: 100 }
-          ]} />
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div className={styles.monthView}>

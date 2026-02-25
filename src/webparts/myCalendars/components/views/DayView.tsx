@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { IAppointment } from '../../models/IAppointment';
-import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
 import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
@@ -17,7 +16,7 @@ export interface ICalendarViewProps {
 }
 
 export const DayView: React.FC<ICalendarViewProps> = (props) => {
-  const { appointments, currentDate, isLoading, startHour } = props;
+  const { appointments, currentDate, startHour } = props;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Render full day (0-24) to allow scrolling
@@ -55,20 +54,6 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
            aptDate.getMonth() === currentDate.getMonth() &&
            aptDate.getFullYear() === currentDate.getFullYear();
   });
-
-  if (isLoading) {
-    return (
-      <div className={styles.dayView}>
-        <div className={styles.timeGridContainer} ref={scrollContainerRef}>
-          {hours.map(hour => (
-            <Shimmer key={hour} className={styles.shimmerLine} shimmerElements={[
-              { type: ShimmerElementType.line, height: 60, width: '100%' }
-            ]} />
-          ))}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={styles.dayView}>

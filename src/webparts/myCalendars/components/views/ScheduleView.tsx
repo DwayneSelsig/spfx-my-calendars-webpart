@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { IAppointment } from '../../models/IAppointment';
-import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
 import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { ICalendarViewProps } from './DayView';
@@ -34,23 +33,6 @@ export const ScheduleView: React.FC<ICalendarViewProps> = (props) => {
     }
     return `${minutes} min`;
   };
-
-  if (isLoading) {
-    return (
-      <div className={styles.scheduleView}>
-        <div className={styles.scheduleDay}>
-          <div className={styles.scheduleDate}>
-            <Shimmer shimmerElements={[{ type: ShimmerElementType.line, height: 20, width: '40%' }]} />
-          </div>
-          <div className={styles.scheduleAppointments}>
-            {[1, 2, 3].map(j => (
-              <Shimmer key={j} shimmerElements={[{ type: ShimmerElementType.line, height: 100 }]} />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const dayName = currentDate.toLocaleDateString(undefined, { weekday: 'long' });
   const dateStr = currentDate.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
@@ -115,7 +97,7 @@ export const ScheduleView: React.FC<ICalendarViewProps> = (props) => {
           ))}
         </div>
       </div>
-      {dayAppointments.length === 0 && (
+      {dayAppointments.length === 0 && !isLoading && (
         <div className={styles.noAppointments}>No appointments today</div>
       )}
     </div>

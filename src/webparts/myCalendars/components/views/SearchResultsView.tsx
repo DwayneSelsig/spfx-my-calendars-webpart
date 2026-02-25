@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { IAppointment } from '../../models/IAppointment';
-import { Shimmer, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
 import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
@@ -65,24 +64,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
     return `${minutes} min`;
   };
 
-  if (isLoading) {
-    return (
-      <div className={styles.scheduleView}>
-        <div className={styles.scheduleDay}>
-          <div className={styles.scheduleDate}>
-            <Shimmer shimmerElements={[{ type: ShimmerElementType.line, height: 20, width: '40%' }]} />
-          </div>
-          <div className={styles.scheduleAppointments}>
-            {[1, 2, 3].map(j => (
-              <Shimmer key={j} shimmerElements={[{ type: ShimmerElementType.line, height: 100 }]} />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (groupedByDate.length === 0) {
+  if (groupedByDate.length === 0 && !isLoading) {
     return (
       <div className={styles.scheduleView}>
         <div className={styles.noAppointments}>
