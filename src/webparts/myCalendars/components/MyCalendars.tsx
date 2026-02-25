@@ -18,7 +18,7 @@ import { Callout } from '@fluentui/react/lib/Callout';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Text } from '@fluentui/react/lib/Text';
-import { CommandBarButton, IButton } from '@fluentui/react/lib/Button';
+import { CommandBarButton } from '@fluentui/react/lib/Button';
 import { SettingsPanel } from './SettingsPanel';
 import { CalendarToolbar } from './CalendarToolbar';
 
@@ -63,7 +63,7 @@ interface IMyCalendarsState {
 export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyCalendarsState> {
   private debounceTimer: number | null = null;
   private activeLoadId = 0;
-  private loadingStatusButtonRef = React.createRef<IButton>();
+  private loadingStatusWrapperRef = React.createRef<HTMLDivElement>();
   private refreshTimer: number | null = null;
 
   constructor(props: IMyCalendarsProps) {
@@ -541,17 +541,16 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const buttonLabel = hasLoading ? 'Show loading status' : 'Show loading summary';
 
     return (
-      <div className={styles.loadingStatusWrapper}>
+      <div ref={this.loadingStatusWrapperRef} className={styles.loadingStatusWrapper}>
         <CommandBarButton
-          componentRef={this.loadingStatusButtonRef}
           onClick={this.toggleLoadingStatus}
           ariaLabel={buttonLabel}
           iconProps={{ iconName: 'Refresh' }}
           onRenderIcon={() => (hasLoading ? <Spinner size={SpinnerSize.small} /> : <Icon iconName="CheckMark" />)}
         />
-        {isLoadingStatusOpen && this.loadingStatusButtonRef.current?.element && (
+        {isLoadingStatusOpen && this.loadingStatusWrapperRef.current && (
           <Callout
-            target={this.loadingStatusButtonRef.current.element}
+            target={this.loadingStatusWrapperRef.current}
             onDismiss={() => this.setState({ isLoadingStatusOpen: false })}
             setInitialFocus
             className={styles.loadingStatusCallout}
