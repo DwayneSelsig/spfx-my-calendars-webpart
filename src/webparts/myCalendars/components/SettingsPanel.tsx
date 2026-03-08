@@ -9,6 +9,7 @@ import { Label } from '@fluentui/react/lib/Label';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Icon } from '@fluentui/react/lib/Icon';
+import { Checkbox } from '@fluentui/react/lib/Checkbox';
 import { HttpClient } from '@microsoft/sp-http';
 import { ICalendarSource, ICalendarSettings, CalendarSourceType } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
@@ -19,6 +20,7 @@ type MSGraphClientV3 = any;
 import { ExchangeCalendarService, IExchangeCalendar } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
+import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 
 export interface ISettingsPanelProps {
   isOpen: boolean;
@@ -39,7 +41,7 @@ interface ISettingsPanelState {
   userExchangeCalendarsLoading: boolean;
   // Add calendar flow state
   addingCalendarType: CalendarSourceType | undefined;
-  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options' | 'teams-shifts';
+  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options' | 'teams-shifts' | 'unified-group-select';
   // SharePoint flow
   spSites: ISharePointSite[];
   spSitesLoading: boolean;
@@ -75,6 +77,10 @@ interface ISettingsPanelState {
   plannerShowCompleted: boolean;
   plannerShowLogo: boolean;
   teamsShiftsShowLogo: boolean;
+  // M365 Groups/Teams flow
+  unifiedGroups: IUnifiedGroupItem[];
+  unifiedGroupsLoading: boolean;
+  unifiedGroupsSelection: Record<string, boolean>;
   // Color for new calendar
   newCalendarColor: string;
   newCalendarName: string;
@@ -90,6 +96,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private exchangeService: ExchangeCalendarService | null = null;
   private sharePointService: SharePointCalendarService | null = null;
   private plannerService: PlannerTaskService | null = null;
+  private unifiedGroupService: UnifiedGroupCalendarService | null = null;
   private readonly SITES_PER_PAGE = 20;
 
   constructor(props: ISettingsPanelProps) {
@@ -99,12 +106,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
       this.sharePointService = new SharePointCalendarService(props.httpClient, props.graphClient);
       this.plannerService = new PlannerTaskService(props.httpClient, props.graphClient);
+      this.unifiedGroupService = new UnifiedGroupCalendarService(props.httpClient, props.graphClient);
       
       // If graphClient is provided, set it on the services
       if (props.graphClient) {
         this.exchangeService.setGraphClient(props.graphClient);
         this.sharePointService.setGraphClient(props.graphClient);
         this.plannerService.setGraphClient(props.graphClient);
+        this.unifiedGroupService.setGraphClient(props.graphClient);
       }
     }
 
@@ -145,6 +154,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       plannerShowCompleted: true,
       plannerShowLogo: true,
       teamsShiftsShowLogo: true,
+      unifiedGroups: [],
+      unifiedGroupsLoading: false,
+      unifiedGroupsSelection: {},
       // New calendar
       newCalendarColor: props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
@@ -188,6 +200,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     }
     if (this.plannerService) {
       this.plannerService.setGraphClient(client);
+    }
+    if (this.unifiedGroupService) {
+      this.unifiedGroupService.setGraphClient(client);
     }
     // Load user's Exchange calendars automatically
     this.loadUserExchangeCalendars().catch(err => console.error('Failed to load Exchange calendars:', err));
@@ -239,6 +254,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       exchangeSelectedCalendarId: undefined,
       icsUrl: '',
       teamsShiftsShowLogo: true,
+      unifiedGroups: [],
+      unifiedGroupsLoading: false,
+      unifiedGroupsSelection: {},
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
     });
@@ -257,6 +275,15 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.setState({ addingCalendarType: type, addingCalendarStep: 'planner-plan', plannerPlansLoading: true });
       const plans = await this.plannerService?.getUserPlans() || [];
       this.setState({ plannerPlans: plans, plannerPlansLoading: false });
+    } else if (type === 'unifiedGroup') {
+      this.setState({
+        addingCalendarType: type,
+        addingCalendarStep: 'unified-group-select',
+        unifiedGroupsLoading: true,
+        unifiedGroupsSelection: {},
+        newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4'
+      });
+      await this.loadUnifiedGroups();
     } else if (type === 'teamsShifts') {
       this.setState({
         addingCalendarType: type,
@@ -264,6 +291,38 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         newCalendarName: 'Teams Shifts',
         newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
         teamsShiftsShowLogo: true
+      });
+    }
+  };
+
+  private loadUnifiedGroups = async (): Promise<void> => {
+    if (!this.unifiedGroupService) {
+      this.setState({ unifiedGroupsLoading: false });
+      return;
+    }
+
+    try {
+      const [groups, joinedTeamIds] = await Promise.all([
+        this.unifiedGroupService.getUnifiedGroups(),
+        this.unifiedGroupService.getJoinedTeamIds()
+      ]);
+
+      const mappedGroups = groups
+        .map(group => ({
+          ...group,
+          isTeam: joinedTeamIds.has(group.id)
+        }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+      this.setState({
+        unifiedGroups: mappedGroups,
+        unifiedGroupsLoading: false
+      });
+    } catch (error) {
+      console.error('Failed to load unified groups:', error);
+      this.setState({
+        unifiedGroups: [],
+        unifiedGroupsLoading: false
       });
     }
   };
@@ -292,6 +351,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       plannerShowCompleted: true,
       plannerShowLogo: true,
       teamsShiftsShowLogo: true,
+      unifiedGroups: [],
+      unifiedGroupsLoading: false,
+      unifiedGroupsSelection: {},
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: ''
     });
@@ -322,6 +384,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       } else if (addingCalendarStep === 'planner-plan') {
         this.handleBackToTypeSelection();
       }
+    } else if (addingCalendarType === 'unifiedGroup') {
+      this.handleBackToTypeSelection();
     } else if (addingCalendarType === 'teamsShifts') {
       this.handleBackToTypeSelection();
     }
@@ -1132,6 +1196,111 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     this.setState({ settings }, () => this.handleCloseAddDialog());
   };
 
+  private handleToggleUnifiedGroupSelection = (groupId: string, checked?: boolean): void => {
+    this.setState(prev => ({
+      unifiedGroupsSelection: {
+        ...prev.unifiedGroupsSelection,
+        [groupId]: !!checked
+      }
+    }));
+  };
+
+  private handleConfirmUnifiedGroups = (): void => {
+    const selectedIds = Object.keys(this.state.unifiedGroupsSelection)
+      .filter(id => this.state.unifiedGroupsSelection[id]);
+
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    const selectedGroups = this.state.unifiedGroups.filter(group => selectedIds.indexOf(group.id) >= 0);
+    const newSources = selectedGroups.map(group => ({
+      id: this.generateId(),
+      sourceType: 'unifiedGroup' as const,
+      name: group.displayName,
+      color: this.state.newCalendarColor,
+      isEnabled: true,
+      groupId: group.id,
+      showSourceLogo: true
+    }));
+
+    const settings = {
+      ...this.state.settings,
+      sources: [...this.state.settings.sources, ...newSources]
+    };
+
+    this.setState({ settings }, () => this.handleCloseAddDialog());
+  };
+
+  private renderUnifiedGroupsFlow = (): React.ReactElement => {
+    const { unifiedGroups, unifiedGroupsLoading, unifiedGroupsSelection } = this.state;
+    const selectedCount = Object.keys(unifiedGroupsSelection).filter(id => unifiedGroupsSelection[id]).length;
+
+    if (unifiedGroupsLoading) {
+      return (
+        <Stack tokens={{ childrenGap: 12 }}>
+          <Label>Loading groups and teams...</Label>
+          <Spinner size={SpinnerSize.large} />
+        </Stack>
+      );
+    }
+
+    if (unifiedGroups.length === 0) {
+      return (
+        <Stack tokens={{ childrenGap: 12 }}>
+          <Label>No M365 groups found</Label>
+          <div>You don&apos;t have access to any Microsoft 365 groups.</div>
+          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+        </Stack>
+      );
+    }
+
+    return (
+      <Stack tokens={{ childrenGap: 12 }}>
+        <Label>Select one or more groups or teams:</Label>
+        <Stack tokens={{ childrenGap: 8 }}>
+          {unifiedGroups.map(group => (
+            <Stack
+              key={group.id}
+              horizontal
+              verticalAlign="center"
+              tokens={{ childrenGap: 8 }}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #edebe9',
+                borderRadius: 4,
+                backgroundColor: unifiedGroupsSelection[group.id] ? '#f3f2f1' : 'white'
+              }}
+            >
+              <Icon iconName={group.isTeam ? 'TeamsLogo' : 'Group'} style={{ fontSize: 16 }} />
+              <Checkbox
+                label={group.displayName}
+                checked={!!unifiedGroupsSelection[group.id]}
+                onChange={(_, checked) => this.handleToggleUnifiedGroupSelection(group.id, checked)}
+              />
+            </Stack>
+          ))}
+        </Stack>
+        <div>
+          <Label>Color</Label>
+          <ColorPicker
+            color={this.state.newCalendarColor}
+            onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+            alphaType="none"
+          />
+        </div>
+        <Stack horizontal tokens={{ childrenGap: 8 }}>
+          <PrimaryButton
+            text={selectedCount > 1 ? 'Add Calendars' : 'Add Calendar'}
+            onClick={this.handleConfirmUnifiedGroups}
+            disabled={selectedCount === 0}
+          />
+          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+        </Stack>
+      </Stack>
+    );
+  };
+
   private renderTeamsShiftsFlow = (): React.ReactElement => {
     const hasValidInput = this.state.newCalendarName.trim();
 
@@ -1323,6 +1492,20 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
+              text="M365 Group"
+              secondaryText="Add a calendar from a Microsoft 365 group"
+              iconProps={{ iconName: 'Group' }}
+              onClick={() => this.handleSelectAddType('unifiedGroup')}
+              style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
+            />
+            <PrimaryButton
+              text="Teams"
+              secondaryText="Add a calendar from a Team"
+              iconProps={{ iconName: 'TeamsLogo' }}
+              onClick={() => this.handleSelectAddType('unifiedGroup')}
+              style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
+            />
+            <PrimaryButton
               text="Teams Shifts"
               secondaryText="Toon diensten uit Teams shifts"
               iconProps={{ iconName: 'Clock' }}
@@ -1355,6 +1538,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         {addingCalendarType === 'sharepoint' && this.renderSharePointFlow()}
         {addingCalendarType === 'exchange' && this.renderExchangeFlow()}
         {addingCalendarType === 'planner' && this.renderPlannerFlow()}
+        {addingCalendarType === 'unifiedGroup' && this.renderUnifiedGroupsFlow()}
         {addingCalendarType === 'teamsShifts' && this.renderTeamsShiftsFlow()}
         {addingCalendarType === 'ics' && this.renderIcsFlow()}
       </Stack>
@@ -1616,6 +1800,21 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     </Stack>
                     <Stack tokens={{ childrenGap: 10 }}>
                       {settings.sources.filter(s => s.sourceType === 'planner').map(source => (
+                        this.renderCalendarSource(source)
+                      ))}
+                    </Stack>
+                  </div>
+                )}
+
+                {/* Groups & Teams */}
+                {settings.sources.filter(s => s.sourceType === 'unifiedGroup').length > 0 && (
+                  <div>
+                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
+                      <Icon iconName="Group" style={{ fontSize: 16 }} />
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Groups &amp; Teams</Label>
+                    </Stack>
+                    <Stack tokens={{ childrenGap: 10 }}>
+                      {settings.sources.filter(s => s.sourceType === 'unifiedGroup').map(source => (
                         this.renderCalendarSource(source)
                       ))}
                     </Stack>

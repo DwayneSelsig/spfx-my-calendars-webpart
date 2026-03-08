@@ -139,7 +139,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                     >
                       <div className={styles.appointmentTitle}>
                         {apt.showSourceLogo && apt.sourceType && (
-                          <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                          <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
                         )}
                         <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                       </div>
@@ -194,7 +194,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                       >
                         <div className={styles.appointmentTitle}>
                           {apt.showSourceLogo && apt.sourceType && (
-                            <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                            <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
                           )}
                           <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                         </div>

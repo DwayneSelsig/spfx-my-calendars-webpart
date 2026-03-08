@@ -112,7 +112,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                     <div style={{ flex: 1 }}>
                       <div className={styles.appointmentTitle}>
                         {apt.showSourceLogo && apt.sourceType && (
-                          <Icon iconName={getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                          <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
                         )}
                         <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                       </div>

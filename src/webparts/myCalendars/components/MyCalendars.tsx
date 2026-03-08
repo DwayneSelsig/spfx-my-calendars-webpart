@@ -8,6 +8,7 @@ import { ExchangeCalendarService } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService } from '../services/SharePointCalendarService';
 import { PlannerTaskService } from '../services/PlannerTaskService';
 import { TeamsShiftsService } from '../services/TeamsShiftsService';
+import { UnifiedGroupCalendarService } from '../services/UnifiedGroupCalendarService';
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
@@ -26,7 +27,7 @@ import { CalendarToolbar } from './CalendarToolbar';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MSGraphClientV3 = any;
 
-type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts';
+type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 type ServiceStatus = 'loading' | 'ready' | 'error';
 
 const defaultLoadingSources: Record<ServiceKey, ServiceStatus> = {
@@ -34,7 +35,8 @@ const defaultLoadingSources: Record<ServiceKey, ServiceStatus> = {
   ics: 'ready',
   sharepoint: 'ready',
   planner: 'ready',
-  teamsShifts: 'ready'
+  teamsShifts: 'ready',
+  unifiedGroup: 'ready'
 };
 
 const defaultLoadErrors: Record<ServiceKey, string | undefined> = {
@@ -42,7 +44,8 @@ const defaultLoadErrors: Record<ServiceKey, string | undefined> = {
   ics: undefined,
   sharepoint: undefined,
   planner: undefined,
-  teamsShifts: undefined
+  teamsShifts: undefined,
+  unifiedGroup: undefined
 };
 
 interface IMyCalendarsState {
@@ -139,6 +142,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     plannerService.setGraphClient(graphClient);
     const teamsShiftsService = new TeamsShiftsService(httpClient, graphClient);
     teamsShiftsService.setGraphClient(graphClient);
+    const unifiedGroupService = new UnifiedGroupCalendarService(httpClient, graphClient);
+    unifiedGroupService.setGraphClient(graphClient);
     
     // Calculate date range for filtering (current month ± 3 months)
     const today = new Date();
@@ -179,7 +184,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       ics: enabledSources.filter(source => source.sourceType === 'ics'),
       sharepoint: enabledSources.filter(source => source.sourceType === 'sharepoint'),
       planner: enabledSources.filter(source => source.sourceType === 'planner'),
-      teamsShifts: enabledSources.filter(source => source.sourceType === 'teamsShifts')
+      teamsShifts: enabledSources.filter(source => source.sourceType === 'teamsShifts'),
+      unifiedGroup: enabledSources.filter(source => source.sourceType === 'unifiedGroup')
     };
 
     const tasks: Array<Promise<void>> = [];
@@ -344,6 +350,47 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
         appendAppointments(flattenedAppointments);
         updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? 'One or more Teams Shifts sources failed.' : undefined);
+      })());
+    }
+
+    if (sourceGroups.unifiedGroup.length > 0) {
+      tasks.push((async () => {
+        let hadError = false;
+        let joinedTeamIds: Set<string> = new Set();
+
+        try {
+          joinedTeamIds = await unifiedGroupService.getJoinedTeamIds();
+        } catch (error) {
+          hadError = true;
+          console.error('Failed to load joined Teams for group calendars:', error);
+        }
+
+        const appointmentsBySource = await Promise.all(sourceGroups.unifiedGroup.map(async source => {
+          try {
+            if (!source.groupId) {
+              return [] as IAppointment[];
+            }
+
+            const iconName = joinedTeamIds.has(source.groupId) ? 'TeamsLogo' : 'Group';
+            const events = await unifiedGroupService.getGroupEvents(source.groupId, startDate, endDate);
+            return events.map(event => ({
+              ...event,
+              sourceId: source.id,
+              color: source.color,
+              sourceType: 'unifiedGroup' as const,
+              showSourceLogo: source.showSourceLogo ?? true,
+              sourceIconName: iconName
+            }));
+          } catch (error) {
+            hadError = true;
+            console.error(`Failed to load group calendar ${source.name}:`, error);
+            return [] as IAppointment[];
+          }
+        }));
+
+        const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+        appendAppointments(flattenedAppointments);
+        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? 'One or more group calendars failed.' : undefined);
       })());
     }
 
@@ -517,6 +564,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         serviceKeys.add('planner');
       } else if (source.sourceType === 'teamsShifts') {
         serviceKeys.add('teamsShifts');
+      } else if (source.sourceType === 'unifiedGroup') {
+        serviceKeys.add('unifiedGroup');
       }
     }
 
@@ -535,7 +584,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       ics: 'ICS',
       sharepoint: 'SharePoint',
       planner: 'Planner',
-      teamsShifts: 'Teams Shifts'
+      teamsShifts: 'Teams Shifts',
+      unifiedGroup: 'Groups/Teams'
     };
     const hasLoading = enabledServices.reduce((acc, service) => acc || loadingSources[service] === 'loading', false);
     const buttonLabel = hasLoading ? 'Show loading status' : 'Show loading summary';

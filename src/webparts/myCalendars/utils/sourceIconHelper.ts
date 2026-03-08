@@ -13,6 +13,8 @@ export function getSourceIcon(sourceType: CalendarSourceType | undefined): strin
       return 'PlannerLogo';
     case 'teamsShifts':
       return 'Clock';
+    case 'unifiedGroup':
+      return 'Group';
     case 'ics':
       return 'Calendar';
     default:

@@ -1,5 +1,5 @@
 export type CalendarViewType = 'day' | 'week' | 'month' | 'schedule' | 'search';
-export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' | 'teamsShifts';
+export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 
 export interface ISharePointFieldMapping {
   titleField?: string;        // e.g., "Title"
@@ -31,6 +31,8 @@ export interface ICalendarSource {
   plannerPlanTitle?: string; // for display purposes
   plannerAssignedToMeOnly?: boolean;
   showCompletedTasks?: boolean; // default true
+  // M365 groups/teams source properties
+  groupId?: string;
   // Source display options
   showSourceLogo?: boolean; // default true
 }

@@ -15,6 +15,7 @@ export interface IAppointment {
   // Source metadata for display
   sourceType?: CalendarSourceType;
   showSourceLogo?: boolean;
+  sourceIconName?: string;
   // Planner-specific fields
   percentComplete?: number;
   // Teams Shifts-specific fields

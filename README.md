@@ -1,8 +1,8 @@
-# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/icon-dark.svg"><img src="docs/images/icon.svg" alt="icon" width="32" height="32"></picture> My Calendars
+# <picture><img src="docs/images/icon.svg" alt="icon" width="32" height="32" /></picture> My Calendars
 
 ## Summary
 
-A SharePoint Framework webpart that aggregates appointments from multiple calendar sources into unified, interactive calendar views. This solution integrates with Microsoft Exchange calendars, SharePoint lists, Microsoft Planner tasks, and ICS feeds, allowing users to visualize and manage events from diverse sources in a single interface. It supports multiple calendar views (day, week, month, schedule) with customizable work hours, time slot durations, and advanced filtering capabilities.
+A SharePoint Framework webpart that aggregates appointments from multiple calendar sources into unified, interactive calendar views. This solution integrates with Microsoft Exchange calendars, SharePoint lists, Microsoft Planner tasks, Microsoft 365 Group and Teams calendars, Teams Shifts, and ICS feeds, allowing users to visualize and manage events from diverse sources in a single interface. It supports multiple calendar views (day, week, month, schedule) with customizable work hours, time slot durations, and advanced filtering capabilities.
 
 ## Screenshot
 
@@ -17,15 +17,16 @@ A SharePoint Framework webpart that aggregates appointments from multiple calend
 The My Calendars webpart provides the following functionality:
 
 - **Multi-Calendar View Support**: Display appointments in Day, Week, Month, Schedule, and Search views
-- **Multiple Calendar Sources**: Aggregate calendars from Exchange, SharePoint lists, Microsoft Planner tasks, Teams Shifts, and internet calendar feeds (ICS)
+- **Multiple Calendar Sources**: Aggregate calendars from Exchange, SharePoint lists, Microsoft Planner tasks, Microsoft 365 Groups, Teams, Teams Shifts, and internet calendar feeds (ICS)
 - **Exchange Integration**: Add user's own calendars and shared mailboxes with color mapping from Outlook
 - **SharePoint Lists**: Support for custom SharePoint list calendars with configurable field mapping
 - **Microsoft Planner Integration**: View Planner tasks as calendar appointments with filtering options (assigned to me, show completed tasks)
+- **M365 Groups & Teams Integration**: Add one or more Group/Team calendars in a single flow, apply one color to the selection, and edit each calendar color afterwards
 - **Teams Shifts Integration**: View Shifts from joined Teams, including draft shifts (shown in italics)
 - **Internet Calendars**: Add ICS feeds with built-in CORS proxy support and fallback mechanisms
 - **Work Hours Configuration**: Set custom work day hours and time slot durations (15-60 minutes)
 - **Calendar Customization**: Toggle weekends, configure first day of week, and customize display settings
-- **Source Logo Display**: Toggle visibility of source logos (Outlook, SharePoint, Planner) per service type
+- **Source Logo Display**: Toggle visibility of source logos (Outlook, SharePoint, Planner, Groups/Teams) per service type
 - **Theme Support**: Light/dark theme awareness with organizational branding
 - **Calendar Management**: Enable/disable individual sources without removing them
 - **Search Functionality**: Search across all appointments from all sources
@@ -45,12 +46,13 @@ The webpart can be configured through the property pane with the following optio
 - **First Day of Week**: Choose which day to start the week on (Sunday through Saturday)
 
 ### Calendar Sources
-- **Add Calendar**: Add Exchange calendars, SharePoint list calendars, Microsoft Planner tasks, Teams Shifts, or internet calendar feeds
+- **Add Calendar**: Add Exchange calendars, SharePoint list calendars, Microsoft Planner tasks, Microsoft 365 Group/Teams calendars, Teams Shifts, or internet calendar feeds
 - **Manage Sources**: View, enable/disable, or remove calendar sources
 - **Assign Colors**: Customize the color for each calendar source
+- **Group/Teams Picker**: Start from either the **M365 Group** or **Teams** button (same destination), select one or more items, and apply one initial color to all selected calendars
 - **Field Mapping**: Configure custom field mappings for SharePoint list calendars
 - **Planner Filters**: Filter Planner tasks by assignment (assigned to me only) and completion status
-- **Logo Display**: Toggle visibility of service logos per source type (Exchange, SharePoint, Planner, Teams Shifts)
+- **Logo Display**: Toggle visibility of service logos per source type (Exchange, SharePoint, Planner, Groups/Teams, Teams Shifts)
 
 ### ICS Proxy Settings
 - **Use Custom Proxy**: Enable a custom proxy for CORS-enabled ICS feeds
@@ -92,7 +94,10 @@ We welcome contributions from the community! Here are some ways you can help:
 
 | Version | Date             | Comments        |
 | ------- | ---------------- | --------------- |
-| 0.0.1 | 2026-02-21          | Initial release |
+| 0.0.1 | 2026-02-21       | Initial release |
+| 0.0.2 | 2026-02-21       | Added Planner calendars |
+| 0.0.3 | 2026-02-25       | Added Teams Shifts calendars |
+| 0.0.4 | 2026-03-08       | Added Teams and Microsoft 365 Groups calendars |
 
 ## Used SharePoint Framework Version
 
@@ -113,7 +118,7 @@ Additional requirements:
 - Node.js version 22.14.0 or higher (and lower than 23.0.0)
 - Appropriate Microsoft Graph permissions configured in your SharePoint tenant
 - Access to a SharePoint site where the webpart can be deployed
-- Configured calendar sources (Exchange, SharePoint lists, or internet calendars)
+- Configured calendar sources (Exchange, SharePoint lists, Microsoft 365 Groups/Teams, Planner, Teams Shifts, or internet calendars)
 
 ## Disclaimer
 
@@ -144,8 +149,8 @@ This solution requires the following Microsoft Graph permissions:
 - `Files.ReadWrite.AppFolder` - To store and retrieve user settings from OneDrive App Folder
 - `Sites.Read.All` - To discover and read SharePoint list calendars
 - `Tasks.Read` - To read Planner tasks from plans the user has access to
-- `Group.Read.All` - To discover Microsoft 365 Groups and their associated Planner plans
-- `Team.ReadBasic.All` - To discover joined Teams
+- `Group.Read.All` - To discover Microsoft 365 Groups and read Group/Team calendar events
+- `Team.ReadBasic.All` - To discover joined Teams and dynamically map Group vs Teams icons
 - `Schedule.Read.All` - To read Teams Shifts
 
 `Calendars.Read` and `Calendars.Read.Shared` are covered by basic calendar access consent; `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All` must be approved by a tenant admin via the API access page.
