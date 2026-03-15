@@ -8,7 +8,7 @@
   },
   "private": true,
   "engines": {
-    "node": ">=22.14.0 < 23.0.0"
+    "node": ">=18.17.1 <19.0.0 || >=22.14.0 <23.0.0"
   },
   "scripts": {
     "build": "heft test --clean --production && heft package-solution --production",

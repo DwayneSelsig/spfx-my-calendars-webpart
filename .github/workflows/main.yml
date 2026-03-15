@@ -37,8 +37,10 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "sharepoint_version=${VERSION}.0" >> $GITHUB_OUTPUT
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Sync lockfile and install dependencies
+        run: |
+          npm install --package-lock-only
+          npm ci
 
       - name: Update package.json version
         run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
