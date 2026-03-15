@@ -21,10 +21,10 @@ jobs:
       - name: Checkout code (tag)
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 18
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18
           cache: npm
 
       # Extract version from release tag
@@ -37,10 +37,8 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "sharepoint_version=${VERSION}.0" >> $GITHUB_OUTPUT
 
-      - name: Sync lockfile and install dependencies
-        run: |
-          npm install --package-lock-only
-          npm ci
+      - name: Install dependencies
+        run: npm install
 
       - name: Update package.json version
         run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
