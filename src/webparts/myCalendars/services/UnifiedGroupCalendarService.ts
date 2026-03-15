@@ -1,5 +1,7 @@
 import { HttpClient } from '@microsoft/sp-http';
-import { IAppointment } from '../models/IAppointment';
+import { GraphFI } from "@pnp/graph";
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import { UserHelper } from '../utils/userHelper';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,8 +26,11 @@ interface IGraphEvent {
   start: { dateTime?: string; date?: string };
   end: { dateTime?: string; date?: string };
   isReminderOn: boolean;
+  isAllDay?: boolean;
+  isOnlineMeeting?: boolean;
+  webLink?: string;
   location?: { displayName: string };
-  organizer?: { emailAddress: { name?: string } };
+  organizer?: { emailAddress: { name?: string; address?: string } };
   attendees: IGraphEventAttendee[];
 }
 
@@ -41,6 +46,7 @@ interface IGraphEventAttendee {
 export class UnifiedGroupCalendarService {
   private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
+  private graph: GraphFI | null = null;
 
   constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
     this.httpClient = httpClient;
@@ -52,6 +58,10 @@ export class UnifiedGroupCalendarService {
    */
   public setGraphClient(client: MSGraphClientV3): void {
     this.graphClient = client;
+  }
+
+  public setGraph(graph: GraphFI): void {
+    this.graph = graph;
   }
 
   /**
@@ -124,7 +134,7 @@ export class UnifiedGroupCalendarService {
   /**
    * Get calendar events for a specific group
    */
-  public async getGroupEvents(groupId: string, startDate: Date, endDate: Date): Promise<IAppointment[]> {
+  public async getGroupEvents(groupId: string, startDate: Date, endDate: Date): Promise<IEvent[]> {
     if (!this.graphClient) {
       console.error('GraphClient not initialized');
       return [];
@@ -133,41 +143,66 @@ export class UnifiedGroupCalendarService {
     try {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
+      const mailboxSettings = await UserHelper.getCurrentUserMailboxSettings(this.graphClient);
+      const userTimeZone = mailboxSettings?.timeZone || 'UTC';
+      console.log('[UnifiedGroupCalendarService] Timezone debug', {
+        groupId,
+        graphTimeZone: mailboxSettings?.timeZone || null,
+        appliedTimeZone: userTimeZone,
+        startISO,
+        endISO
+      });
 
       const data = await this.graphClient
         .api(`/groups/${groupId}/events`)
+        .header('Prefer', `outlook.timezone="${userTimeZone}"`)
         .query({
           $filter: `start/dateTime ge '${startISO}' and end/dateTime le '${endISO}'`,
+          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,webLink,location,organizer,attendees',
           $top: 500
         })
         .get();
 
-      return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event));
+      // Get current user email for isOrganizer determination
+      const currentUserEmail = await UserHelper.getCurrentUserEmail(this.graphClient);
+
+      return Promise.all((data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail)));
     } catch (error) {
       console.error('Error fetching group calendar events:', error);
       return [];
     }
   }
 
-  private mapGraphEventToAppointment(graphEvent: IGraphEvent): IAppointment {
-    const start = new Date(graphEvent.start.dateTime || graphEvent.start.date || new Date());
-    const end = new Date(graphEvent.end.dateTime || graphEvent.end.date || new Date());
+  private async mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string): Promise<IEvent> {
+    const startISO = graphEvent.start.dateTime || graphEvent.start.date || new Date().toISOString();
+    const endISO = graphEvent.end.dateTime || graphEvent.end.date || new Date().toISOString();
+    const organizerEmail = graphEvent.organizer?.emailAddress?.address;
+
+    // Map attendees excluding the organizer
+    const mappedAttendees = (graphEvent.attendees || [])
+      .filter((att: IGraphEventAttendee) => att.type !== 'organizer')
+      .map((att: IGraphEventAttendee) => ({
+        id: att.emailAddress?.address || '',
+        name: att.emailAddress?.name || att.emailAddress?.address || '',
+        email: att.emailAddress?.address || ''
+      }))
+      .filter(att => att.id);
 
     return {
       id: graphEvent.id,
       title: graphEvent.subject || 'Untitled',
       description: graphEvent.bodyPreview || '',
       location: graphEvent.location?.displayName || undefined,
-      startDate: start,
-      endDate: end,
-      isAllDay: graphEvent.isReminderOn === false && !graphEvent.start.dateTime,
+      start: startISO,
+      end: endISO,
+      isFullDay: graphEvent.isAllDay || false,
       sourceId: '',
-      color: '',
-      organizer: graphEvent.organizer?.emailAddress?.name || undefined,
-      attendees: (graphEvent.attendees || [])
-        .filter((att: IGraphEventAttendee) => att.type !== 'organizer')
-        .map((att: IGraphEventAttendee) => att.emailAddress?.name || att.emailAddress?.address || '')
-        .filter(Boolean)
+      color: undefined,
+      isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail),
+      attendees: mappedAttendees,
+      isOnlineMeeting: graphEvent.isOnlineMeeting || false,
+      webLink: graphEvent.webLink || undefined
     };
   }
 }
+

@@ -2,7 +2,6 @@ import * as React from 'react';
 import {
     ActionButton,
     DefaultButton,
-    SearchBox,
     Callout,
     Text,
     IconButton
@@ -15,13 +14,13 @@ export interface ICalendarToolbarProps {
     onToday: () => void;
     onDateChange: (date: Date) => void;
     onNavigate: (direction: 'prev' | 'next') => void;
-    onSearch?: (query: string) => void;
     dateRangeText: string;
+    usePnpCalendar?: boolean;
+    onToggleCalendarRenderer?: () => void;
 }
 
 interface ICalendarToolbarState {
     isDatePickerOpen: boolean;
-    searchQuery: string;
     pickerMonth: number;
     pickerYear: number;
     selectedWeekStart?: Date;
@@ -34,20 +33,11 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
         super(props);
         this.state = {
             isDatePickerOpen: false,
-            searchQuery: '',
             pickerMonth: props.currentDate.getMonth(),
             pickerYear: props.currentDate.getFullYear(),
             selectedWeekStart: undefined
         };
     }
-
-    private handleSearchChange = (_event?: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string): void => {
-        const value = newValue || '';
-        this.setState({ searchQuery: value });
-        if (this.props.onSearch) {
-            this.props.onSearch(value);
-        }
-    };
 
     private getWeekStart = (date: Date): Date => {
         const d = new Date(date);
@@ -374,10 +364,6 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
         return navigationLabels[this.props.viewType];
     };
 
-    private getSearchPlaceholder = (): string => {
-        return 'Search appointments...';
-    };
-
     private getWeekDays = (): Date[] => {
         const { currentDate } = this.props;
         const weekStart = this.getWeekStart(currentDate);
@@ -478,8 +464,8 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
     };
 
     public render(): React.ReactElement {
-        const { onToday, onNavigate, dateRangeText } = this.props;
-        const { isDatePickerOpen, searchQuery } = this.state;
+        const { onToday, onNavigate, dateRangeText, usePnpCalendar = true, onToggleCalendarRenderer } = this.props;
+        const { isDatePickerOpen } = this.state;
 
         const toolbarTopStyle = mergeStyles({
             display: 'flex',
@@ -503,7 +489,7 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
 
         return (
             <div style={{ marginBottom: 8 }}>
-                {/* Top toolbar: Today, Date Picker, and Search */}
+                {/* Top toolbar: Today and Date Picker */}
                 <div className={toolbarTopStyle}>
                     <div className={toolbarLeftStyle}>
                         <DefaultButton
@@ -544,12 +530,14 @@ export class CalendarToolbar extends React.Component<ICalendarToolbarProps, ICal
                             title={this.getNavigationAriaLabel('next')}
                         />
                     </div>
-                    <SearchBox
-                        placeholder={this.getSearchPlaceholder()}
-                        value={searchQuery}
-                        onChange={this.handleSearchChange}
-                        style={{ width: 250, flexShrink: 0 }}
-                    />
+                    {onToggleCalendarRenderer && (
+                        <DefaultButton
+                            text={usePnpCalendar ? 'PnP View' : 'Classic View'}
+                            iconProps={{ iconName: usePnpCalendar ? 'PlugConnected' : 'Calendar' }}
+                            onClick={onToggleCalendarRenderer}
+                            title="Toggle between PnP calendar and custom views"
+                        />
+                    )}
                 </div>
                 
                 {/* Quick day selector - only for day view */}

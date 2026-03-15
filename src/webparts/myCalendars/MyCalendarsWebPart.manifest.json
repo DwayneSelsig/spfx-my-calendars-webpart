@@ -43,6 +43,10 @@
     {
       "resource": "Microsoft Graph",
       "scope": "Schedule.Read.All"
+    },
+    {
+      "resource": "Microsoft Graph",
+      "scope": "MailboxSettings.Read"
     }
   ],
 

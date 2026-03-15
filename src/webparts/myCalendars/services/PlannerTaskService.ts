@@ -1,10 +1,6 @@
-import { HttpClient } from '@microsoft/sp-http';
-import { IAppointment } from '../models/IAppointment';
+import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { ICalendarSource } from '../models/ICalendarSettings';
-
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
 
 export interface IPlannerPlan {
   id: string;
@@ -162,7 +158,7 @@ export class PlannerTaskService {
     showCompleted: boolean = true,
     source: ICalendarSource,
     showSourceLogo: boolean = true
-  ): Promise<IAppointment[]> {
+  ): Promise<IEvent[]> {
     try {
       if (!this.graphClient) {
         console.error('GraphClient not initialized');
@@ -197,11 +193,11 @@ export class PlannerTaskService {
       // Map to appointments and filter by date range
       const appointments = tasks
         .map((task: IGraphPlannerTask) => this.mapPlannerTaskToAppointment(task, source, showSourceLogo))
-        .filter((apt: IAppointment | null): apt is IAppointment => apt !== null);
+        .filter((apt: IEvent | null): apt is IEvent => apt !== null);
 
       // Client-side date filtering (only include tasks with dates in range)
-      return appointments.filter((apt: IAppointment) => {
-        const aptDate = new Date(apt.startDate);
+      return appointments.filter((apt: IEvent) => {
+        const aptDate = new Date(apt.start);
         return aptDate >= startDate && aptDate <= endDate;
       });
     } catch (error) {
@@ -211,10 +207,10 @@ export class PlannerTaskService {
   }
 
   /**
-   * Map Planner task to IAppointment
+   * Map Planner task to IEvent
    * Returns null if the task has no usable date
    */
-  private mapPlannerTaskToAppointment(task: IGraphPlannerTask, source: ICalendarSource, showSourceLogo: boolean): IAppointment | null {
+  private mapPlannerTaskToAppointment(task: IGraphPlannerTask, source: ICalendarSource, showSourceLogo: boolean): IEvent | null {
     // Determine dates - use both if available, otherwise use whichever is available
     let startDate: Date | null = null;
     let endDate: Date | null = null;
@@ -255,21 +251,16 @@ export class PlannerTaskService {
       description += (description ? '\n' : '') + `Checklist: ${completed}/${task.checklistItemCount} completed`;
     }
 
-    // Get assignments as attendees
-    const assignments = task.assignments ? Object.keys(task.assignments) : [];
-
     return {
       id: task.id,
       title: task.title || 'Untitled Task',
       description: description || undefined,
       location: undefined, // Planner tasks don't have locations
-      startDate: startDate,
-      endDate: endDate,
-      isAllDay: true, // Planner tasks are always all-day (no time component)
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      isFullDay: true, // Planner tasks are always all-day (no time component)
       sourceId: source.id,
-      color: source.color,
-      organizer: undefined,
-      attendees: assignments.length > 0 ? assignments : undefined,
+      colorHex: source.color,
       sourceType: 'planner',
       showSourceLogo: showSourceLogo,
       percentComplete: task.percentComplete
@@ -297,3 +288,4 @@ export class PlannerTaskService {
     }
   }
 }
+

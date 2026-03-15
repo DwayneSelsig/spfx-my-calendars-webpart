@@ -10,13 +10,9 @@ import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Checkbox } from '@fluentui/react/lib/Checkbox';
-import { HttpClient } from '@microsoft/sp-http';
+import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
 import { ICalendarSource, ICalendarSettings, CalendarSourceType } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
-
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
 import { ExchangeCalendarService, IExchangeCalendar } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';

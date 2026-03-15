@@ -1,3 +1,17 @@
+.communityCalendarWrapper {
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  
+  // Override PnP Calendar styles to match our theme
+  :global {
+    .ms-Calendar {
+      width: 100%;
+      height: 100%;
+    }
+  }
+}
+
 .dayView, .weekView, .monthView, .scheduleView {
   width: 100%;
   height: 100%;
@@ -83,6 +97,7 @@
   border-radius: 10px;
   background: var(--white, #ffffff);
   max-height: calc(100vh - 200px);
+  overflow-y: auto;
 }
 
 .timeColumn {
@@ -248,6 +263,9 @@
   overflow-y: auto;
   box-sizing: border-box;
   flex-shrink: 0;
+  position: sticky;
+  top: 66px;
+  z-index: 2;
 }
 
 .allDayPlaceholder {
@@ -257,6 +275,9 @@
   background-color: var(--neutralLighterAlt, #faf9f8);
   box-sizing: border-box;
   flex-shrink: 0;
+  position: sticky;
+  top: 66px;
+  z-index: 2;
 }
 
 .allDayAppointment {

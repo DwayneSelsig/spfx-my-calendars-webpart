@@ -12,6 +12,12 @@ import {
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
+import PnPTelemetry from '@pnp/telemetry-js';
+import { spfi, SPFI, SPFx } from "@pnp/sp";
+import "@pnp/sp/webs";
+import "@pnp/sp/lists";
+import "@pnp/sp/items";
+import "@pnp/sp/batching";
 
 import * as strings from 'MyCalendarsWebPartStrings';
 import MyCalendars from './components/MyCalendars';
@@ -21,6 +27,7 @@ import { SettingsStorageService } from './services/SettingsStorageService';
 
 export interface IMyCalendarsWebPartProps {
   settings: string;
+  disablePnpTelemetry?: boolean;
 }
 
 export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalendarsWebPartProps> {
@@ -30,6 +37,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   private _currentSettings: ICalendarSettings = { ...defaultCalendarSettings };
   private _storageService: SettingsStorageService | null = null;
   private _themeVariant: IReadonlyTheme | undefined;
+  private _sp!: SPFI;
 
   public render(): void {
     const settings = this.getSettings();
@@ -45,7 +53,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         settings: settings,
         onSettingsChange: this.handleSettingsChange,
         onResetSettings: this.handleResetSettings,
-        context: this.context
+        context: this.context,
+        sp: this._sp
       }
     );
 
@@ -114,6 +123,11 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   };
 
   protected onInit(): Promise<void> {
+    this.applyTelemetryPreference();
+
+    // Initialize PnPjs with SPFx context
+    this._sp = spfi().using(SPFx(this.context));
+
     // Initialize storage service
     this._storageService = new SettingsStorageService(
       this.context.msGraphClientFactory
@@ -157,6 +171,13 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     }
 
     return Promise.resolve(this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentSharePoint : strings.AppSharePointEnvironment);
+  }
+
+  private applyTelemetryPreference(): void {
+    if (this.properties.disablePnpTelemetry === true) {
+      const telemetry = PnPTelemetry.getInstance();
+      telemetry.optOut();
+    }
   }
 
   protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
@@ -249,6 +270,20 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
                   max: 6,
                   value: settings.firstDayOfWeek,
                   showValue: true
+                })
+              ]
+            },
+            {
+              groupName: 'PnP Controls',
+              groupFields: [
+                PropertyPaneToggle('disablePnpTelemetry', {
+                  label: 'Schakel PnP Controls telemetry uit',
+                  checked: this.properties.disablePnpTelemetry === true,
+                  onText: 'Uit',
+                  offText: 'Aan'
+                }),
+                PropertyPaneLabel('telemetryInfo', {
+                  text: 'Standaard staat telemetry aan. Bij uitschakelen wordt PnP telemetry opt-out toegepast voor deze webpart.'
                 })
               ]
             },
@@ -347,6 +382,10 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         break;
       case 'proxyPriority2':
         settings.proxyPriority2 = newValue as 'custom' | 'whateverorigin';
+        break;
+      case 'disablePnpTelemetry':
+        this.properties.disablePnpTelemetry = newValue === true;
+        this.applyTelemetryPreference();
         break;
     }
     

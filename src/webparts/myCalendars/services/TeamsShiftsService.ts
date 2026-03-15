@@ -1,10 +1,6 @@
-import { HttpClient } from '@microsoft/sp-http';
-import { IAppointment } from '../models/IAppointment';
+import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { ICalendarSource } from '../models/ICalendarSettings';
-
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
 
 interface IGraphTeam {
   id: string;
@@ -59,7 +55,7 @@ export class TeamsShiftsService {
     endDate: Date,
     source: ICalendarSource,
     showSourceLogo: boolean = true
-  ): Promise<IAppointment[]> {
+  ): Promise<IEvent[]> {
     if (!this.graphClient) {
       console.error('GraphClient not initialized');
       return [];
@@ -70,11 +66,11 @@ export class TeamsShiftsService {
       return [];
     }
 
-    const allAppointments: IAppointment[] = [];
+    const allAppointments: IEvent[] = [];
 
     for (const team of teams) {
       const teamShifts = await this.getTeamShifts(team.id, startDate, endDate);
-      const mappedShifts = teamShifts.reduce((acc: IAppointment[], shift: IGraphShift) => {
+      const mappedShifts = teamShifts.reduce((acc: IEvent[], shift: IGraphShift) => {
         acc.push(...this.mapShiftToAppointments(shift, team, source, showSourceLogo));
         return acc;
       }, []);
@@ -89,6 +85,11 @@ export class TeamsShiftsService {
 
   private async getJoinedTeams(): Promise<IGraphTeam[]> {
     try {
+      if (!this.graphClient) {
+        console.error('GraphClient not initialized');
+        return [];
+      }
+
       const teams: IGraphTeam[] = [];
       let nextLink: string | undefined = '/me/joinedTeams';
 
@@ -111,6 +112,11 @@ export class TeamsShiftsService {
 
   private async getTeamShifts(teamId: string, startDate: Date, endDate: Date): Promise<IGraphShift[]> {
     try {
+      if (!this.graphClient) {
+        console.error('GraphClient not initialized');
+        return [];
+      }
+
       const shifts: IGraphShift[] = [];
       let nextLink: string | undefined = `/teams/${teamId}/schedule/shifts`;
 
@@ -156,8 +162,8 @@ export class TeamsShiftsService {
     team: IGraphTeam,
     source: ICalendarSource,
     showSourceLogo: boolean
-  ): IAppointment[] {
-    const appointments: IAppointment[] = [];
+  ): IEvent[] {
+    const appointments: IEvent[] = [];
 
     if (shift.draftShift) {
       const draftAppointment = this.createAppointmentFromShiftItem(
@@ -196,7 +202,7 @@ export class TeamsShiftsService {
     showSourceLogo: boolean,
     suffix: 'shared' | 'draft',
     isDraft: boolean
-  ): IAppointment | null {
+  ): IEvent | null {
     if (!shiftItem?.startDateTime || !shiftItem?.endDateTime) {
       return null;
     }
@@ -214,18 +220,17 @@ export class TeamsShiftsService {
     const isAllDay = durationHours >= 12;
 
     const description = this.buildDescription(shiftItem);
-    const color = this.mapThemeToColor(shiftItem.theme) || source.color;
 
     return {
       id: `shift_${team.id}_${suffix}_${normalizedStart.getTime()}_${normalizedEnd.getTime()}`,
       title: team.displayName,
       description,
       location: team.displayName,
-      startDate: normalizedStart,
-      endDate: normalizedEnd,
-      isAllDay,
+      start: normalizedStart.toISOString(),
+      end: normalizedEnd.toISOString(),
+      isFullDay: isAllDay,
       sourceId: source.id,
-      color,
+      colorHex: this.mapThemeToColor(shiftItem.theme) || source.color,
       sourceType: 'teamsShifts',
       showSourceLogo,
       isDraft
@@ -273,3 +278,4 @@ export class TeamsShiftsService {
     return map[normalized];
   }
 }
+

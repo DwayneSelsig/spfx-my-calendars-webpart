@@ -1,7 +1,7 @@
 import * as React from 'react';
 import styles from './MyCalendars.module.scss';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
-import { IAppointment } from '../models/IAppointment';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { CalendarViewType } from '../models/ICalendarSettings';
 import { IcsParser } from '../services/IcsParser';
 import { ExchangeCalendarService } from '../services/ExchangeCalendarService';
@@ -12,6 +12,7 @@ import { UnifiedGroupCalendarService } from '../services/UnifiedGroupCalendarSer
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
+import { CommunityCalendarView } from './views/CommunityCalendarView';
 import { ScheduleView } from './views/ScheduleView';
 import { SearchResultsView } from './views/SearchResultsView';
 import { CommandBar, ICommandBarItemProps } from '@fluentui/react/lib/CommandBar';
@@ -20,12 +21,14 @@ import { Icon } from '@fluentui/react/lib/Icon';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Text } from '@fluentui/react/lib/Text';
 import { CommandBarButton } from '@fluentui/react/lib/Button';
+import { SearchBox } from '@fluentui/react/lib/SearchBox';
 import { SettingsPanel } from './SettingsPanel';
-import { CalendarToolbar } from './CalendarToolbar';
-
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
+//import { CalendarToolbar } from './CalendarToolbar';
+import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { graphfi } from "@pnp/graph";
+import { SPFx } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/mail";
 
 type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 type ServiceStatus = 'loading' | 'ready' | 'error';
@@ -49,7 +52,7 @@ const defaultLoadErrors: Record<ServiceKey, string | undefined> = {
 };
 
 interface IMyCalendarsState {
-  appointments: IAppointment[];
+  appointments: IEvent[];
   currentDate: Date;
   currentView: CalendarViewType;
   previousView: CalendarViewType;
@@ -61,6 +64,7 @@ interface IMyCalendarsState {
   loadErrors: Record<ServiceKey, string | undefined>;
   isLoadingStatusOpen: boolean;
   showRefreshButton: boolean;
+  usePnpCalendar: boolean;
 }
 
 export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyCalendarsState> {
@@ -84,7 +88,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       loadingSources: { ...defaultLoadingSources },
       loadErrors: { ...defaultLoadErrors },
       isLoadingStatusOpen: false,
-      showRefreshButton: true
+      showRefreshButton: true,
+      usePnpCalendar: true
     };
   }
 
@@ -134,8 +139,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const httpClient = this.props.context.httpClient;
     const graphClientPromise = this.props.context.msGraphClientFactory.getClient('3');
     const graphClient = await graphClientPromise;
+    const graph = graphfi().using(SPFx(this.props.context));
     const exchangeService = new ExchangeCalendarService(httpClient, graphClient);
     exchangeService.setGraphClient(graphClient);
+    exchangeService.setGraph(graph);
     const sharePointService = new SharePointCalendarService(httpClient, graphClient);
     sharePointService.setGraphClient(graphClient);
     const plannerService = new PlannerTaskService(httpClient, graphClient);
@@ -144,6 +151,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     teamsShiftsService.setGraphClient(graphClient);
     const unifiedGroupService = new UnifiedGroupCalendarService(httpClient, graphClient);
     unifiedGroupService.setGraphClient(graphClient);
+    unifiedGroupService.setGraph(graph);
     
     // Calculate date range for filtering (current month ± 3 months)
     const today = new Date();
@@ -167,13 +175,18 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       }));
     };
 
-    const appendAppointments = (appointments: IAppointment[]): void => {
+    const appendAppointments = (appointments: IEvent[]): void => {
       if (loadId !== this.activeLoadId || appointments.length === 0) {
         return;
       }
 
+      const normalizedAppointments = appointments.map(apt => ({
+        ...apt,
+        colorHex: apt.colorHex || '#0078d4'
+      }));
+
       this.setState(prev => ({
-        appointments: [...prev.appointments, ...appointments]
+        appointments: [...prev.appointments, ...normalizedAppointments]
       }));
     };
 
@@ -211,19 +224,19 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 return events.map(event => ({
                   ...event,
                   sourceId: `exchange_${calendar.id}`,
-                  color: calendar.hexColor,
+                  colorHex: calendar.hexColor,
                   sourceType: 'exchange' as const,
                   showSourceLogo: this.props.settings.exchangeShowSourceLogo ?? true
-                }));
+                } as IEvent));
               } catch (error) {
                 hadError = true;
                 console.error(`Failed to load Exchange calendar ${calendar.name}:`, error);
-                return [] as IAppointment[];
+                return [] as IEvent[];
               }
             });
 
           const appointmentGroups = await Promise.all(calendarPromises);
-          const flattenedAppointments = appointmentGroups.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+          const flattenedAppointments = appointmentGroups.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
           appendAppointments(flattenedAppointments);
         } catch (error) {
           hadError = true;
@@ -239,7 +252,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         let hadError = false;
         const appointmentsBySource = await Promise.all(sourceGroups.ics.map(async source => {
           try {
-            let appointments: IAppointment[] = [];
+            let appointments: IEvent[] = [];
             if (source.rawContent) {
               appointments = IcsParser.parseRawContent(source.rawContent, source.id, source.color);
             } else if (source.url) {
@@ -248,17 +261,18 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
             return appointments.map(apt => ({
               ...apt,
+              colorHex: source.color,
               sourceType: 'ics' as const,
               showSourceLogo: source.showSourceLogo ?? true
-            }));
+            } as IEvent));
           } catch (error) {
             hadError = true;
             console.error(`Failed to load ICS calendar ${source.name}:`, error);
-            return [] as IAppointment[];
+            return [] as IEvent[];
           }
         }));
 
-        const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
         updateStatus('ics', hadError ? 'error' : 'ready', hadError ? 'One or more ICS sources failed.' : undefined);
       })());
@@ -280,20 +294,20 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               return items.map(item => ({
                 ...item,
                 sourceId: source.id,
-                color: source.color,
+                colorHex: source.color,
                 sourceType: 'sharepoint' as const,
                 showSourceLogo: this.props.settings.sharePointShowSourceLogo ?? true
-              }));
+              } as IEvent));
             }
           } catch (error) {
             hadError = true;
             console.error(`Failed to load SharePoint calendar ${source.name}:`, error);
           }
 
-          return [] as IAppointment[];
+          return [] as IEvent[];
         }));
 
-        const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
         updateStatus('sharepoint', hadError ? 'error' : 'ready', hadError ? 'One or more SharePoint calendars failed.' : undefined);
       })());
@@ -320,10 +334,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             console.error(`Failed to load Planner tasks ${source.name}:`, error);
           }
 
-          return [] as IAppointment[];
+          return [] as IEvent[];
         }));
 
-        const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
         updateStatus('planner', hadError ? 'error' : 'ready', hadError ? 'One or more Planner sources failed.' : undefined);
       })());
@@ -343,11 +357,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           } catch (error) {
             hadError = true;
             console.error(`Failed to load Teams shifts ${source.name}:`, error);
-            return [] as IAppointment[];
+            return [] as IEvent[];
           }
         }));
 
-        const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
         updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? 'One or more Teams Shifts sources failed.' : undefined);
       })());
@@ -368,7 +382,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         const appointmentsBySource = await Promise.all(sourceGroups.unifiedGroup.map(async source => {
           try {
             if (!source.groupId) {
-              return [] as IAppointment[];
+              return [] as IEvent[];
             }
 
             const iconName = joinedTeamIds.has(source.groupId) ? 'TeamsLogo' : 'Group';
@@ -376,19 +390,19 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             return events.map(event => ({
               ...event,
               sourceId: source.id,
-              color: source.color,
+              colorHex: source.color,
               sourceType: 'unifiedGroup' as const,
               showSourceLogo: source.showSourceLogo ?? true,
               sourceIconName: iconName
-            }));
+            } as IEvent));
           } catch (error) {
             hadError = true;
             console.error(`Failed to load group calendar ${source.name}:`, error);
-            return [] as IAppointment[];
+            return [] as IEvent[];
           }
         }));
 
-        const flattenedAppointments = appointmentsBySource.reduce((acc, group) => acc.concat(group), [] as IAppointment[]);
+        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
         updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? 'One or more group calendars failed.' : undefined);
       })());
@@ -450,40 +464,30 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   };
 
   private getCommandBarItems = (): ICommandBarItemProps[] => {
-    const { currentView } = this.state;
-    const isSearchView = currentView === 'search';
+    const { searchQuery } = this.state;
+
+    const searchItem: ICommandBarItemProps = {
+      key: 'search',
+      onRender: () => (
+        <SearchBox
+          placeholder="Search appointments..."
+          value={searchQuery}
+          onChange={(_event, newValue) => this.handleSearch(newValue || '')}
+          style={{
+            width: 250,
+            flexShrink: 0
+          }}
+        />
+      )
+    };
 
     return [
-      {
-        key: 'today',
-        text: 'Today',
-        iconProps: { iconName: 'GotoToday' },
-        disabled: isSearchView,
-        onClick: () => this.setState({ currentDate: new Date() })
-      },
-      {
-        key: 'prev',
-        iconProps: { iconName: 'ChevronLeft' },
-        disabled: isSearchView,
-        onClick: () => this.navigateDate('prev')
-      },
-      {
-        key: 'next',
-        iconProps: { iconName: 'ChevronRight' },
-        disabled: isSearchView,
-        onClick: () => this.navigateDate('next')
-      },
-      {
-        key: 'dateRange',
-        text: this.getDateRangeText(),
-        disabled: true
-      }
+      searchItem
     ];
   };
 
   private getFarCommandBarItems = (): ICommandBarItemProps[] => {
-    const { currentView, previousView, showRefreshButton } = this.state;
-    const displayView = currentView === 'search' ? previousView : currentView;
+    const { showRefreshButton } = this.state;
 
     const refreshItem: ICommandBarItemProps = {
       key: 'refresh',
@@ -500,7 +504,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     };
 
     return [
-      {
+      /*{
         key: 'views',
         text: displayView.charAt(0).toUpperCase() + displayView.slice(1),
         iconProps: { iconName: 'View' },
@@ -540,7 +544,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             }
           ]
         }
-      },
+      },*/
       {
         key: 'settings',
         iconProps: { iconName: 'Settings' },
@@ -665,7 +669,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   };
 
   private renderView(): React.ReactElement {
-    const { appointments, currentDate, currentView, isLoading, searchQuery } = this.state;
+    const { appointments, currentDate, currentView, isLoading, searchQuery, usePnpCalendar } = this.state;
     const { settings } = this.props;
 
     // Filter appointments based on search query
@@ -675,8 +679,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       const query = trimmedQuery.toLowerCase();
       filteredAppointments = appointments.filter(apt =>
         apt.title.toLowerCase().includes(query) ||
-        (apt.location && apt.location.toLowerCase().includes(query)) ||
-        (apt.organizer && apt.organizer.toLowerCase().includes(query))
+        (apt.location && apt.location.toLowerCase().includes(query))
       );
     }
 
@@ -695,7 +698,17 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const startHour = settings.userStartHour !== undefined ? settings.userStartHour : settings.startHour;
     const endHour = settings.userEndHour !== undefined ? settings.userEndHour : settings.endHour;
 
-    const viewProps = {
+    const calendarViewProps = {
+      appointments: filteredAppointments,
+      currentDate,
+      onDateChange: this.handleDateChange,
+      isLoading,
+      startHour: startHour,
+      endHour: endHour,
+      showWeekends: settings.showWeekends
+    };
+
+    const scheduleViewProps = {
       appointments: filteredAppointments,
       currentDate,
       onDateChange: this.handleDateChange,
@@ -708,15 +721,23 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     switch (currentView) {
       case 'day':
-        return <DayView {...viewProps} />;
+        return usePnpCalendar
+          ? <CommunityCalendarView {...calendarViewProps} viewType="day" />
+          : <DayView {...scheduleViewProps} />;
       case 'week':
-        return <WeekView {...viewProps} />;
+        return usePnpCalendar
+          ? <CommunityCalendarView {...calendarViewProps} viewType="week" />
+          : <WeekView {...scheduleViewProps} />;
       case 'month':
-        return <MonthView {...viewProps} />;
+        return usePnpCalendar
+          ? <CommunityCalendarView {...calendarViewProps} viewType="month" />
+          : <MonthView {...scheduleViewProps} />;
       case 'schedule':
-        return <ScheduleView {...viewProps} />;
+        return <ScheduleView {...scheduleViewProps} />;
       default:
-        return <MonthView {...viewProps} />;
+        return usePnpCalendar
+          ? <CommunityCalendarView {...calendarViewProps} viewType="month" />
+          : <MonthView {...scheduleViewProps} />;
     }
   }
 
@@ -736,22 +757,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   };
 
   public render(): React.ReactElement<IMyCalendarsProps> {
-    const { currentDate, currentView, previousView } = this.state;
-    const displayView = (currentView === 'search' ? previousView : currentView) as 'day' | 'week' | 'month' | 'schedule';
-
     return (
       <div className={styles.myCalendars}>
-        <CalendarToolbar
-          currentDate={currentDate}
-          viewType={displayView}
-          onToday={() => this.setState({ currentDate: new Date() })}
-          onDateChange={this.handleDateChange}
-          onNavigate={this.navigateDate}
-          onSearch={this.handleSearch}
-          dateRangeText={this.getDateRangeText()}
-        />
         <CommandBar
-          items={[]}
+          items={this.getCommandBarItems()}
           farItems={this.getFarCommandBarItems()}
           className={styles.commandBar}
         />

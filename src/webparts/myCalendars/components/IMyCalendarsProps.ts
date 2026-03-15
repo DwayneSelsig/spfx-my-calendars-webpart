@@ -1,5 +1,6 @@
 import { ICalendarSettings } from '../models/ICalendarSettings';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
+import { SPFI } from "@pnp/sp";
 
 export interface IMyCalendarsProps {
   description: string;
@@ -11,4 +12,5 @@ export interface IMyCalendarsProps {
   onSettingsChange: (settings: ICalendarSettings) => void;
   onResetSettings?: () => void;
   context: WebPartContext;
+  sp: SPFI;
 }

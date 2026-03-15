@@ -3,7 +3,7 @@ import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { ICalendarViewProps } from './DayView';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
-import { IAppointment } from '../../models/IAppointment';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 
 export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, startHour, endHour, showWeekends } = props;
@@ -59,10 +59,9 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   }, [startHour, endHour, showWeekends]);
 
   // Helper function to check if appointment is all-day (starts at 00:00 or spans entire day)
-  const isAllDayAppointment = (apt: IAppointment): boolean => {
-    if (!apt.endDate) return false;
-    const start = apt.startDate; // Already a Date object
-    const end = apt.endDate; // Already a Date object
+  const isAllDayAppointment = (apt: IEvent): boolean => {
+    const start = new Date(apt.start);
+    const end = new Date(apt.end);
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     // Consider it all-day if it's 12+ hours or starts at midnight and longer than 4 hours
     return durationHours >= 12 || (start.getHours() === 0 && start.getMinutes() === 0 && durationHours > 4);
@@ -71,7 +70,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   // Check if any day in the week has all-day appointments
   const hasAnyAllDayAppointments = weekDays.some(day => {
     const dayAppointments = appointments.filter(apt => {
-      const aptDate = apt.startDate; // Already a Date object
+      const aptDate = new Date(apt.start);
       return aptDate.getDate() === day.getDate() &&
              aptDate.getMonth() === day.getMonth() &&
              aptDate.getFullYear() === day.getFullYear();
@@ -102,7 +101,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
         </div>
         {weekDays.map((day, dayIdx) => {
           const dayAppointments = appointments.filter(apt => {
-            const aptDate = apt.startDate; // Already a Date object
+            const aptDate = new Date(apt.start);
             return aptDate.getDate() === day.getDate() &&
                    aptDate.getMonth() === day.getMonth() &&
                    aptDate.getFullYear() === day.getFullYear();
@@ -132,8 +131,8 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                       key={apt.id}
                       className={styles.allDayAppointment}
                       style={{
-                        backgroundColor: `color-mix(in srgb, ${apt.color} 20%, transparent)`,
-                        borderLeftColor: apt.color
+                        backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
+                        borderLeftColor: apt.colorHex ?? '#0078d4'
                       }}
                       title={apt.title}
                     >
@@ -163,10 +162,12 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                 {/* Appointments layer with absolute positioning */}
                 <div className={styles.appointmentsLayer}>
                   {timedAppointments.map(apt => {
-                    const aptStartHour = apt.startDate.getHours();
-                    const aptStartMinutes = apt.startDate.getMinutes();
-                    const aptEndHour = apt.endDate ? apt.endDate.getHours() : aptStartHour + 1;
-                    const aptEndMinutes = apt.endDate ? apt.endDate.getMinutes() : 0;
+                    const aptStartDate = new Date(apt.start);
+                    const aptEndDate = new Date(apt.end);
+                    const aptStartHour = aptStartDate.getHours();
+                    const aptStartMinutes = aptStartDate.getMinutes();
+                    const aptEndHour = aptEndDate.getHours();
+                    const aptEndMinutes = aptEndDate.getMinutes();
                     
                     // Calculate position from the start of visible hours (startHour prop)
                     const minutesFromViewStart = (aptStartHour - startHour) * 60 + aptStartMinutes;
@@ -187,10 +188,10 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                           height: `${height}px`,
                           left: '4px',
                           right: '4px',
-                          backgroundColor: `color-mix(in srgb, ${apt.color} 20%, transparent)`,
-                          borderLeftColor: apt.color
+                          backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
+                          borderLeftColor: apt.colorHex ?? '#0078d4'
                         }}
-                        title={`${apt.title} (${apt.startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${apt.endDate?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
+                        title={`${apt.title} (${aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${aptEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
                       >
                         <div className={styles.appointmentTitle}>
                           {apt.showSourceLogo && apt.sourceType && (
@@ -199,7 +200,7 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
                           <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                         </div>
                         <div className={styles.appointmentTime}>
-                          {apt.startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
                     );
@@ -213,3 +214,4 @@ export const WeekView: React.FC<ICalendarViewProps> = (props) => {
     </div>
   );
 };
+

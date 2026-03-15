@@ -1,5 +1,7 @@
 import { HttpClient } from '@microsoft/sp-http';
-import { IAppointment } from '../models/IAppointment';
+import { GraphFI } from "@pnp/graph";
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import { UserHelper } from '../utils/userHelper';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,8 +32,11 @@ interface IGraphEvent {
   start: { dateTime?: string; date?: string };
   end: { dateTime?: string; date?: string };
   isReminderOn: boolean;
+  isAllDay?: boolean;
+  isOnlineMeeting?: boolean;
+  webLink?: string;
   location?: { displayName: string };
-  organizer?: { emailAddress: { name?: string } };
+  organizer?: { emailAddress: { name?: string; address?: string } };
   attendees: IGraphEventAttendee[];
 }
 
@@ -48,6 +53,7 @@ export class ExchangeCalendarService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
   private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
+  private graph: GraphFI | null = null;
 
   // Color mapping based on Outlook calendar colors
   private readonly COLOR_MAP: Record<string, string> = {
@@ -74,6 +80,10 @@ export class ExchangeCalendarService {
    */
   public setGraphClient(client: MSGraphClientV3): void {
     this.graphClient = client;
+  }
+
+  public setGraph(graph: GraphFI): void {
+    this.graph = graph;
   }
 
   /**
@@ -153,7 +163,7 @@ export class ExchangeCalendarService {
     startDate: Date,
     endDate: Date,
     mailbox?: string
-  ): Promise<IAppointment[]> {
+  ): Promise<IEvent[]> {
     try {
       if (!this.graphClient) {
         console.error('GraphClient not initialized');
@@ -168,15 +178,31 @@ export class ExchangeCalendarService {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
 
+      const mailboxSettings = await UserHelper.getCurrentUserMailboxSettings(this.graphClient);
+      const userTimeZone = mailboxSettings?.timeZone || 'UTC';
+      console.log('[ExchangeCalendarService] Timezone debug', {
+        calendarId,
+        mailbox: mailbox || 'me',
+        graphTimeZone: mailboxSettings?.timeZone || null,
+        appliedTimeZone: userTimeZone,
+        startISO,
+        endISO
+      });
+
       const data = await this.graphClient
         .api(endpoint)
+        .header('Prefer', `outlook.timezone="${userTimeZone}"`)
         .query({
           $filter: `start/dateTime ge '${startISO}' and end/dateTime le '${endISO}'`,
+          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,webLink,location,organizer,attendees',
           $top: 500
         })
         .get();
 
-      return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event));
+      // Get current user email for isOrganizer determination
+      const currentUserEmail = await UserHelper.getCurrentUserEmail(this.graphClient);
+
+      return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail));
     } catch (error) {
       console.error('Error fetching Exchange calendar events:', error);
       return [];
@@ -184,27 +210,38 @@ export class ExchangeCalendarService {
   }
 
   /**
-   * Map Microsoft Graph event to IAppointment
+   * Map Microsoft Graph event to IEvent
    */
-  private mapGraphEventToAppointment(graphEvent: IGraphEvent): IAppointment {
-    const start = new Date(graphEvent.start.dateTime || graphEvent.start.date || new Date());
-    const end = new Date(graphEvent.end.dateTime || graphEvent.end.date || new Date());
+  private mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string): IEvent {
+    const startISO = graphEvent.start.dateTime || graphEvent.start.date || new Date().toISOString();
+    const endISO = graphEvent.end.dateTime || graphEvent.end.date || new Date().toISOString();
+    const organizerEmail = graphEvent.organizer?.emailAddress?.address;
+
+    // Map attendees excluding the organizer
+    const mappedAttendees = (graphEvent.attendees || [])
+      .filter((att: IGraphEventAttendee) => att.type !== 'organizer')
+      .map((att: IGraphEventAttendee) => ({
+        id: att.emailAddress?.address || '',
+        name: att.emailAddress?.name || att.emailAddress?.address || '',
+        email: att.emailAddress?.address || ''
+      }))
+      .filter(att => att.id);
 
     return {
       id: graphEvent.id,
       title: graphEvent.subject || 'Untitled',
+      start: startISO,
+      end: endISO,
+      isFullDay: graphEvent.isAllDay || false,
       description: graphEvent.bodyPreview || '',
       location: graphEvent.location?.displayName || undefined,
-      startDate: start,
-      endDate: end,
-      isAllDay: graphEvent.isReminderOn === false && !graphEvent.start.dateTime, // no time component
+      isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail),
+      attendees: mappedAttendees,
       sourceId: '', // Will be set by caller
-      color: '', // Will be set by caller
-      organizer: graphEvent.organizer?.emailAddress?.name || undefined,
-      attendees: (graphEvent.attendees || [])
-        .filter((att: IGraphEventAttendee) => att.type !== 'organizer')
-        .map((att: IGraphEventAttendee) => att.emailAddress?.name || att.emailAddress?.address || '')
-        .filter(Boolean)
+      color: undefined, // Will be set by caller
+      // Extended properties
+      isOnlineMeeting: graphEvent.isOnlineMeeting || false,
+      webLink: graphEvent.webLink || undefined
     };
   }
 
@@ -224,3 +261,4 @@ export class ExchangeCalendarService {
     }
   }
 }
+

@@ -1,18 +1,18 @@
 import * as React from 'react';
-import { IAppointment } from '../../models/IAppointment';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export interface ISearchResultsViewProps {
-  appointments: IAppointment[];
+  appointments: IEvent[];
   isLoading: boolean;
   searchQuery: string;
 }
 
 interface IGroupedAppointments {
   date: Date;
-  appointments: IAppointment[];
+  appointments: IEvent[];
 }
 
 export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
@@ -25,8 +25,8 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
   const groupedByDate = React.useMemo(() => {
     const groups: { [key: string]: IGroupedAppointments } = {};
 
-    appointments.forEach((apt: IAppointment) => {
-      const aptDate = new Date(apt.startDate);
+    appointments.forEach((apt: IEvent) => {
+      const aptDate = new Date(apt.start);
       const month = padZero(aptDate.getMonth() + 1);
       const day = padZero(aptDate.getDate());
       const dateKey = `${aptDate.getFullYear()}-${month}-${day}`;
@@ -47,15 +47,15 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
       .map((key: string) => groups[key])
       .map((group: IGroupedAppointments) => ({
         ...group,
-        appointments: group.appointments.sort((a: IAppointment, b: IAppointment) => a.startDate.getTime() - b.startDate.getTime())
+        appointments: group.appointments.sort((a: IEvent, b: IEvent) => new Date(a.start).getTime() - new Date(b.start).getTime())
       }));
   }, [appointments]);
 
-  const getAppointmentDuration = (apt: IAppointment): string => {
-    if (apt.isAllDay) {
+  const getAppointmentDuration = (apt: IEvent): string => {
+    if (apt.isFullDay) {
       return 'All day';
     }
-    const durationMs = apt.endDate.getTime() - apt.startDate.getTime();
+    const durationMs = new Date(apt.end).getTime() - new Date(apt.start).getTime();
     const hours = Math.floor(durationMs / (1000 * 60 * 60));
     const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
     if (hours > 0) {
@@ -88,13 +88,13 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
               </div>
             </div>
             <div className={styles.scheduleAppointments}>
-              {group.appointments.map((apt: IAppointment) => (
+              {group.appointments.map((apt: IEvent) => (
                 <div
                   key={apt.id}
                   className={styles.scheduleAppointment}
                   style={{
-                    backgroundColor: `color-mix(in srgb, ${apt.color} 12%, transparent)`,
-                    borderLeftColor: apt.color
+                    backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 12%, transparent)`,
+                    borderLeftColor: apt.colorHex ?? '#0078d4'
                   }}
                 >
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -105,8 +105,8 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                       whiteSpace: 'nowrap',
                       minWidth: 45
                     }}>
-                      {apt.isAllDay ? '09:00' : 
-                        apt.startDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+                      {apt.isFullDay ? '09:00' : 
+                        new Date(apt.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
                       }
                     </div>
                     <div style={{ flex: 1 }}>
@@ -128,12 +128,6 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                         {apt.location}
                       </div>
                     )}
-                    {apt.organizer && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--neutralSecondary, #605e5c)' }}>
-                        <span style={{ fontSize: 13 }}>👤</span>
-                        {apt.organizer}
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}
@@ -144,3 +138,4 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
     </div>
   );
 };
+

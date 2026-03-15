@@ -1,10 +1,6 @@
-import { HttpClient } from '@microsoft/sp-http';
-import { IAppointment } from '../models/IAppointment';
+import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { ISharePointFieldMapping } from '../models/ICalendarSettings';
-
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
 
 export interface ISharePointSite {
   id: string;
@@ -196,7 +192,7 @@ export class SharePointCalendarService {
     startDate: Date,
     endDate: Date,
     fieldMapping?: ISharePointFieldMapping
-  ): Promise<IAppointment[]> {
+  ): Promise<IEvent[]> {
     if (!this.graphClient) {
       console.error('GraphClient not initialized');
       return [];
@@ -214,7 +210,7 @@ export class SharePointCalendarService {
 
       return (data.value || [])
         .map((item: IGraphListItem) => this.mapListItemToAppointment(item, startDate, endDate, effectiveMapping))
-        .filter((apt: IAppointment | null): apt is IAppointment => apt !== null);
+        .filter((apt: IEvent | null): apt is IEvent => apt !== null);
     } catch (error) {
       console.error('Error fetching list events:', error);
       return [];
@@ -260,10 +256,10 @@ export class SharePointCalendarService {
   }
 
   /**
-   * Map SharePoint list item to IAppointment
+   * Map SharePoint list item to IEvent
    * Supports custom field mappings for different SharePoint calendar list schemas
    */
-  private mapListItemToAppointment(item: IGraphListItem, startDate?: Date, endDate?: Date, fieldMapping?: ISharePointFieldMapping): IAppointment | null {
+  private mapListItemToAppointment(item: IGraphListItem, startDate?: Date, endDate?: Date, fieldMapping?: ISharePointFieldMapping): IEvent | null {
     const fields = (item.fields || {}) as Record<string, unknown>;
     
     // Apply field mapping
@@ -301,13 +297,13 @@ export class SharePointCalendarService {
       title,
       description: (fields[descriptionFieldName] as string | undefined) || '',
       location: (fields[locationFieldName] as string | undefined) || undefined,
-      startDate: eventStart,
-      endDate: eventEnd,
-      isAllDay,
+      start: eventStart.toISOString(),
+      end: eventEnd.toISOString(),
+      isFullDay: isAllDay,
       sourceId: '', // Will be set by caller
-      color: '', // Will be set by caller
-      organizer: undefined,
+      color: undefined, // Will be set by caller
       attendees: []
     };
   }
 }
+

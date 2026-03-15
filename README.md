@@ -30,6 +30,11 @@ The My Calendars webpart provides the following functionality:
 - **Theme Support**: Light/dark theme awareness with organizational branding
 - **Calendar Management**: Enable/disable individual sources without removing them
 - **Search Functionality**: Search across all appointments from all sources
+- **PnP Calendar Foundation**: Day/Week/Month rendering uses `@pnp/spfx-controls-react` Calendar (Search view remains custom), including required control localization, `patch-package` support, and optional PnP telemetry opt-out
+- **PnPjs Integration**: Uses `@pnp/sp` and `@pnp/graph` for SharePoint and Microsoft Graph data access within SPFx context
+- **Standard Event Contract**: Uses the PnP Calendar `IEvent` model as the canonical event format across all calendar sources
+- **Timezone-Aware Event Retrieval**: Uses mailbox settings to align event time rendering with the user's mailbox timezone
+- **Caching Strategy**: Includes local caching (for example user identity and mailbox settings in `userHelper.ts`) to reduce repeated Graph calls, with planned expansion to additional data paths
 - **User Preferences**: Store personal settings (work hours, calendar states) in OneDrive App Folder
 - **Localization Support**: English language with Dutch translations in progress
 
@@ -66,7 +71,7 @@ The webpart can be configured through the property pane with the following optio
 [Download the latest release](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/releases) or compile the solution (`npm run build`). The `.sppkg` file will be in `sharepoint/solution/`.
 
 ### Installation
-Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions (`Calendars.Read`, `Calendars.Read.Shared`, `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All`) when prompted.
+Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions (`Calendars.Read`, `Calendars.Read.Shared`, `MailboxSettings.Read`, `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All`) when prompted.
 
 ### Upgrades
 Upload the new `.sppkg` file and overwrite the existing one when prompted.
@@ -98,6 +103,7 @@ We welcome contributions from the community! Here are some ways you can help:
 | 0.0.2 | 2026-02-21       | Added Planner calendars |
 | 0.0.3 | 2026-02-25       | Added Teams Shifts calendars |
 | 0.0.4 | 2026-03-08       | Added Teams and Microsoft 365 Groups calendars |
+| 0.0.5 | 2026-03-15       | Switched day/week/month rendering to PnP Calendar, standardized on `IEvent`, integrated PnPjs, added mailbox timezone-aware event handling, and introduced cache-first user/mailbox lookups |
 
 ## Used SharePoint Framework Version
 
@@ -146,6 +152,7 @@ This solution requires the following Microsoft Graph permissions:
 
 - `Calendars.Read` - To read the current user's calendars
 - `Calendars.Read.Shared` - To read calendars that have been shared with the user
+- `MailboxSettings.Read` - To read mailbox timezone and other mailbox settings for correct event time conversion
 - `Files.ReadWrite.AppFolder` - To store and retrieve user settings from OneDrive App Folder
 - `Sites.Read.All` - To discover and read SharePoint list calendars
 - `Tasks.Read` - To read Planner tasks from plans the user has access to
@@ -153,7 +160,7 @@ This solution requires the following Microsoft Graph permissions:
 - `Team.ReadBasic.All` - To discover joined Teams and dynamically map Group vs Teams icons
 - `Schedule.Read.All` - To read Teams Shifts
 
-`Calendars.Read` and `Calendars.Read.Shared` are covered by basic calendar access consent; `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All` must be approved by a tenant admin via the API access page.
+`Calendars.Read` and `Calendars.Read.Shared` are covered by basic calendar access consent; `MailboxSettings.Read`, `Files.ReadWrite.AppFolder`, `Sites.Read.All`, `Tasks.Read`, `Group.Read.All`, `Team.ReadBasic.All`, and `Schedule.Read.All` must be approved by a tenant admin via the API access page.
 
 ## References
 
@@ -162,6 +169,8 @@ This solution requires the following Microsoft Graph permissions:
 - [Use Microsoft Graph in your solution](https://docs.microsoft.com/sharepoint/dev/spfx/web-parts/get-started/using-microsoft-graph-apis)
 - [Microsoft Graph Calendar API](https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0)
 - [Microsoft Graph Planner API](https://learn.microsoft.com/en-us/graph/api/resources/planner-overview?view=graph-rest-1.0)
+- [PnP SPFx React Controls - Calendar](https://pnp.github.io/sp-dev-fx-controls-react/controls/Calendar/)
+- [PnPjs](https://pnp.github.io/pnpjs/)
 - [Publish SharePoint Framework applications to the Marketplace](https://docs.microsoft.com/sharepoint/dev/spfx/publish-to-marketplace-overview)
 - [Microsoft 365 Patterns and Practices](https://aka.ms/m365pnp) - Guidance, tooling, samples and open-source controls for your Microsoft 365 development
 - [Heft Documentation](https://heft.rushstack.io/)

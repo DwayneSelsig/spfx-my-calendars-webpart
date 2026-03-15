@@ -40,7 +40,7 @@ export const MonthView: React.FC<ICalendarViewProps> = (props) => {
         {days.map((day, idx) => {
           const isCurrentMonth = day.getMonth() === currentDate.getMonth();
           const dayAppointments = appointments.filter(apt => {
-            const aptDate = new Date(apt.startDate);
+            const aptDate = new Date(apt.start);
             return aptDate.getDate() === day.getDate() &&
                    aptDate.getMonth() === day.getMonth() &&
                    aptDate.getFullYear() === day.getFullYear();
@@ -59,8 +59,8 @@ export const MonthView: React.FC<ICalendarViewProps> = (props) => {
                     key={apt.id}
                     className={styles.monthAppointment}
                     style={{
-                      backgroundColor: `color-mix(in srgb, ${apt.color} 20%, transparent)`,
-                      borderLeftColor: apt.color
+                      backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
+                      borderLeftColor: apt.colorHex ?? '#0078d4'
                     }}
                   >
                     {apt.showSourceLogo && apt.sourceType && (

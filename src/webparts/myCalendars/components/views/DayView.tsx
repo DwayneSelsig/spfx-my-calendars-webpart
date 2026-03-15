@@ -1,11 +1,11 @@
 import * as React from 'react';
-import { IAppointment } from '../../models/IAppointment';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { Icon } from '@fluentui/react/lib/Icon';
 import styles from './CalendarView.module.scss';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export interface ICalendarViewProps {
-  appointments: IAppointment[];
+  appointments: IEvent[];
   currentDate: Date;
   onDateChange: (date: Date) => void;
   isLoading: boolean;
@@ -49,7 +49,7 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
   }, [startHour]);
 
   const dayAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.startDate);
+    const aptDate = new Date(apt.start);
     return aptDate.getDate() === currentDate.getDate() &&
            aptDate.getMonth() === currentDate.getMonth() &&
            aptDate.getFullYear() === currentDate.getFullYear();
@@ -70,8 +70,8 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
           {/* Appointments layer with absolute positioning */}
           <div className={styles.appointmentsLayerDay}>
             {dayAppointments.map(apt => {
-              const aptStartDate = new Date(apt.startDate);
-              const aptEndDate = new Date(apt.endDate);
+              const aptStartDate = new Date(apt.start);
+              const aptEndDate = new Date(apt.end);
               const aptStartHour = aptStartDate.getHours();
               const aptStartMinutes = aptStartDate.getMinutes();
               const aptEndHour = aptEndDate.getHours();
@@ -96,8 +96,8 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
                     height: `${height}px`,
                     left: '88px', // Account for hourLabel width (60px) + padding + 20px
                     right: '8px',
-                    backgroundColor: `color-mix(in srgb, ${apt.color} 20%, transparent)`,
-                    borderLeftColor: apt.color,
+                    backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
+                    borderLeftColor: apt.colorHex ?? '#0078d4',
                     margin: 0
                   }}
                   title={`${apt.title} (${aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${aptEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
@@ -121,3 +121,4 @@ export const DayView: React.FC<ICalendarViewProps> = (props) => {
     </div>
   );
 };
+

@@ -1,4 +1,4 @@
-import { IAppointment } from '../models/IAppointment';
+import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { ICalendarSettings } from '../models/ICalendarSettings';
 import { HttpClient, HttpClientResponse } from '@microsoft/sp-http';
 
@@ -9,7 +9,7 @@ export class IcsParser {
     color: string,
     httpClient: HttpClient,
     settings?: ICalendarSettings
-  ): Promise<IAppointment[]> {
+  ): Promise<IEvent[]> {
     if (!url) {
       return [];
     }
@@ -45,16 +45,16 @@ export class IcsParser {
     }
   }
 
-  public static parseRawContent(icsText: string, sourceId: string, color: string): IAppointment[] {
+  public static parseRawContent(icsText: string, sourceId: string, color: string): IEvent[] {
     return this.parse(icsText, sourceId, color);
   }
 
-  public static parse(icsText: string, sourceId: string, color: string): IAppointment[] {
-    const appointments: IAppointment[] = [];
+  public static parse(icsText: string, sourceId: string, color: string): IEvent[] {
+    const appointments: IEvent[] = [];
     const lines = icsText.split(/\r\n|\n|\r/);
     
     let inEvent = false;
-    let currentEvent: Partial<IAppointment> = {};
+    let currentEvent: Partial<IEvent> = {};
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i].trim();
@@ -69,12 +69,12 @@ export class IcsParser {
         inEvent = true;
         currentEvent = {
           sourceId,
-          color,
-          isAllDay: false
+          color: undefined,
+          isFullDay: false
         };
       } else if (line === 'END:VEVENT' && inEvent) {
-        if (currentEvent.id && currentEvent.title && currentEvent.startDate && currentEvent.endDate) {
-          appointments.push(currentEvent as IAppointment);
+        if (currentEvent.id && currentEvent.title && currentEvent.start && currentEvent.end) {
+          appointments.push(currentEvent as IEvent);
         }
         inEvent = false;
         currentEvent = {};
@@ -101,17 +101,16 @@ export class IcsParser {
             currentEvent.location = this.unescapeValue(value);
             break;
           case 'DTSTART':
-            currentEvent.startDate = this.parseDate(value, params);
+            currentEvent.start = this.parseDate(value, params).toISOString();
             if (params.some(p => p.includes('VALUE=DATE'))) {
-              currentEvent.isAllDay = true;
+              currentEvent.isFullDay = true;
             }
             break;
           case 'DTEND':
-            currentEvent.endDate = this.parseDate(value, params);
+            currentEvent.end = this.parseDate(value, params).toISOString();
             break;
           case 'ORGANIZER': {
-            const cnMatch = params.find(p => p.startsWith('CN='));
-            currentEvent.organizer = cnMatch ? cnMatch.substring(3).replace(/"/g, '') : value;
+            // IEvent doesn't have organizer field, skip for now
             break;
           }
         }
@@ -226,3 +225,4 @@ export class IcsParser {
     return `${base}${target}`;
   }
 }
+
