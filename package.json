@@ -49,11 +49,6 @@
     "patch-package": "^8.0.0",
     "typescript": "~5.8.0"
   },
-  "overrides": {
-    "@rushstack/heft": "1.1.2",
-    "sass-embedded": "npm:sass@^1.77.8",
-    "sass-embedded-linux-x64": "npm:sass@^1.77.8"
-  },
   "resolutions": {
     "@types/react": "17.0.45"
   }
