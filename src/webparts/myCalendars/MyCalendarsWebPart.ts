@@ -13,11 +13,6 @@ import {
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import PnPTelemetry from '@pnp/telemetry-js';
-import { spfi, SPFI, SPFx } from "@pnp/sp";
-import "@pnp/sp/webs";
-import "@pnp/sp/lists";
-import "@pnp/sp/items";
-import "@pnp/sp/batching";
 
 import * as strings from 'MyCalendarsWebPartStrings';
 import MyCalendars from './components/MyCalendars';
@@ -37,7 +32,6 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   private _currentSettings: ICalendarSettings = { ...defaultCalendarSettings };
   private _storageService: SettingsStorageService | null = null;
   private _themeVariant: IReadonlyTheme | undefined;
-  private _sp!: SPFI;
 
   public render(): void {
     const settings = this.getSettings();
@@ -53,8 +47,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         settings: settings,
         onSettingsChange: this.handleSettingsChange,
         onResetSettings: this.handleResetSettings,
-        context: this.context,
-        sp: this._sp
+        context: this.context
       }
     );
 
@@ -124,9 +117,6 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
 
   protected onInit(): Promise<void> {
     this.applyTelemetryPreference();
-
-    // Initialize PnPjs with SPFx context
-    this._sp = spfi().using(SPFx(this.context));
 
     // Initialize storage service
     this._storageService = new SettingsStorageService(

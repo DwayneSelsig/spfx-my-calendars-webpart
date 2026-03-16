@@ -1,5 +1,4 @@
 import { HttpClient } from '@microsoft/sp-http';
-import { GraphFI } from "@pnp/graph";
 import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { UserHelper } from '../utils/userHelper';
 
@@ -53,7 +52,6 @@ export class ExchangeCalendarService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
   private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
-  private graph: GraphFI | null = null;
 
   // Color mapping based on Outlook calendar colors
   private readonly COLOR_MAP: Record<string, string> = {
@@ -80,10 +78,6 @@ export class ExchangeCalendarService {
    */
   public setGraphClient(client: MSGraphClientV3): void {
     this.graphClient = client;
-  }
-
-  public setGraph(graph: GraphFI): void {
-    this.graph = graph;
   }
 
   /**

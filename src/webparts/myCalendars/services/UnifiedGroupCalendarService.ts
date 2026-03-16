@@ -1,5 +1,4 @@
 import { HttpClient } from '@microsoft/sp-http';
-import { GraphFI } from "@pnp/graph";
 import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { UserHelper } from '../utils/userHelper';
 
@@ -46,7 +45,6 @@ interface IGraphEventAttendee {
 export class UnifiedGroupCalendarService {
   private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
-  private graph: GraphFI | null = null;
 
   constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
     this.httpClient = httpClient;
@@ -58,10 +56,6 @@ export class UnifiedGroupCalendarService {
    */
   public setGraphClient(client: MSGraphClientV3): void {
     this.graphClient = client;
-  }
-
-  public setGraph(graph: GraphFI): void {
-    this.graph = graph;
   }
 
   /**

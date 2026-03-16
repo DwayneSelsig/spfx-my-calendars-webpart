@@ -25,10 +25,6 @@ import { SearchBox } from '@fluentui/react/lib/SearchBox';
 import { SettingsPanel } from './SettingsPanel';
 //import { CalendarToolbar } from './CalendarToolbar';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
-import { graphfi } from "@pnp/graph";
-import { SPFx } from "@pnp/graph";
-import "@pnp/graph/users";
-import "@pnp/graph/mail";
 
 type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 type ServiceStatus = 'loading' | 'ready' | 'error';
@@ -139,10 +135,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const httpClient = this.props.context.httpClient;
     const graphClientPromise = this.props.context.msGraphClientFactory.getClient('3');
     const graphClient = await graphClientPromise;
-    const graph = graphfi().using(SPFx(this.props.context));
     const exchangeService = new ExchangeCalendarService(httpClient, graphClient);
     exchangeService.setGraphClient(graphClient);
-    exchangeService.setGraph(graph);
     const sharePointService = new SharePointCalendarService(httpClient, graphClient);
     sharePointService.setGraphClient(graphClient);
     const plannerService = new PlannerTaskService(httpClient, graphClient);
@@ -151,7 +145,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     teamsShiftsService.setGraphClient(graphClient);
     const unifiedGroupService = new UnifiedGroupCalendarService(httpClient, graphClient);
     unifiedGroupService.setGraphClient(graphClient);
-    unifiedGroupService.setGraph(graph);
     
     // Calculate date range for filtering (current month ± 3 months)
     const today = new Date();

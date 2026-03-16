@@ -31,7 +31,6 @@ The My Calendars webpart provides the following functionality:
 - **Calendar Management**: Enable/disable individual sources without removing them
 - **Search Functionality**: Search across all appointments from all sources
 - **PnP Calendar Foundation**: Day/Week/Month rendering uses `@pnp/spfx-controls-react` Calendar (Search view remains custom), including required control localization, `patch-package` support, and optional PnP telemetry opt-out
-- **PnPjs Integration**: Uses `@pnp/sp` and `@pnp/graph` for SharePoint and Microsoft Graph data access within SPFx context
 - **Standard Event Contract**: Uses the PnP Calendar `IEvent` model as the canonical event format across all calendar sources
 - **Timezone-Aware Event Retrieval**: Uses mailbox settings to align event time rendering with the user's mailbox timezone
 - **Caching Strategy**: Includes local caching (for example user identity and mailbox settings in `userHelper.ts`) to reduce repeated Graph calls, with planned expansion to additional data paths
@@ -170,7 +169,6 @@ This solution requires the following Microsoft Graph permissions:
 - [Microsoft Graph Calendar API](https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0)
 - [Microsoft Graph Planner API](https://learn.microsoft.com/en-us/graph/api/resources/planner-overview?view=graph-rest-1.0)
 - [PnP SPFx React Controls - Calendar](https://pnp.github.io/sp-dev-fx-controls-react/controls/Calendar/)
-- [PnPjs](https://pnp.github.io/pnpjs/)
 - [Publish SharePoint Framework applications to the Marketplace](https://docs.microsoft.com/sharepoint/dev/spfx/publish-to-marketplace-overview)
 - [Microsoft 365 Patterns and Practices](https://aka.ms/m365pnp) - Guidance, tooling, samples and open-source controls for your Microsoft 365 development
 - [Heft Documentation](https://heft.rushstack.io/)
