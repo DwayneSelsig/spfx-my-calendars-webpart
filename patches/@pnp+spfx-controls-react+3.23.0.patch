@@ -1,8 +1,8 @@
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/DayView.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/DayView.js
-index ec7858d..6c2c2f8 100644
+index 2596c1d..6f1d512 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/DayView.js
 +++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/DayView.js
-@@ -50,14 +50,20 @@ export var DayView = function (props) {
+@@ -48,13 +48,19 @@ export var DayView = function (props) {
                  var weekDay = format(addDays(currentDay, dayIndex), 'yyyy-MM-dd');
                  var dayEvents = weekEvents.find(function (day) { return day.date === weekDay; });
                  var fullDayEvents = (dayEvents === null || dayEvents === void 0 ? void 0 : dayEvents.fullDayEvents) || [];
@@ -18,17 +18,17 @@ index ec7858d..6c2c2f8 100644
                              ? getCalendarColors(event.color).backgroundColor
                              : getEventColors(event.category).backgroundColor,
                      } },
--                    React.createElement(Caption1Strong, { className: styles.eventTitle }, event.title))); }))); 
+-                    React.createElement(Caption1Strong, { className: styles.eventTitle }, event.title))); })));
 +                    React.createElement(Caption1Strong, { className: styles.eventTitle }, event.title)));
 +                })));
-             }))));
+             })));
      }, [
          currentDay,
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js
-index 50fca38..bc441d7 100644
+index c3f5501..fecbbe5 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js
 +++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js
-@@ -67,14 +67,20 @@ export var WeekView = function (props) {
+@@ -64,13 +64,19 @@ export var WeekView = function (props) {
                  var weekDay = formatDate(addDays(weekStart, dayIndex).toISOString(), 'yyyy-MM-dd');
                  var dayEvents = weekEvents.find(function (day) { return day.date === weekDay; });
                  var fullDayEvents = (dayEvents === null || dayEvents === void 0 ? void 0 : dayEvents.fullDayEvents) || [];
@@ -44,13 +44,13 @@ index 50fca38..bc441d7 100644
                              ? getCalendarColors(event.color).backgroundColor
                              : getEventColors(event.category).backgroundColor,
                      } },
--                    React.createElement(Caption1Strong, { className: styles.eventTitle }, event.title))); }))); 
+-                    React.createElement(Caption1Strong, { className: styles.eventTitle }, event.title))); })));
 +                    React.createElement(Caption1Strong, { className: styles.eventTitle }, event.title)));
 +                })));
-             }))));
+             })));
      }, [
          weekStart,
-@@ -89,8 +92,8 @@ export var WeekView = function (props) {
+@@ -83,8 +89,8 @@ export var WeekView = function (props) {
      var renderDayCells = React.useCallback(function () {
          var weekEvents = getWeekEvents(events, weekStart.toISOString());
          return Array.from({ length: 7 }, function (_, dayIndex) {
@@ -61,39 +61,11 @@ index 50fca38..bc441d7 100644
              return (React.createElement(React.Fragment, null, dayEvents === null || dayEvents === void 0 ? void 0 : dayEvents.timeSlots.map(function (timeSlot, slotIndex) {
                  var eventCount = timeSlot.events.length; // Total events in the slot
                  return (React.createElement("div", { key: slotIndex, className: styles.dayCell, style: {
-diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
-index 65db07c..f01957a 100644
---- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
-+++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
-@@ -79,12 +79,20 @@ export var useWeekViewStyles = function () {
-             padding: '5px',
-             borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border for the label cell
-             borderBottom: "3px solid ".concat(tokens.colorNeutralStroke2), // Bottom border for the cell
-+            position: 'sticky',
-+            top: '50px', // Keep all-day row pinned below the sticky header row
-+            zIndex: 9,
-+            backgroundColor: tokens.colorNeutralBackground2,
-         }),
-         fullDayCell: css({
-             borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border between day cells
-             display: 'flex',
-             flexDirection: 'row', // Arrange events horizontally
-             gap: '0px',
-             padding: '4px', // Ensure events have spacing within the cell
-             borderBottom: "3px solid ".concat(tokens.colorNeutralStroke2), // Bottom border for the cell
-             overflow: 'hidden', // Ensure events don’t overflow the cell
-+            position: 'sticky',
-+            top: '50px', // Keep all-day row pinned below the sticky header row
-+            zIndex: 9,
-+            backgroundColor: tokens.colorNeutralBackground2,
-         }),
-         fullDayEvent: css({
-             flex: '1 1 auto', // Allow events to share space equally
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
-index 16d5707..5c38080 100644
+index 3fdcb8e..97e552a 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
 +++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
-@@ -82,12 +82,20 @@ export var useDayViewStyles = function () {
+@@ -88,6 +88,10 @@ export var useDayViewStyles = function () {
              padding: "5px",
              borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border for the label cell
              borderBottom: "3px solid ".concat(tokens.colorNeutralStroke2), // Bottom border for the cell
@@ -104,9 +76,7 @@ index 16d5707..5c38080 100644
          }),
          fullDayCell: css({
              borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border between day cells
-             display: "flex",
-             flexDirection: "row", // Arrange events horizontally
-             gap: "2px",
+@@ -97,6 +101,10 @@ export var useDayViewStyles = function () {
              padding: "4px", // Ensure events have spacing within the cell
              borderBottom: "3px solid ".concat(tokens.colorNeutralStroke2), // Bottom border for the cell
              overflow: "hidden", // Ensure events don’t overflow the cell
@@ -117,9 +87,8 @@ index 16d5707..5c38080 100644
          }),
          fullDayEvent: css({
              flex: "1 1 auto", // Allow events to share space equally
-
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useUtils.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useUtils.js
-index 2cbd852..64fbc17 100644
+index 832eb37..3b21f59 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useUtils.js
 +++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useUtils.js
 @@ -8,10 +8,10 @@ export var useUtils = function () {
@@ -135,3 +104,29 @@ index 2cbd852..64fbc17 100644
          var spanSlots = endSlot - startSlot;
          return { spanSlots: spanSlots, startSlot: startSlot, endSlot: endSlot };
      }, []);
+diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
+index ba0d802..4ca040d 100644
+--- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
++++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
+@@ -86,6 +86,10 @@ export var useWeekViewStyles = function () {
+             padding: '5px',
+             borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border for the label cell
+             borderBottom: "3px solid ".concat(tokens.colorNeutralStroke2), // Bottom border for the cell
++            position: 'sticky',
++            top: '50px', // Keep all-day row pinned below the sticky header row
++            zIndex: 9,
++            backgroundColor: tokens.colorNeutralBackground2,
+         }),
+         fullDayCell: css({
+             borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border between day cells
+@@ -95,6 +99,10 @@ export var useWeekViewStyles = function () {
+             padding: '4px', // Ensure events have spacing within the cell
+             borderBottom: "3px solid ".concat(tokens.colorNeutralStroke2), // Bottom border for the cell
+             overflow: 'hidden', // Ensure events don’t overflow the cell
++            position: 'sticky',
++            top: '50px', // Keep all-day row pinned below the sticky header row
++            zIndex: 9,
++            backgroundColor: tokens.colorNeutralBackground2,
+         }),
+         fullDayEvent: css({
+             flex: '1 1 auto', // Allow events to share space equally
