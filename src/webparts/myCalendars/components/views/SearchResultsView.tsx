@@ -12,57 +12,104 @@ export interface ISearchResultsViewProps {
 
 interface IGroupedAppointments {
   date: Date;
-  appointments: IEvent[];
+  dayName: string;
+  dateLabel: string;
+  appointments: ISearchResultAppointment[];
+}
+
+interface ISearchResultAppointment {
+  appointment: IEvent;
+  startTimeLabel: string;
+  durationLabel: string;
 }
 
 export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
   const { appointments, isLoading, searchQuery } = props;
 
+  const weekdayFormatter = React.useMemo(
+    () => new Intl.DateTimeFormat(undefined, { weekday: 'long' }),
+    []
+  );
+  const dateFormatter = React.useMemo(
+    () => new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long' }),
+    []
+  );
+  const timeFormatter = React.useMemo(
+    () => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
+    []
+  );
+
   // Helper function to pad numbers
   const padZero = (value: number): string => value < 10 ? '0' + value : String(value);
 
-  // Group appointments by date
-  const groupedByDate = React.useMemo(() => {
-    const groups: { [key: string]: IGroupedAppointments } = {};
-
-    appointments.forEach((apt: IEvent) => {
-      const aptDate = new Date(apt.start);
-      const month = padZero(aptDate.getMonth() + 1);
-      const day = padZero(aptDate.getDate());
-      const dateKey = `${aptDate.getFullYear()}-${month}-${day}`;
-      
-      if (!groups[dateKey]) {
-        groups[dateKey] = {
-          date: new Date(aptDate.getFullYear(), aptDate.getMonth(), aptDate.getDate()),
-          appointments: []
-        };
-      }
-      
-      groups[dateKey].appointments.push(apt);
-    });
-
-    // Sort by date and each group's appointments by start time
-    return Object.keys(groups)
-      .sort()
-      .map((key: string) => groups[key])
-      .map((group: IGroupedAppointments) => ({
-        ...group,
-        appointments: group.appointments.sort((a: IEvent, b: IEvent) => new Date(a.start).getTime() - new Date(b.start).getTime())
-      }));
-  }, [appointments]);
-
-  const getAppointmentDuration = (apt: IEvent): string => {
-    if (apt.isFullDay) {
+  const getAppointmentDuration = React.useCallback((startDate: Date, endDate: Date, isFullDay: boolean): string => {
+    if (isFullDay) {
       return 'All day';
     }
-    const durationMs = new Date(apt.end).getTime() - new Date(apt.start).getTime();
+
+    const durationMs = endDate.getTime() - startDate.getTime();
     const hours = Math.floor(durationMs / (1000 * 60 * 60));
     const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
     if (hours > 0) {
       return `${hours} hr${hours > 1 ? 's' : ''}${minutes > 0 ? ` ${minutes} min` : ''}`;
     }
+
     return `${minutes} min`;
-  };
+  }, []);
+
+  // Group appointments by date and precompute display labels to keep render work minimal.
+  const groupedByDate = React.useMemo(() => {
+    const groups: { [key: string]: IGroupedAppointments } = {};
+    const timeLabelCache = new Map<number, string>();
+
+    appointments.forEach((apt: IEvent) => {
+      const startDate = new Date(apt.start);
+      const endDate = new Date(apt.end);
+      const month = padZero(startDate.getMonth() + 1);
+      const day = padZero(startDate.getDate());
+      const dateKey = `${startDate.getFullYear()}-${month}-${day}`;
+
+      if (!groups[dateKey]) {
+        const groupDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        groups[dateKey] = {
+          date: groupDate,
+          dayName: weekdayFormatter.format(groupDate),
+          dateLabel: dateFormatter.format(groupDate),
+          appointments: []
+        };
+      }
+
+      let startTimeLabel = '09:00';
+      if (!apt.isFullDay) {
+        const startTimeKey = startDate.getTime();
+        const cachedStartTime = timeLabelCache.get(startTimeKey);
+        if (cachedStartTime) {
+          startTimeLabel = cachedStartTime;
+        } else {
+          startTimeLabel = timeFormatter.format(startDate);
+          timeLabelCache.set(startTimeKey, startTimeLabel);
+        }
+      }
+
+      groups[dateKey].appointments.push({
+        appointment: apt,
+        startTimeLabel,
+        durationLabel: getAppointmentDuration(startDate, endDate, apt.isFullDay ?? false)
+      });
+    });
+
+    // Sort by date and each group's appointments by start time.
+    return Object.keys(groups)
+      .sort()
+      .map((key: string) => groups[key])
+      .map((group: IGroupedAppointments) => ({
+        ...group,
+        appointments: group.appointments.sort(
+          (a: ISearchResultAppointment, b: ISearchResultAppointment) =>
+            new Date(a.appointment.start).getTime() - new Date(b.appointment.start).getTime()
+        )
+      }));
+  }, [appointments, dateFormatter, getAppointmentDuration, timeFormatter, weekdayFormatter]);
 
   if (groupedByDate.length === 0 && !isLoading) {
     return (
@@ -77,18 +124,17 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
   return (
     <div className={styles.scheduleView}>
       {groupedByDate.map((group: IGroupedAppointments) => {
-        const dayName = group.date.toLocaleDateString(undefined, { weekday: 'long' });
-        const dateStr = group.date.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
-
         return (
           <div key={`${group.date.getFullYear()}-${group.date.getMonth()}-${group.date.getDate()}`} className={styles.scheduleDay}>
             <div className={styles.scheduleDate}>
               <div className={styles.scheduleDayName}>
-                {dayName}<span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>• {dateStr}</span>
+                {group.dayName}<span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>• {group.dateLabel}</span>
               </div>
             </div>
             <div className={styles.scheduleAppointments}>
-              {group.appointments.map((apt: IEvent) => (
+              {group.appointments.map((result: ISearchResultAppointment) => {
+                const apt = result.appointment;
+                return (
                 <div
                   key={apt.id}
                   className={styles.scheduleAppointment}
@@ -105,9 +151,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                       whiteSpace: 'nowrap',
                       minWidth: 45
                     }}>
-                      {apt.isFullDay ? '09:00' : 
-                        new Date(apt.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
-                      }
+                      {result.startTimeLabel}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div className={styles.appointmentTitle}>
@@ -117,7 +161,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                         <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                       </div>
                       <div className={styles.appointmentTime}>
-                        {getAppointmentDuration(apt)}
+                        {result.durationLabel}
                       </div>
                     </div>
                   </div>
@@ -130,7 +174,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                     )}
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </div>
         );

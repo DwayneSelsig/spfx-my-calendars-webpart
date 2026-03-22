@@ -28,6 +28,7 @@ import type { MSGraphClientV3 } from '@microsoft/sp-http';
 
 type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 type ServiceStatus = 'loading' | 'ready' | 'error';
+type IndexedEvent = IEvent & { searchIndexText?: string };
 
 const defaultLoadingSources: Record<ServiceKey, ServiceStatus> = {
   exchange: 'ready',
@@ -65,6 +66,7 @@ interface IMyCalendarsState {
 
 export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyCalendarsState> {
   private debounceTimer: number | null = null;
+  private searchDebounceTimer: number | null = null;
   private activeLoadId = 0;
   private loadingStatusWrapperRef = React.createRef<HTMLDivElement>();
   private refreshTimer: number | null = null;
@@ -109,6 +111,23 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       if (prevProps.settings.sources !== this.props.settings.sources) {
         this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
       }
+    }
+  }
+
+  public componentWillUnmount(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
     }
   }
 
@@ -173,9 +192,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         return;
       }
 
-      const normalizedAppointments = appointments.map(apt => ({
+      const normalizedAppointments: IndexedEvent[] = appointments.map(apt => ({
         ...apt,
-        colorHex: apt.colorHex || '#0078d4'
+        colorHex: apt.colorHex || '#0078d4',
+        // Build a reusable lowercase search index per event to avoid repeated string work while typing.
+        searchIndexText: this.buildSearchIndexText(apt)
       }));
 
       this.setState(prev => ({
@@ -457,14 +478,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   };
 
   private getCommandBarItems = (): ICommandBarItemProps[] => {
-    const { searchQuery } = this.state;
-
     const searchItem: ICommandBarItemProps = {
       key: 'search',
       onRender: () => (
         <SearchBox
           placeholder="Search appointments..."
-          value={searchQuery}
           onChange={(_event, newValue) => this.handleSearch(newValue || '')}
           style={{
             width: 250,
@@ -661,58 +679,39 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     }
   };
 
-  private renderView(): React.ReactElement {
-    const { appointments, currentDate, currentView, isLoading, searchQuery, usePnpCalendar } = this.state;
+  private buildSearchIndexText(appointment: IEvent): string {
+    const title = (appointment.title || '').toLowerCase();
+    const location = (appointment.location || '').toLowerCase();
+    return `${title} ${location}`.trim();
+  }
+
+  private renderCalendarView(): React.ReactElement {
+    const { appointments, currentDate, currentView, previousView, isLoading, usePnpCalendar } = this.state;
     const { settings } = this.props;
 
-    // Filter appointments based on search query
-    let filteredAppointments = appointments;
-    const trimmedQuery = (searchQuery || '').trim();
-    if (trimmedQuery) {
-      const query = trimmedQuery.toLowerCase();
-      filteredAppointments = appointments.filter(apt =>
-        apt.title.toLowerCase().includes(query) ||
-        (apt.location && apt.location.toLowerCase().includes(query))
-      );
-    }
-
-    // If in search view, show search results
-    if (currentView === 'search') {
-      return (
-        <SearchResultsView
-          appointments={filteredAppointments}
-          isLoading={isLoading}
-          searchQuery={searchQuery}
-        />
-      );
-    }
-
-    // Use user-level overrides if set, otherwise fall back to webpart-level settings
     const startHour = settings.userStartHour !== undefined ? settings.userStartHour : settings.startHour;
     const endHour = settings.userEndHour !== undefined ? settings.userEndHour : settings.endHour;
 
+    // While search is active keep rendering the last calendar layout so it
+    // stays mounted and appears instantly when the user clears the query.
+    const displayView = currentView === 'search' ? previousView : currentView;
+
     const calendarViewProps = {
-      appointments: filteredAppointments,
+      appointments,
       currentDate,
       onDateChange: this.handleDateChange,
       isLoading,
-      startHour: startHour,
-      endHour: endHour,
+      startHour,
+      endHour,
       showWeekends: settings.showWeekends
     };
 
     const scheduleViewProps = {
-      appointments: filteredAppointments,
-      currentDate,
-      onDateChange: this.handleDateChange,
-      isLoading,
-      startHour: startHour,
-      endHour: endHour,
-      showWeekends: settings.showWeekends,
+      ...calendarViewProps,
       slotDuration: settings.slotDuration
     };
 
-    switch (currentView) {
+    switch (displayView) {
       case 'day':
         return usePnpCalendar
           ? <CommunityCalendarView {...calendarViewProps} viewType="day" />
@@ -721,12 +720,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         return usePnpCalendar
           ? <CommunityCalendarView {...calendarViewProps} viewType="week" />
           : <WeekView {...scheduleViewProps} />;
-      case 'month':
-        return usePnpCalendar
-          ? <CommunityCalendarView {...calendarViewProps} viewType="month" />
-          : <MonthView {...scheduleViewProps} />;
       case 'schedule':
         return <ScheduleView {...scheduleViewProps} />;
+      case 'month':
       default:
         return usePnpCalendar
           ? <CommunityCalendarView {...calendarViewProps} viewType="month" />
@@ -735,21 +731,68 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   private handleSearch = (query: string): void => {
-    const trimmedQuery = (query || '').trim();
-    
-    if (trimmedQuery && this.state.currentView !== 'search') {
-      // Switch to search view when search text is entered
-      this.setState({ searchQuery: query, currentView: 'search' });
-    } else if (!trimmedQuery && this.state.currentView === 'search') {
-      // Switch back to previous view when search is cleared
-      this.setState({ searchQuery: '', currentView: this.state.previousView });
-    } else {
-      // Just update search query
-      this.setState({ searchQuery: query });
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
     }
+
+    const trimmedQuery = (query || '').trim();
+
+    // Empty: always switch back to calendar immediately.
+    if (!trimmedQuery) {
+      this.applySearchQuery(query);
+      return;
+    }
+
+    // >3 chars: apply immediately (enough specificity to be fast).
+    if (trimmedQuery.length > 3) {
+      this.applySearchQuery(query);
+      return;
+    }
+
+    // 1-3 chars: debounce to avoid expensive renders on every keystroke.
+    this.searchDebounceTimer = window.setTimeout(() => {
+      this.searchDebounceTimer = null;
+      this.applySearchQuery(query);
+    }, 100);
   };
 
+  private applySearchQuery(query: string): void {
+    const trimmedQuery = (query || '').trim();
+
+    this.setState(prevState => {
+      if (trimmedQuery && prevState.currentView !== 'search') {
+        // Switch to search view when search text is entered.
+        return { searchQuery: query, currentView: 'search' };
+      }
+
+      if (!trimmedQuery && prevState.currentView === 'search') {
+        // Switch back to previous view when search is cleared.
+        return { searchQuery: '', currentView: prevState.previousView };
+      }
+
+      return { searchQuery: query, currentView: prevState.currentView };
+    });
+  }
+
   public render(): React.ReactElement<IMyCalendarsProps> {
+    const { currentView, isLoading, searchQuery, appointments } = this.state;
+    const isSearchMode = currentView === 'search';
+
+    // Compute filtered appointments only when the search overlay is active.
+    let filteredAppointments: IEvent[] = [];
+    if (isSearchMode) {
+      const trimmedQuery = (searchQuery || '').trim();
+      if (trimmedQuery) {
+        const query = trimmedQuery.toLowerCase();
+        filteredAppointments = appointments.filter(apt => {
+          const indexed = apt as IndexedEvent;
+          const searchText = indexed.searchIndexText || this.buildSearchIndexText(apt);
+          return searchText.includes(query);
+        });
+      }
+    }
+
     return (
       <div className={styles.myCalendars}>
         <CommandBar
@@ -758,7 +801,21 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           className={styles.commandBar}
         />
         <div className={styles.calendarContainer}>
-          {this.renderView()}
+          {/*
+            Keep the calendar mounted at all times (hidden via CSS when searching).
+            This prevents the remount cost when clearing a search query, which was
+            causing noticeable lag before the PnP calendar became interactive again.
+          */}
+          <div style={{ display: isSearchMode ? 'none' : 'block' }}>
+            {this.renderCalendarView()}
+          </div>
+          {isSearchMode && (
+            <SearchResultsView
+              appointments={filteredAppointments}
+              isLoading={isLoading}
+              searchQuery={searchQuery}
+            />
+          )}
         </div>
         <SettingsPanel
           isOpen={this.state.isSettingsPanelOpen}
