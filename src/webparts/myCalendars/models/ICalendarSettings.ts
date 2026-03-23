@@ -1,4 +1,4 @@
-export type CalendarViewType = 'day' | 'week' | 'month' | 'schedule' | 'search';
+export type CalendarViewType = 'day' | 'week' | 'month' | 'search';
 export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 
 export interface ISharePointFieldMapping {

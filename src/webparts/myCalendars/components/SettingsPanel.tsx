@@ -1714,7 +1714,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
                       <Icon iconName="OutlookLogo" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Outlook</Label>
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Outlook</Label>
                       <DefaultButton
                         text="Manage"
                         iconProps={{ iconName: 'OpenInNewWindow' }}
@@ -1745,7 +1745,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
                       <Icon iconName="SharepointLogo" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>SharePoint</Label>
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>SharePoint</Label>
                       <div style={{ flex: 1 }} />
                       <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
                         <Label style={{ margin: 0 }}>Show logos</Label>
@@ -1782,7 +1782,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
                       <Icon iconName="PlannerLogo" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Planner</Label>
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Planner</Label>
                       <div style={{ flex: 1 }} />
                       <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
                         <Label style={{ margin: 0 }}>Show logos</Label>
@@ -1807,7 +1807,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
                       <Icon iconName="Group" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Groups &amp; Teams</Label>
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Groups &amp; Teams</Label>
                     </Stack>
                     <Stack tokens={{ childrenGap: 10 }}>
                       {settings.sources.filter(s => s.sourceType === 'unifiedGroup').map(source => (
@@ -1822,7 +1822,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   <div>
                     <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
                       <Icon iconName="Clock" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: 0 }}>Teams Shifts</Label>
+                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Teams Shifts</Label>
                     </Stack>
                     <Stack tokens={{ childrenGap: 10 }}>
                       {settings.sources.filter(s => s.sourceType === 'teamsShifts').map(source => (

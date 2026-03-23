@@ -13,7 +13,6 @@ import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
 import { CommunityCalendarView } from './views/CommunityCalendarView';
-import { ScheduleView } from './views/ScheduleView';
 import { SearchResultsView } from './views/SearchResultsView';
 import { CommandBar, ICommandBarItemProps } from '@fluentui/react/lib/CommandBar';
 import { Callout } from '@fluentui/react/lib/Callout';
@@ -463,7 +462,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     switch (currentView) {
       case 'day':
-      case 'schedule':
         newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
         break;
       case 'week':
@@ -662,7 +660,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     switch (currentView) {
       case 'day':
-      case 'schedule':
         return currentDate.toLocaleDateString(undefined, { ...options, day: 'numeric' });
       case 'week': {
         const weekStart = new Date(currentDate);
@@ -720,8 +717,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         return usePnpCalendar
           ? <CommunityCalendarView {...calendarViewProps} viewType="week" />
           : <WeekView {...scheduleViewProps} />;
-      case 'schedule':
-        return <ScheduleView {...scheduleViewProps} />;
       case 'month':
       default:
         return usePnpCalendar

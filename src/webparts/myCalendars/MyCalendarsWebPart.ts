@@ -5,9 +5,6 @@ import {
   type IPropertyPaneConfiguration,
   PropertyPaneDropdown,
   PropertyPaneToggle,
-  PropertyPaneSlider,
-  PropertyPaneCheckbox,
-  PropertyPaneTextField,
   PropertyPaneLabel
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
@@ -23,6 +20,7 @@ import { SettingsStorageService } from './services/SettingsStorageService';
 export interface IMyCalendarsWebPartProps {
   settings: string;
   disablePnpTelemetry?: boolean;
+  enablePnpTelemetry?: boolean;
 }
 
 export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalendarsWebPartProps> {
@@ -164,7 +162,11 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   private applyTelemetryPreference(): void {
-    if (this.properties.disablePnpTelemetry === true) {
+    // enablePnpTelemetry === false means user explicitly turned it off
+    // disablePnpTelemetry === true is kept for backward compatibility
+    const shouldDisable = this.properties.enablePnpTelemetry === false
+      || (this.properties.enablePnpTelemetry === undefined && this.properties.disablePnpTelemetry === true);
+    if (shouldDisable) {
       const telemetry = PnPTelemetry.getInstance();
       telemetry.optOut();
     }
@@ -221,102 +223,23 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
                   options: [
                     { key: 'day', text: 'Day' },
                     { key: 'week', text: 'Week' },
-                    { key: 'month', text: 'Month' },
-                    { key: 'schedule', text: 'Schedule' }
+                    { key: 'month', text: 'Month' }
                   ],
                   selectedKey: settings.defaultView
-                }),
-                PropertyPaneToggle('showWeekends', {
-                  label: 'Show Weekends',
-                  checked: settings.showWeekends,
-                  onText: 'Yes',
-                  offText: 'No'
-                }),
-                PropertyPaneSlider('startHour', {
-                  label: 'Start Hour',
-                  min: 0,
-                  max: 23,
-                  value: settings.startHour,
-                  showValue: true
-                }),
-                PropertyPaneSlider('endHour', {
-                  label: 'End Hour',
-                  min: 0,
-                  max: 23,
-                  value: settings.endHour,
-                  showValue: true
-                }),
-                PropertyPaneSlider('slotDuration', {
-                  label: 'Slot Duration (minutes)',
-                  min: 15,
-                  max: 60,
-                  step: 15,
-                  value: settings.slotDuration,
-                  showValue: true
-                }),
-                PropertyPaneSlider('firstDayOfWeek', {
-                  label: 'First Day of Week (0=Sunday, 1=Monday)',
-                  min: 0,
-                  max: 6,
-                  value: settings.firstDayOfWeek,
-                  showValue: true
                 })
               ]
             },
             {
               groupName: 'PnP Controls',
               groupFields: [
-                PropertyPaneToggle('disablePnpTelemetry', {
-                  label: 'Schakel PnP Controls telemetry uit',
-                  checked: this.properties.disablePnpTelemetry === true,
-                  onText: 'Uit',
-                  offText: 'Aan'
+                PropertyPaneToggle('enablePnpTelemetry', {
+                  label: 'PnP Controls telemetry',
+                  checked: this.properties.enablePnpTelemetry !== false,
+                  onText: 'Aan',
+                  offText: 'Uit'
                 }),
                 PropertyPaneLabel('telemetryInfo', {
-                  text: 'Standaard staat telemetry aan. Bij uitschakelen wordt PnP telemetry opt-out toegepast voor deze webpart.'
-                })
-              ]
-            },
-            {
-              groupName: 'ICS Proxy',
-              groupFields: [
-                PropertyPaneLabel('icsProxyInfo', {
-                  text: 'Sommige ICS-bronnen vereisen een proxy wegens CORS.'
-                }),
-                PropertyPaneCheckbox('useCustomProxy', {
-                  text: 'Gebruik eigen proxy',
-                  checked: !!settings.useCustomProxy
-                }),
-                PropertyPaneTextField('customProxyUrl', {
-                  label: 'Eigen proxy URL',
-                  placeholder: 'https://proxy.example.com/https://doel-host/...',
-                  description: 'Wordt gebruikt als "Eigen proxy" is ingeschakeld',
-                  value: settings.customProxyUrl || '',
-                  disabled: !settings.useCustomProxy
-                }),
-                PropertyPaneCheckbox('useWhateverOrigin', {
-                  text: 'Gebruik https://www.whateverorigin.org/',
-                  checked: !!settings.useWhateverOrigin
-                }),
-                PropertyPaneLabel('corsTip', {
-                  text: 'Tip: zie ook https://github.com/Zibri/cloudflare-cors-anywhere voor een eigen proxy.'
-                }),
-                PropertyPaneLabel('proxyOrderHeader', { text: 'Proxy volgorde (na directe poging):' }),
-                PropertyPaneDropdown('proxyPriority1', {
-                  label: 'Eerste proxy',
-                  options: [
-                    { key: 'custom', text: 'Eigen proxy' },
-                    { key: 'whateverorigin', text: 'whateverorigin.org' }
-                  ],
-                  selectedKey: settings.proxyPriority1
-                }),
-                PropertyPaneDropdown('proxyPriority2', {
-                  label: 'Tweede proxy',
-                  options: [
-                    { key: 'custom', text: 'Eigen proxy' },
-                    { key: 'whateverorigin', text: 'whateverorigin.org' }
-                  ],
-                  selectedKey: settings.proxyPriority2
+                  text: 'Standaard staat telemetry aan. Schakel hier telemetry in of uit voor deze webpart.'
                 })
               ]
             }
@@ -333,48 +256,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       case 'defaultView':
         settings.defaultView = newValue as CalendarViewType;
         break;
-      case 'showWeekends':
-        settings.showWeekends = newValue as boolean;
-        break;
-      case 'startHour':
-        settings.startHour = newValue as number;
-        break;
-      case 'endHour':
-        settings.endHour = newValue as number;
-        break;
-      case 'slotDuration':
-        settings.slotDuration = newValue as number;
-        break;
-      case 'firstDayOfWeek':
-        settings.firstDayOfWeek = newValue as number;
-        break;
-      case 'useCustomProxy': {
-        const v = !!newValue;
-        settings.useCustomProxy = v;
-        if (v) {
-          settings.useWhateverOrigin = false;
-        }
-        break;
-      }
-      case 'customProxyUrl':
-        settings.customProxyUrl = (newValue as string) || '';
-        break;
-      case 'useWhateverOrigin': {
-        const v = !!newValue;
-        settings.useWhateverOrigin = v;
-        if (v) {
-          settings.useCustomProxy = false;
-        }
-        break;
-      }
-      case 'proxyPriority1':
-        settings.proxyPriority1 = newValue as 'custom' | 'whateverorigin';
-        break;
-      case 'proxyPriority2':
-        settings.proxyPriority2 = newValue as 'custom' | 'whateverorigin';
-        break;
-      case 'disablePnpTelemetry':
-        this.properties.disablePnpTelemetry = newValue === true;
+      case 'enablePnpTelemetry':
+        this.properties.enablePnpTelemetry = newValue === true;
         this.applyTelemetryPreference();
         break;
     }
