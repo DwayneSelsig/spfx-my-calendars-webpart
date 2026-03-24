@@ -102,7 +102,8 @@ We welcome contributions from the community! Here are some ways you can help:
 | 0.0.2 | 2026-02-21       | Added Planner calendars |
 | 0.0.3 | 2026-02-25       | Added Teams Shifts calendars |
 | 0.0.4 | 2026-03-08       | Added Teams and Microsoft 365 Groups calendars |
-| 0.0.5 | 2026-03-15       | Switched day/week/month rendering to PnP Calendar, standardized on `IEvent`, integrated PnPjs, added mailbox timezone-aware event handling, and introduced cache-first user/mailbox lookups |
+| 0.0.5 | 2026-03-15       | Switched day/week/month rendering to PnP Calendar, standardized on `IEvent`, added mailbox timezone-aware event handling, and introduced cache-first user/mailbox lookups |
+| 0.0.6 | 2026-03-24       | Improved search performance through debouncing, streamlined Property Pane behavior, and enhanced the settings panel |
 
 ## Used SharePoint Framework Version
 
