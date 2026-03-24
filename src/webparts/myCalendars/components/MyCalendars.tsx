@@ -3,7 +3,6 @@ import styles from './MyCalendars.module.scss';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
 import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { CalendarViewType } from '../models/ICalendarSettings';
-import { IcsParser } from '../services/IcsParser';
 import { ExchangeCalendarService } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService } from '../services/SharePointCalendarService';
 import { PlannerTaskService } from '../services/PlannerTaskService';
@@ -260,37 +259,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (sourceGroups.ics.length > 0) {
-      tasks.push((async () => {
-        let hadError = false;
-        const appointmentsBySource = await Promise.all(sourceGroups.ics.map(async source => {
-          try {
-            let appointments: IEvent[] = [];
-            if (source.rawContent) {
-              appointments = IcsParser.parseRawContent(source.rawContent, source.id, source.color);
-            } else if (source.url) {
-              appointments = await IcsParser.fetchAndParse(source.url, source.id, source.color, httpClient);
-            }
-
-            return appointments.map(apt => ({
-              ...apt,
-              colorHex: source.color,
-              sourceType: 'ics' as const,
-              showSourceLogo: source.showSourceLogo ?? true
-            } as IEvent));
-          } catch (error) {
-            hadError = true;
-            console.error(`Failed to load ICS calendar ${source.name}:`, error);
-            return [] as IEvent[];
-          }
-        }));
-
-        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-        appendAppointments(flattenedAppointments);
-        updateStatus('ics', hadError ? 'error' : 'ready', hadError ? 'One or more ICS sources failed.' : undefined);
-      })());
-    }
-
     if (sourceGroups.sharepoint.length > 0) {
       tasks.push((async () => {
         let hadError = false;
@@ -365,7 +333,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               startDate,
               endDate,
               source,
-              source.showSourceLogo ?? true
+              this.props.settings.teamsShiftsShowSourceLogo ?? true
             );
           } catch (error) {
             hadError = true;
@@ -405,7 +373,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               sourceId: source.id,
               colorHex: source.color,
               sourceType: 'unifiedGroup' as const,
-              showSourceLogo: source.showSourceLogo ?? true,
+              showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
               sourceIconName: iconName
             } as IEvent));
           } catch (error) {

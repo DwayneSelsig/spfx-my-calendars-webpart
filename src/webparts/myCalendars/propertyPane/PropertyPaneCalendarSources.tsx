@@ -38,7 +38,6 @@ class CalendarSourcesControl extends React.Component<IPropertyPaneCalendarSource
       id: this.generateId(),
       sourceType: 'ics',
       name: 'New Calendar',
-      url: '',
       color: '#0078d4',
       isEnabled: true
     };
@@ -88,13 +87,6 @@ class CalendarSourcesControl extends React.Component<IPropertyPaneCalendarSource
                     value={source.name}
                     onChange={(_, value) => this.handleUpdateSource(source.id, { name: value || '' })}
                   />
-                  <TextField
-                    label="ICS URL"
-                    value={source.url}
-                    onChange={(_, value) => this.handleUpdateSource(source.id, { url: value || '' })}
-                    multiline
-                    rows={2}
-                  />
                   <div>
                     <Label>Color</Label>
                     <ColorPicker
@@ -124,9 +116,6 @@ class CalendarSourcesControl extends React.Component<IPropertyPaneCalendarSource
                   }} />
                   <div style={{ flex: 1 }}>
                     <strong>{source.name}</strong>
-                    <div style={{ fontSize: 12, color: '#605e5c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {source.url || 'No URL set'}
-                    </div>
                   </div>
                   <Toggle
                     checked={source.isEnabled}

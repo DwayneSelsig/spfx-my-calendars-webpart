@@ -80,6 +80,8 @@ interface ISettingsPanelState {
   // Color for new calendar
   newCalendarColor: string;
   newCalendarName: string;
+  // Accordion expanded state per section
+  expandedSections: Record<string, boolean>;
 }
 
 interface IGraphColumn {
@@ -97,13 +99,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   constructor(props: ISettingsPanelProps) {
     super(props);
-    
+
     if (props.httpClient) {
       this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
       this.sharePointService = new SharePointCalendarService(props.httpClient, props.graphClient);
       this.plannerService = new PlannerTaskService(props.httpClient, props.graphClient);
       this.unifiedGroupService = new UnifiedGroupCalendarService(props.httpClient, props.graphClient);
-      
+
       // If graphClient is provided, set it on the services
       if (props.graphClient) {
         this.exchangeService.setGraphClient(props.graphClient);
@@ -155,7 +157,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       unifiedGroupsSelection: {},
       // New calendar
       newCalendarColor: props.settings.organizationPrimaryColor || '#0078d4',
-      newCalendarName: ''
+      newCalendarName: '',
+      expandedSections: {
+        outlook: true,
+        sharepoint: false,
+        planner: false,
+        unifiedGroup: false,
+        teamsShifts: false
+      }
     };
   }
 
@@ -212,13 +221,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     this.setState({ userExchangeCalendarsLoading: true });
     try {
       const calendars = await this.exchangeService.getCalendars();
-      this.setState({ 
+      this.setState({
         userExchangeCalendars: calendars,
         userExchangeCalendarsLoading: false
       });
     } catch (error) {
       console.error('Error loading user Exchange calendars:', error);
-      this.setState({ 
+      this.setState({
         userExchangeCalendars: [],
         userExchangeCalendarsLoading: false
       });
@@ -522,7 +531,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           guessedMapping.endDateField = this.findBestMatchingFieldKey(fieldOptions, candidateLists.end);
         }
 
-        this.setState({ 
+        this.setState({
           spAvailableFields: fieldOptions,
           addingCalendarStep: 'sharepoint-fields',
           spFieldMapping: guessedMapping
@@ -641,7 +650,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     this.setState({ exchangeCalendarsLoading: true });
     const resolved = await this.exchangeService?.resolveMailbox(this.state.exchangeMailbox);
-    
+
     if (resolved) {
       const calendars = await this.exchangeService?.getCalendars(this.state.exchangeMailbox) || [];
       this.setState({
@@ -711,7 +720,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private handleUpdateSource = (id: string, updates: Partial<ICalendarSource>): void => {
     const settings = {
       ...this.state.settings,
-      sources: this.state.settings.sources.map(s => 
+      sources: this.state.settings.sources.map(s =>
         s.id === id ? { ...s, ...updates } : s
       )
     };
@@ -766,9 +775,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       <Stack horizontal tokens={{ childrenGap: 8 }}>
         <PrimaryButton onClick={this.handleSave} text="Save" />
         <DefaultButton onClick={this.props.onDismiss} text="Cancel" />
-        <DefaultButton 
-          onClick={this.handleReset} 
-          text="Reset to Defaults" 
+        <DefaultButton
+          onClick={this.handleReset}
+          text="Reset to Defaults"
           title="Reset your calendar settings to administrator defaults"
         />
       </Stack>
@@ -787,40 +796,40 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label="Title/Subject field"
             options={spAvailableFields}
             selectedKey={spFieldMapping.titleField || ''}
-            onChange={(_, option) => this.setState({ 
-              spFieldMapping: { ...spFieldMapping, titleField: option?.key as string } 
+            onChange={(_, option) => this.setState({
+              spFieldMapping: { ...spFieldMapping, titleField: option?.key as string }
             })}
           />
           <Dropdown
             label="Start Date field"
             options={spAvailableFields}
             selectedKey={spFieldMapping.startDateField || ''}
-            onChange={(_, option) => this.setState({ 
-              spFieldMapping: { ...spFieldMapping, startDateField: option?.key as string } 
+            onChange={(_, option) => this.setState({
+              spFieldMapping: { ...spFieldMapping, startDateField: option?.key as string }
             })}
           />
           <Dropdown
             label="End Date field"
             options={spAvailableFields}
             selectedKey={spFieldMapping.endDateField || ''}
-            onChange={(_, option) => this.setState({ 
-              spFieldMapping: { ...spFieldMapping, endDateField: option?.key as string } 
+            onChange={(_, option) => this.setState({
+              spFieldMapping: { ...spFieldMapping, endDateField: option?.key as string }
             })}
           />
           <Dropdown
             label="Location field (optional)"
             options={[{ key: '', text: '(none)' }, ...spAvailableFields]}
             selectedKey={spFieldMapping.locationField || ''}
-            onChange={(_, option) => this.setState({ 
-              spFieldMapping: { ...spFieldMapping, locationField: option?.key as string } 
+            onChange={(_, option) => this.setState({
+              spFieldMapping: { ...spFieldMapping, locationField: option?.key as string }
             })}
           />
           <Dropdown
             label="Description field (optional)"
             options={[{ key: '', text: '(none)' }, ...spAvailableFields]}
             selectedKey={spFieldMapping.descriptionField || ''}
-            onChange={(_, option) => this.setState({ 
-              spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string } 
+            onChange={(_, option) => this.setState({
+              spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string }
             })}
           />
           <TextField
@@ -902,7 +911,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           onChange={(_, value) => this.handleSharePointFilterChange(value)}
         />
         <PrimaryButton text="Search" onClick={this.handleSharePointSearch} />
-        
+
         {spSites.length === 0 && !spSiteFilter && (
           <Label style={{ color: '#605e5c', fontStyle: 'italic' }}>
             No sites found. Try searching for a specific site name.
@@ -1037,7 +1046,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               </Stack>
             ))}
           </Stack>
-          
+
           {/* Option to search another mailbox */}
           <div style={{ borderTop: '1px solid #edebe9', paddingTop: 12, marginTop: 8 }}>
             <Label>Or enter another mailbox email:</Label>
@@ -1120,10 +1129,10 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           onChange={(_, value) => this.setState({ icsUrl: value || '' })}
           placeholder="https://www.officeholidays.com/ics-all/netherlands"
         />
-        
+
         <Stack horizontal tokens={{ childrenGap: 8 }}>
-          <PrimaryButton 
-            text="Open in Outlook" 
+          <PrimaryButton
+            text="Open in Outlook"
             onClick={this.handleOpenOutlookCalendar}
             disabled={!hasValidInput}
             iconProps={{ iconName: 'OpenInNewWindow' }}
@@ -1136,7 +1145,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   // Planner flow
   private handleSelectPlannerPlan = (planId: string, planTitle: string): void => {
-    this.setState({ 
+    this.setState({
       plannerSelectedPlanId: planId,
       addingCalendarStep: 'planner-options',
       newCalendarName: planTitle
@@ -1395,7 +1404,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       return (
         <Stack tokens={{ childrenGap: 12 }}>
           <Label>Configure Planner integration</Label>
-          
+
           {selectedPlan && (
             <div style={{ padding: '8px', backgroundColor: '#f3f2f1', borderRadius: '4px' }}>
               <Icon iconName="PlannerLogo" style={{ marginRight: 8 }} />
@@ -1541,15 +1550,101 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     );
   };
 
-  private renderExchangeCalendarItem = (calendar: IExchangeCalendar): React.ReactElement => {
+  private renderSourceSection = (params: {
+    sectionKey: string;
+    icon: string;
+    iconBg: string;
+    iconColor: string;
+    title: string;
+    subtitle: string;
+    showLogoValue?: boolean;
+    onShowLogoChange?: (checked: boolean) => void;
+    headerActions?: React.ReactNode;
+    children: React.ReactNode;
+  }): React.ReactElement => {
+    const { sectionKey, icon, iconBg, iconColor, title, subtitle, showLogoValue, onShowLogoChange, headerActions, children } = params;
+    const isExpanded = this.state.expandedSections[sectionKey] !== false;
+    const toggleExpanded = (): void => {
+      this.setState(prev => ({
+        expandedSections: { ...prev.expandedSections, [sectionKey]: !isExpanded }
+      }));
+    };
+
+    return (
+      <div style={{ border: '1px solid #edebe9', overflow: 'hidden' }}>
+        {/* Section header */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '12px 16px',
+            gap: 12,
+            cursor: 'pointer',
+            userSelect: 'none',
+            backgroundColor: 'rgba(0, 0, 0, 0.04)'
+          }}
+          onClick={toggleExpanded}
+          onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { toggleExpanded(); e.preventDefault(); } }}
+        >
+          <div style={{
+            width: 40, height: 40,
+            backgroundColor: iconBg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Icon iconName={icon} style={{ fontSize: 20, color: iconColor }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
+            <div style={{ fontSize: 11, opacity: 0.55, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 1 }}>{subtitle}</div>
+          </div>
+          {(headerActions !== undefined || showLogoValue !== undefined) && (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+              onClick={e => e.stopPropagation()}
+            >
+              {headerActions}
+              {showLogoValue !== undefined && onShowLogoChange && (
+                <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.6 }}>Show logos</span>
+                  <Toggle
+                    checked={showLogoValue}
+                    onChange={(_, checked) => onShowLogoChange(!!checked)}
+                    styles={{ root: { margin: 0 } }}
+                  />
+                </Stack>
+              )}
+            </div>
+          )}
+          <Icon
+            iconName="ChevronDown"
+            style={{
+              fontSize: 14,
+              opacity: 0.55,
+              transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: 'transform 0.15s ease',
+              flexShrink: 0
+            }}
+          />
+        </div>
+        {/* Expandable content */}
+        {isExpanded && (
+          <div style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  private renderExchangeCalendarItem = (calendar: IExchangeCalendar, index: number = 0): React.ReactElement => {
     const isEnabled = this.isExchangeCalendarEnabled(calendar.id);
 
     return (
-      <div key={calendar.id} style={{
-        border: '1px solid #edebe9',
-        borderRadius: 4,
-        padding: 12
-      }}>
+      <div key={calendar.id} style={{ backgroundColor: index % 2 === 1 ? 'rgba(0, 0, 0, 0.02)' : 'transparent', borderRadius: 4, padding: '4px 6px' }}>
         <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}>
           <div style={{
             width: 16,
@@ -1559,74 +1654,43 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             flexShrink: 0
           }} />
           <div style={{ flex: 1 }}>
-            <strong>{calendar.name}</strong>
+            <strong style={{ fontSize: 13 }}>{calendar.name}</strong>
             {calendar.isDefaultCalendar && (
               <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>(Default)</span>
             )}
           </div>
-          <Toggle
-            checked={isEnabled}
-            onChange={(_, checked) => this.handleToggleExchangeCalendar(calendar.id, !!checked)}
+          <IconButton
+            iconProps={{ iconName: 'Edit' }}
+            title="Edit"
+            onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
+            styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
+          />
+          <IconButton
+            iconProps={{ iconName: isEnabled ? 'View' : 'Hide' }}
+            title={isEnabled ? 'Hide calendar' : 'Show calendar'}
+            onClick={() => this.handleToggleExchangeCalendar(calendar.id, !isEnabled)}
+            styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 16, color: isEnabled ? 'inherit' : '#a19f9d' } }}
           />
         </Stack>
       </div>
     );
   };
 
-  private renderCalendarSource = (source: ICalendarSource): React.ReactElement => {
+  private renderCalendarSource = (source: ICalendarSource, index: number = 0): React.ReactElement => {
     const { editingSourceId } = this.state;
+    const isEditing = editingSourceId === source.id;
 
     return (
-      <div key={source.id} style={{
-        border: '1px solid #edebe9',
-        borderRadius: 4,
-        padding: 12,
-        backgroundColor: editingSourceId === source.id ? '#f3f2f1' : 'transparent'
-      }}>
-        {editingSourceId === source.id && source.sourceType === 'ics' ? (
-          <Stack tokens={{ childrenGap: 8 }}>
-            <TextField
-              label="Name"
-              value={source.name}
-              onChange={(_, value) => this.handleUpdateSource(source.id, { name: value || '' })}
-            />
-            <Label>ICS Source (choose one):</Label>
-            <TextField
-              label="ICS URL"
-              value={source.url || ''}
-              onChange={(_, value) => this.handleUpdateSource(source.id, { url: value || '' })}
-              multiline
-              rows={2}
-              placeholder="https://example.com/calendar.ics"
-            />
-            <div style={{ fontSize: 12, color: '#605e5c', margin: '8px 0' }}>OR</div>
-            <TextField
-              label="Paste ICS Content"
-              value={source.rawContent || ''}
-              onChange={(_, value) => this.handleUpdateSource(source.id, { rawContent: value || '' })}
-              multiline
-              rows={5}
-              placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;..."
-            />
-            <div>
-              <Label>Color</Label>
-              <ColorPicker
-                color={source.color}
-                onChange={(_, color) => this.handleUpdateSource(source.id, { color: `#${color.hex}` })}
-                alphaType="none"
-              />
-            </div>
-            <Toggle
-              label="Enabled"
-              checked={source.isEnabled}
-              onChange={(_, checked) => this.handleUpdateSource(source.id, { isEnabled: !!checked })}
-            />
-            <Stack horizontal tokens={{ childrenGap: 8 }}>
-              <PrimaryButton text="Done" onClick={() => this.toggleEdit(undefined)} />
-              <DefaultButton text="Delete" onClick={() => this.handleDeleteSource(source.id)} />
-            </Stack>
-          </Stack>
-        ) : editingSourceId === source.id ? (
+      <div
+        key={source.id}
+        style={{
+          borderRadius: 4,
+          padding: isEditing ? 12 : '4px 6px',
+          backgroundColor: isEditing ? '#f3f2f1' : (index % 2 === 1 ? 'rgba(0, 0, 0, 0.02)' : 'transparent'),
+          border: isEditing ? '1px solid #edebe9' : 'none'
+        }}
+      >
+        {isEditing ? (
           <Stack tokens={{ childrenGap: 8 }}>
             <TextField
               label="Name"
@@ -1661,15 +1725,19 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               flexShrink: 0
             }} />
             <div style={{ flex: 1 }}>
-              <strong>{source.name}</strong>
+              <strong style={{ fontSize: 13 }}>{source.name}</strong>
             </div>
             <IconButton
               iconProps={{ iconName: 'Edit' }}
+              title="Edit"
               onClick={() => this.toggleEdit(source.id)}
+              styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
             />
-            <Toggle
-              checked={source.isEnabled}
-              onChange={(_, checked) => this.handleUpdateSource(source.id, { isEnabled: !!checked })}
+            <IconButton
+              iconProps={{ iconName: source.isEnabled ? 'View' : 'Hide' }}
+              title={source.isEnabled ? 'Hide calendar' : 'Show calendar'}
+              onClick={() => this.handleUpdateSource(source.id, { isEnabled: !source.isEnabled })}
+              styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 16, color: source.isEnabled ? 'inherit' : '#a19f9d' } }}
             />
           </Stack>
         )}
@@ -1696,146 +1764,96 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Stack tokens={{ childrenGap: 16 }}>
             {/* Add Calendar Button at Top */}
             <div>
-              <PrimaryButton 
-                text="Add Calendar" 
+              <PrimaryButton
+                text="Add Calendar"
                 iconProps={{ iconName: 'Add' }}
-                onClick={this.handleOpenAddDialog} 
+                onClick={this.handleOpenAddDialog}
               />
             </div>
 
             {/* Calendar Sources Section */}
             <div>
-              <Stack tokens={{ childrenGap: 20 }}>
-                {/* Exchange Calendars (Auto-loaded from current user) */}
-                {userExchangeCalendarsLoading && (
-                  <Spinner size={SpinnerSize.small} label="Loading your calendars..." />
-                )}
-                {!userExchangeCalendarsLoading && userExchangeCalendars.length > 0 && (
-                  <div>
-                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Icon iconName="OutlookLogo" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Outlook</Label>
-                      <DefaultButton
-                        text="Manage"
-                        iconProps={{ iconName: 'OpenInNewWindow' }}
-                        onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
-                        styles={{ root: { height: 24, minWidth: 0, padding: '0 8px' } }}
-                      />
-                      <div style={{ flex: 1 }} />
-                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
-                        <Label style={{ margin: 0 }}>Show logos</Label>
-                        <Toggle
-                          checked={settings.exchangeShowSourceLogo ?? true}
-                          onChange={(_, checked) => this.setState({
-                            settings: { ...settings, exchangeShowSourceLogo: !!checked }
-                          })}
-                        />
-                      </Stack>
-                    </Stack>
-                    <Stack tokens={{ childrenGap: 10 }}>
-                      {userExchangeCalendars.map(calendar => (
-                        this.renderExchangeCalendarItem(calendar)
-                      ))}
-                    </Stack>
-                  </div>
-                )}
+              <Stack tokens={{ childrenGap: 12 }}>
 
-                {/* SharePoint Calendars */}
-                {settings.sources.filter(s => s.sourceType === 'sharepoint').length > 0 && (
-                  <div>
-                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Icon iconName="SharepointLogo" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>SharePoint</Label>
-                      <div style={{ flex: 1 }} />
-                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
-                        <Label style={{ margin: 0 }}>Show logos</Label>
-                        <Toggle
-                          checked={settings.sharePointShowSourceLogo ?? true}
-                          onChange={(_, checked) => this.setState({
-                            settings: { ...settings, sharePointShowSourceLogo: !!checked }
-                          })}
-                        />
-                      </Stack>
-                    </Stack>
-                    <Stack tokens={{ childrenGap: 10 }}>
-                      {settings.sources.filter(s => s.sourceType === 'sharepoint').map(source => (
-                        this.renderCalendarSource(source)
-                      ))}
-                    </Stack>
-                  </div>
-                )}
+                {/* Outlook */}
+                {(userExchangeCalendarsLoading || userExchangeCalendars.length > 0) && this.renderSourceSection({
+                  sectionKey: 'outlook',
+                  icon: 'OutlookLogo',
+                  iconBg: 'rgba(0, 120, 212, 0.12)',
+                  iconColor: '#0078d4',
+                  title: 'Outlook',
+                  subtitle: 'Personal & shared mailboxes',
+                  showLogoValue: settings.exchangeShowSourceLogo ?? true,
+                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, exchangeShowSourceLogo: checked } }),
+                  headerActions: (
+                    <DefaultButton
+                      text="Manage"
+                      iconProps={{ iconName: 'OpenInNewWindow' }}
+                      onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
+                      styles={{ root: { height: 28, minWidth: 0, padding: '0 8px', fontSize: 12 } }}
+                    />
+                  ),
+                  children: userExchangeCalendarsLoading
+                    ? <Spinner size={SpinnerSize.small} label="Loading your calendars..." />
+                    : userExchangeCalendars.map((calendar, i) => this.renderExchangeCalendarItem(calendar, i))
+                })}
 
-                {/* Web (ICS) Calendars */}
-                {settings.sources.filter(s => s.sourceType === 'ics').length > 0 && (
-                  <div>
-                    <Label style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Web</Label>
-                    <Stack tokens={{ childrenGap: 10 }}>
-                      {settings.sources.filter(s => s.sourceType === 'ics').map(source => (
-                        this.renderCalendarSource(source)
-                      ))}
-                    </Stack>
-                  </div>
-                )}
+                {/* SharePoint */}
+                {settings.sources.filter(s => s.sourceType === 'sharepoint').length > 0 && this.renderSourceSection({
+                  sectionKey: 'sharepoint',
+                  icon: 'SharepointLogo',
+                  iconBg: 'rgba(3, 129, 134, 0.12)',
+                  iconColor: '#038186',
+                  title: 'SharePoint',
+                  subtitle: 'Site lists, calendars & events',
+                  showLogoValue: settings.sharePointShowSourceLogo ?? true,
+                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, sharePointShowSourceLogo: checked } }),
+                  children: settings.sources.filter(s => s.sourceType === 'sharepoint').map((source, i) => this.renderCalendarSource(source, i))
+                })}
 
-                {/* Planner Tasks */}
-                {settings.sources.filter(s => s.sourceType === 'planner').length > 0 && (
-                  <div>
-                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Icon iconName="PlannerLogo" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Planner</Label>
-                      <div style={{ flex: 1 }} />
-                      <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginRight: 12 }}>
-                        <Label style={{ margin: 0 }}>Show logos</Label>
-                        <Toggle
-                          checked={settings.plannerShowSourceLogo ?? true}
-                          onChange={(_, checked) => this.setState({
-                            settings: { ...settings, plannerShowSourceLogo: !!checked }
-                          })}
-                        />
-                      </Stack>
-                    </Stack>
-                    <Stack tokens={{ childrenGap: 10 }}>
-                      {settings.sources.filter(s => s.sourceType === 'planner').map(source => (
-                        this.renderCalendarSource(source)
-                      ))}
-                    </Stack>
-                  </div>
-                )}
+                {/* Planner */}
+                {settings.sources.filter(s => s.sourceType === 'planner').length > 0 && this.renderSourceSection({
+                  sectionKey: 'planner',
+                  icon: 'PlannerLogo',
+                  iconBg: 'rgba(16, 124, 65, 0.12)',
+                  iconColor: '#107c41',
+                  title: 'Planner',
+                  subtitle: 'Task deadlines & milestones',
+                  showLogoValue: settings.plannerShowSourceLogo ?? true,
+                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, plannerShowSourceLogo: checked } }),
+                  children: settings.sources.filter(s => s.sourceType === 'planner').map((source, i) => this.renderCalendarSource(source, i))
+                })}
 
                 {/* Groups & Teams */}
-                {settings.sources.filter(s => s.sourceType === 'unifiedGroup').length > 0 && (
-                  <div>
-                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Icon iconName="Group" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Groups &amp; Teams</Label>
-                    </Stack>
-                    <Stack tokens={{ childrenGap: 10 }}>
-                      {settings.sources.filter(s => s.sourceType === 'unifiedGroup').map(source => (
-                        this.renderCalendarSource(source)
-                      ))}
-                    </Stack>
-                  </div>
-                )}
+                {settings.sources.filter(s => s.sourceType === 'unifiedGroup').length > 0 && this.renderSourceSection({
+                  sectionKey: 'unifiedGroup',
+                  icon: 'Group',
+                  iconBg: 'rgba(91, 95, 199, 0.12)',
+                  iconColor: '#5b5fc7',
+                  title: 'Groups & Teams',
+                  subtitle: 'Shared group calendars',
+                  showLogoValue: settings.unifiedGroupShowSourceLogo ?? true,
+                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, unifiedGroupShowSourceLogo: checked } }),
+                  children: settings.sources.filter(s => s.sourceType === 'unifiedGroup').map((source, i) => this.renderCalendarSource(source, i))
+                })}
 
                 {/* Teams Shifts */}
-                {settings.sources.filter(s => s.sourceType === 'teamsShifts').length > 0 && (
-                  <div>
-                    <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ marginBottom: 8 }}>
-                      <Icon iconName="Clock" style={{ fontSize: 16 }} />
-                      <Label style={{ fontWeight: 600, fontSize: 14, margin: '0 0 0 3px' }}>Teams Shifts</Label>
-                    </Stack>
-                    <Stack tokens={{ childrenGap: 10 }}>
-                      {settings.sources.filter(s => s.sourceType === 'teamsShifts').map(source => (
-                        this.renderCalendarSource(source)
-                      ))}
-                    </Stack>
-                  </div>
-                )}
+                {settings.sources.filter(s => s.sourceType === 'teamsShifts').length > 0 && this.renderSourceSection({
+                  sectionKey: 'teamsShifts',
+                  icon: 'Clock',
+                  iconBg: 'rgba(74, 79, 190, 0.12)',
+                  iconColor: '#4a4fbe',
+                  title: 'Teams Shifts',
+                  subtitle: 'Work schedules & rotas',
+                  showLogoValue: settings.teamsShiftsShowSourceLogo ?? true,
+                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, teamsShiftsShowSourceLogo: checked } }),
+                  children: settings.sources.filter(s => s.sourceType === 'teamsShifts').map((source, i) => this.renderCalendarSource(source, i))
+                })}
 
-                {/* Show message if no calendars */}
+                {/* Empty state */}
                 {!userExchangeCalendarsLoading && userExchangeCalendars.length === 0 && settings.sources.length === 0 && (
                   <Label style={{ color: '#605e5c', fontStyle: 'italic' }}>
-                    No calendars found. Click &quot;Add Calendar&quot; to add SharePoint or Web calendars.
+                    No calendars found. Click &quot;Add Calendar&quot; to add a calendar source.
                   </Label>
                 )}
               </Stack>

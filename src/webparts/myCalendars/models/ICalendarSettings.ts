@@ -16,9 +16,6 @@ export interface ICalendarSource {
   color: string;
   isEnabled: boolean;
   sourceType: CalendarSourceType;
-  // ICS source properties
-  url?: string;
-  rawContent?: string;
   // Exchange source properties
   exchangeMailbox?: string; // user principal name or email, defaults to current user
   exchangeCalendarId?: string;
@@ -63,6 +60,8 @@ export interface ICalendarSettings {
   exchangeShowSourceLogo?: boolean;
   sharePointShowSourceLogo?: boolean;
   plannerShowSourceLogo?: boolean;
+  unifiedGroupShowSourceLogo?: boolean;
+  teamsShiftsShowSourceLogo?: boolean;
 }
 
 export const defaultCalendarSettings: ICalendarSettings = {
@@ -82,5 +81,7 @@ export const defaultCalendarSettings: ICalendarSettings = {
   exchangeCalendarStates: {}, // All Exchange calendars enabled by default
   exchangeShowSourceLogo: true,
   sharePointShowSourceLogo: true,
-  plannerShowSourceLogo: true
+  plannerShowSourceLogo: true,
+  unifiedGroupShowSourceLogo: true,
+  teamsShiftsShowSourceLogo: true
 };
