@@ -207,8 +207,8 @@ export class ExchangeCalendarService {
    * Map Microsoft Graph event to IEvent
    */
   private mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string): IEvent {
-    const startISO = graphEvent.start.dateTime || graphEvent.start.date || new Date().toISOString();
-    const endISO = graphEvent.end.dateTime || graphEvent.end.date || new Date().toISOString();
+    const startISO = ExchangeCalendarService.toSafeISOString(graphEvent.start.dateTime, graphEvent.start.date);
+    const endISO = ExchangeCalendarService.toSafeISOString(graphEvent.end.dateTime, graphEvent.end.date);
     const organizerEmail = graphEvent.organizer?.emailAddress?.address;
 
     // Map attendees excluding the organizer
@@ -253,6 +253,29 @@ export class ExchangeCalendarService {
       console.error('Error resolving mailbox:', error);
       return false;
     }
+  }
+
+  /**
+   * Normalises a Graph date value to a valid ISO string.
+   * Graph all-day events supply only a date string ("2026-03-25") without a
+   * time component; anchoring to noon UTC prevents timezone-boundary drift
+   * and avoids the RangeError: Invalid time value that toISOString() throws
+   * on an Invalid Date.
+   */
+  private static toSafeISOString(dateTime: string | undefined, dateOnly: string | undefined): string {
+    const raw = dateTime || dateOnly;
+    if (!raw) {
+      return new Date().toISOString();
+    }
+    // Date-only value (e.g. "2026-03-25"): anchor to noon UTC so it is
+    // treated as an all-day event regardless of the viewer's local timezone.
+    const normalized = raw.includes('T') ? raw : `${raw}T12:00:00.000Z`;
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) {
+      console.warn('[ExchangeCalendarService] Unparseable date value, falling back to now:', raw);
+      return new Date().toISOString();
+    }
+    return d.toISOString();
   }
 }
 
