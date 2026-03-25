@@ -61,6 +61,25 @@ index c3f5501..fecbbe5 100644
              return (React.createElement(React.Fragment, null, dayEvents === null || dayEvents === void 0 ? void 0 : dayEvents.timeSlots.map(function (timeSlot, slotIndex) {
                  var eventCount = timeSlot.events.length; // Total events in the slot
                  return (React.createElement("div", { key: slotIndex, className: styles.dayCell, style: {
+diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendar.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendar.js
+index 1c60c0b..36e442e 100644
+--- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendar.js
++++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendar.js
+@@ -18,7 +18,13 @@ export var useCalendar = function (timezone) {
+     }, []);
+     // Memoized helper for timezone handling
+     var toLocalDate = useCallback(function (dateString) {
+-        return new Date(new Date(dateString).toLocaleString(undefined, { timeZone: timezone }));
++        var parsed = new Date(dateString);
++        if (isNaN(parsed.getTime())) {
++            return new Date();
++        }
++        // Force an en-US parseable format to avoid locale-dependent Invalid Date
++        // values (for example nl-NL day-month ordering) on the second Date parse.
++        return new Date(parsed.toLocaleString('en-US', { timeZone: timezone }));
+     }, [timezone]);
+     // Memoize getMonthCalendar to avoid re-creation unless dependencies change
+     var getMonthCalendar = useCallback(function (events, year, month) {
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
 index 3fdcb8e..97e552a 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
