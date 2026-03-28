@@ -72,15 +72,24 @@
 }
 
 :global {
-  .calendarControl-menu3 {
+  // Today button - selected by aria-label
+  [class*="calendarContainer_"] button[aria-label="Today"] {
+    border-radius: 2px !important;
+  }
+
+  // Date picker button - 2nd button in left toolbar group
+  [class*="calendarContainer_"] > div > div > div > div > div:first-child > div:first-child > button:nth-child(2) {
     min-width: 150px !important;
     padding-right: 0px !important;
     padding-left: 0px !important;
+    border-radius: 2px !important;
   }
 
-  .calendarControl-menu6 {
+  // View selector button - only button in right toolbar group
+  [class*="calendarContainer_"] > div > div > div > div > div:first-child > div:last-child > button {
     min-width: 40px !important;
     padding-right: 0px !important;
     padding-left: 0px !important;
+    border-radius: 2px !important;
   }
 }
