@@ -70,3 +70,17 @@
   color: var(--errorText, #a80000);
   margin-left: 4px;
 }
+
+:global {
+  .calendarControl-menu3 {
+    min-width: 150px !important;
+    padding-right: 0px !important;
+    padding-left: 0px !important;
+  }
+
+  .calendarControl-menu6 {
+    min-width: 40px !important;
+    padding-right: 0px !important;
+    padding-left: 0px !important;
+  }
+}
