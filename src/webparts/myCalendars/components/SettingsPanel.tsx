@@ -10,6 +10,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Checkbox } from '@fluentui/react/lib/Checkbox';
+import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
 import { ICalendarSource, ICalendarSettings, CalendarSourceType } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
@@ -736,6 +737,42 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       }
     };
     this.setState({ settings });
+  };
+
+  private handleTogglePlannerShowAll = (checked: boolean): void => {
+    this.setState(prev => ({
+      settings: {
+        ...prev.settings,
+        plannerShowAllCalendars: checked
+      }
+    }));
+  };
+
+  private handleTogglePlannerAssignedToMeOnly = (checked: boolean): void => {
+    this.setState(prev => ({
+      settings: {
+        ...prev.settings,
+        plannerShowAllAssignedToMeOnly: checked
+      }
+    }));
+  };
+
+  private handleToggleUnifiedGroupShowAll = (checked: boolean): void => {
+    this.setState(prev => ({
+      settings: {
+        ...prev.settings,
+        unifiedGroupShowAllCalendars: checked
+      }
+    }));
+  };
+
+  private handleToggleTeamsShiftsShowAll = (checked: boolean): void => {
+    this.setState(prev => ({
+      settings: {
+        ...prev.settings,
+        teamsShiftsShowAllCalendars: checked
+      }
+    }));
   };
 
   private isExchangeCalendarEnabled = (calendarId: string): boolean => {
@@ -1812,7 +1849,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 })}
 
                 {/* Planner */}
-                {settings.sources.filter(s => s.sourceType === 'planner').length > 0 && this.renderSourceSection({
+                {this.renderSourceSection({
                   sectionKey: 'planner',
                   icon: 'PlannerLogo',
                   iconBg: 'rgba(16, 124, 65, 0.12)',
@@ -1821,11 +1858,41 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   subtitle: 'Task deadlines & milestones',
                   showLogoValue: settings.plannerShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, plannerShowSourceLogo: checked } }),
-                  children: settings.sources.filter(s => s.sourceType === 'planner').map((source, i) => this.renderCalendarSource(source, i))
+                  children: (() => {
+                    const plannerSources = settings.sources.filter(s => s.sourceType === 'planner');
+                    const showAllPlanner = settings.plannerShowAllCalendars ?? false;
+
+                    return (
+                      <Stack tokens={{ childrenGap: 8 }}>
+                        <Toggle
+                          label="Show all my Planner plans"
+                          checked={showAllPlanner}
+                          onChange={(_, checked) => this.handleTogglePlannerShowAll(!!checked)}
+                        />
+                        {showAllPlanner && (
+                          <Toggle
+                            label="Assigned to me only"
+                            checked={settings.plannerShowAllAssignedToMeOnly ?? false}
+                            onChange={(_, checked) => this.handleTogglePlannerAssignedToMeOnly(!!checked)}
+                          />
+                        )}
+                        {showAllPlanner && (
+                          <MessageBar messageBarType={MessageBarType.info}>
+                            All Planner plans are loaded automatically.
+                          </MessageBar>
+                        )}
+                        {plannerSources.length > 0 && (
+                          <div style={showAllPlanner ? { opacity: 0.4, pointerEvents: 'none' } : undefined}>
+                            {plannerSources.map((source, i) => this.renderCalendarSource(source, i))}
+                          </div>
+                        )}
+                      </Stack>
+                    );
+                  })()
                 })}
 
                 {/* Groups & Teams */}
-                {settings.sources.filter(s => s.sourceType === 'unifiedGroup').length > 0 && this.renderSourceSection({
+                {this.renderSourceSection({
                   sectionKey: 'unifiedGroup',
                   icon: 'Group',
                   iconBg: 'rgba(91, 95, 199, 0.12)',
@@ -1834,11 +1901,34 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   subtitle: 'Shared group calendars',
                   showLogoValue: settings.unifiedGroupShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, unifiedGroupShowSourceLogo: checked } }),
-                  children: settings.sources.filter(s => s.sourceType === 'unifiedGroup').map((source, i) => this.renderCalendarSource(source, i))
+                  children: (() => {
+                    const unifiedGroupSources = settings.sources.filter(s => s.sourceType === 'unifiedGroup');
+                    const showAllUnifiedGroups = settings.unifiedGroupShowAllCalendars ?? false;
+
+                    return (
+                      <Stack tokens={{ childrenGap: 8 }}>
+                        <Toggle
+                          label="Show all my group & team calendars"
+                          checked={showAllUnifiedGroups}
+                          onChange={(_, checked) => this.handleToggleUnifiedGroupShowAll(!!checked)}
+                        />
+                        {showAllUnifiedGroups && (
+                          <MessageBar messageBarType={MessageBarType.info}>
+                            All group and team calendars are loaded automatically.
+                          </MessageBar>
+                        )}
+                        {unifiedGroupSources.length > 0 && (
+                          <div style={showAllUnifiedGroups ? { opacity: 0.4, pointerEvents: 'none' } : undefined}>
+                            {unifiedGroupSources.map((source, i) => this.renderCalendarSource(source, i))}
+                          </div>
+                        )}
+                      </Stack>
+                    );
+                  })()
                 })}
 
                 {/* Teams Shifts */}
-                {settings.sources.filter(s => s.sourceType === 'teamsShifts').length > 0 && this.renderSourceSection({
+                {this.renderSourceSection({
                   sectionKey: 'teamsShifts',
                   icon: 'Clock',
                   iconBg: 'rgba(74, 79, 190, 0.12)',
@@ -1847,7 +1937,30 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   subtitle: 'Work schedules & rotas',
                   showLogoValue: settings.teamsShiftsShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, teamsShiftsShowSourceLogo: checked } }),
-                  children: settings.sources.filter(s => s.sourceType === 'teamsShifts').map((source, i) => this.renderCalendarSource(source, i))
+                  children: (() => {
+                    const teamsShiftsSources = settings.sources.filter(s => s.sourceType === 'teamsShifts');
+                    const showAllTeamsShifts = settings.teamsShiftsShowAllCalendars ?? false;
+
+                    return (
+                      <Stack tokens={{ childrenGap: 8 }}>
+                        <Toggle
+                          label="Show all my Teams Shifts"
+                          checked={showAllTeamsShifts}
+                          onChange={(_, checked) => this.handleToggleTeamsShiftsShowAll(!!checked)}
+                        />
+                        {showAllTeamsShifts && (
+                          <MessageBar messageBarType={MessageBarType.info}>
+                            All Teams Shifts are loaded automatically.
+                          </MessageBar>
+                        )}
+                        {teamsShiftsSources.length > 0 && (
+                          <div style={showAllTeamsShifts ? { opacity: 0.4, pointerEvents: 'none' } : undefined}>
+                            {teamsShiftsSources.map((source, i) => this.renderCalendarSource(source, i))}
+                          </div>
+                        )}
+                      </Stack>
+                    );
+                  })()
                 })}
 
                 {/* Empty state */}

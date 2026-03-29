@@ -106,6 +106,7 @@ We welcome contributions from the community! Here are some ways you can help:
 | 0.0.6 | 2026-03-24       | Improved search performance through debouncing, streamlined Property Pane behavior, and enhanced the settings panel |
 | 0.0.7 | 2026-03-25       | Fixed `RangeError: Invalid time value` crash for all-day Graph events: date-only strings (no `T`) are now anchored to noon UTC before calling `toISOString()`, and unparseable date values fall back to the current time with a console warning |
 | 0.0.8 | 2026-03-28       | Applied CSS overrides for `calendarControl-menu3` and `calendarControl-menu6` to enforce compact min-width and remove horizontal padding |
+| 0.0.9 | 2026-03-29       | Added service-level "Show all my calendars" toggles for Planner, Groups/Teams, and Teams Shifts; manual sources now stay saved but become transparent/inactive while auto-load mode is enabled, with Planner auto-load respecting "assigned to me only" |
 
 ## Used SharePoint Framework Version
 

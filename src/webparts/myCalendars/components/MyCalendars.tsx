@@ -294,7 +294,57 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (sourceGroups.planner.length > 0) {
+    if (this.props.settings.plannerShowAllCalendars) {
+      tasks.push((async () => {
+        let hadError = false;
+
+        try {
+          const plans = await plannerService.getUserPlans();
+          const autoPlannerSources = plans.map(plan => ({
+            id: `auto_planner_${plan.id}`,
+            sourceType: 'planner' as const,
+            name: plan.title,
+            color: this.props.settings.organizationPrimaryColor || '#0078d4',
+            isEnabled: true,
+            plannerPlanId: plan.id,
+            plannerPlanTitle: plan.title,
+            plannerAssignedToMeOnly: this.props.settings.plannerShowAllAssignedToMeOnly ?? false,
+            showCompletedTasks: true,
+            showSourceLogo: this.props.settings.plannerShowSourceLogo ?? true
+          }));
+
+          const appointmentsBySource = await Promise.all(autoPlannerSources.map(async source => {
+            try {
+              if (!source.plannerPlanId) {
+                return [] as IEvent[];
+              }
+
+              return await plannerService.getTasks(
+                source.plannerPlanId,
+                startDate,
+                endDate,
+                source.plannerAssignedToMeOnly ?? false,
+                source.showCompletedTasks ?? true,
+                source,
+                this.props.settings.plannerShowSourceLogo ?? true
+              );
+            } catch (error) {
+              hadError = true;
+              console.error(`Failed to load Planner tasks ${source.name}:`, error);
+              return [] as IEvent[];
+            }
+          }));
+
+          const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
+          appendAppointments(flattenedAppointments);
+        } catch (error) {
+          hadError = true;
+          console.error('Failed to load Planner plans for auto mode:', error);
+        }
+
+        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? 'One or more Planner sources failed.' : undefined);
+      })());
+    } else if (sourceGroups.planner.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         const appointmentsBySource = await Promise.all(sourceGroups.planner.map(async source => {
@@ -324,7 +374,34 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (sourceGroups.teamsShifts.length > 0) {
+    if (this.props.settings.teamsShiftsShowAllCalendars) {
+      tasks.push((async () => {
+        let hadError = false;
+        const autoSource = {
+          id: 'auto_teamsShifts',
+          sourceType: 'teamsShifts' as const,
+          name: 'Teams Shifts',
+          color: this.props.settings.organizationPrimaryColor || '#4a4fbe',
+          isEnabled: true,
+          showSourceLogo: this.props.settings.teamsShiftsShowSourceLogo ?? true
+        };
+
+        try {
+          const events = await teamsShiftsService.getShiftsForJoinedTeams(
+            startDate,
+            endDate,
+            autoSource,
+            this.props.settings.teamsShiftsShowSourceLogo ?? true
+          );
+          appendAppointments(events);
+        } catch (error) {
+          hadError = true;
+          console.error('Failed to load Teams shifts for auto mode:', error);
+        }
+
+        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? 'One or more Teams Shifts sources failed.' : undefined);
+      })());
+    } else if (sourceGroups.teamsShifts.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         const appointmentsBySource = await Promise.all(sourceGroups.teamsShifts.map(async source => {
@@ -348,7 +425,45 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (sourceGroups.unifiedGroup.length > 0) {
+    if (this.props.settings.unifiedGroupShowAllCalendars) {
+      tasks.push((async () => {
+        let hadError = false;
+
+        try {
+          const [groups, joinedTeamIds] = await Promise.all([
+            unifiedGroupService.getUnifiedGroups(),
+            unifiedGroupService.getJoinedTeamIds()
+          ]);
+
+          const appointmentsByGroup = await Promise.all(groups.map(async group => {
+            try {
+              const iconName = joinedTeamIds.has(group.id) ? 'TeamsLogo' : 'Group';
+              const events = await unifiedGroupService.getGroupEvents(group.id, startDate, endDate);
+              return events.map(event => ({
+                ...event,
+                sourceId: `auto_unifiedGroup_${group.id}`,
+                colorHex: this.props.settings.organizationPrimaryColor || '#5b5fc7',
+                sourceType: 'unifiedGroup' as const,
+                showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
+                sourceIconName: iconName
+              } as IEvent));
+            } catch (error) {
+              hadError = true;
+              console.error(`Failed to load group calendar ${group.displayName}:`, error);
+              return [] as IEvent[];
+            }
+          }));
+
+          const flattenedAppointments = appointmentsByGroup.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
+          appendAppointments(flattenedAppointments);
+        } catch (error) {
+          hadError = true;
+          console.error('Failed to load group calendars for auto mode:', error);
+        }
+
+        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? 'One or more group calendars failed.' : undefined);
+      })());
+    } else if (sourceGroups.unifiedGroup.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         let joinedTeamIds: Set<string> = new Set();
@@ -548,6 +663,16 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       } else if (source.sourceType === 'unifiedGroup') {
         serviceKeys.add('unifiedGroup');
       }
+    }
+
+    if (this.props.settings.plannerShowAllCalendars) {
+      serviceKeys.add('planner');
+    }
+    if (this.props.settings.teamsShiftsShowAllCalendars) {
+      serviceKeys.add('teamsShifts');
+    }
+    if (this.props.settings.unifiedGroupShowAllCalendars) {
+      serviceKeys.add('unifiedGroup');
     }
 
     return Array.from(serviceKeys);

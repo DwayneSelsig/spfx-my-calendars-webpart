@@ -25,7 +25,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
 
       # Extract version from release tag
       # npm requires semantic versioning (major.minor.patch)
@@ -48,11 +47,8 @@ jobs:
           jq ".solution.version = \"${{ steps.version.outputs.sharepoint_version }}\"" config/package-solution.json > config/package-solution.json.tmp && mv config/package-solution.json.tmp config/package-solution.json
 
       # BUILD (build omvat bundling in SPFx Heft toolchain)
-      - name: Heft build (production)
-        run: npx heft build --clean --production
-
-      - name: Heft package solution (production)
-        run: npx heft package-solution --production
+      - name: Build and package solution (production)
+        run: npm run build
 
       - name: Upload sppkg to GitHub Release
         uses: softprops/action-gh-release@v2

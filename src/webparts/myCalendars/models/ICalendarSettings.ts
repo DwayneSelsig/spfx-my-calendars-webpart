@@ -62,6 +62,11 @@ export interface ICalendarSettings {
   plannerShowSourceLogo?: boolean;
   unifiedGroupShowSourceLogo?: boolean;
   teamsShiftsShowSourceLogo?: boolean;
+  // Service-level auto-load settings
+  plannerShowAllCalendars?: boolean;
+  plannerShowAllAssignedToMeOnly?: boolean;
+  unifiedGroupShowAllCalendars?: boolean;
+  teamsShiftsShowAllCalendars?: boolean;
 }
 
 export const defaultCalendarSettings: ICalendarSettings = {
@@ -83,5 +88,9 @@ export const defaultCalendarSettings: ICalendarSettings = {
   sharePointShowSourceLogo: true,
   plannerShowSourceLogo: true,
   unifiedGroupShowSourceLogo: true,
-  teamsShiftsShowSourceLogo: true
+  teamsShiftsShowSourceLogo: true,
+  plannerShowAllCalendars: false,
+  plannerShowAllAssignedToMeOnly: false,
+  unifiedGroupShowAllCalendars: false,
+  teamsShiftsShowAllCalendars: false
 };
