@@ -104,7 +104,7 @@ export const CommunityCalendarView: React.FC<ICommunityCalendarViewProps> = (pro
   }, [viewType]);
 
   return (
-    <div style={{ width: '100%', height: '100%', padding: '16px' }}>
+    <div style={{ width: '100%', height: '100%' }}>
       <Calendar
         events={enrichedEvents}
         defaultView={defaultView}

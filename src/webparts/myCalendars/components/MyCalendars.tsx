@@ -566,8 +566,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           placeholder="Search appointments..."
           onChange={(_event, newValue) => this.handleSearch(newValue || '')}
           style={{
-            width: 250,
-            flexShrink: 0
+            width: 200
           }}
         />
       )
@@ -887,6 +886,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           items={this.getCommandBarItems()}
           farItems={this.getFarCommandBarItems()}
           className={styles.commandBar}
+          style={{padding:0}}
         />
         <div className={styles.calendarContainer}>
           {/*

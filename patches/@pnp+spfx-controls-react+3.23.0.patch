@@ -24,6 +24,19 @@ index 2596c1d..6f1d512 100644
              })));
      }, [
          currentDay,
+diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/Toolbar.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/Toolbar.js
+index 2561807..872f1f2 100644
+--- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/Toolbar.js
++++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/Toolbar.js
+@@ -66,7 +66,7 @@ export var Toolbar = React.memo(function (_a) {
+         onDayChange,
+         setCurrentDate,
+     ]);
+-    return (React.createElement(Stack, { width: "calc(100% - 40px)", height: "fit-content", horizontal: true, horizontalAlign: "space-between", verticalAlign: "center", paddingLeft: "20px", paddingRight: "20px", paddingBottom: "10px", paddingTop: "10px", columnGap: 10, styles: { overflow: 'hidden' } },
++    return (React.createElement(Stack, { width: "100%", height: "fit-content", horizontal: true, horizontalAlign: "space-between", verticalAlign: "center", paddingLeft: "0px", paddingRight: "0px", paddingBottom: "10px", paddingTop: "10px", columnGap: 10, styles: { overflow: 'hidden' } },
+         React.createElement(Stack, { horizontal: true, horizontalAlign: "start", verticalAlign: "center", columnGap: 10 },
+             React.createElement(RenderToday, null),
+             React.createElement(RenderSelectView, null),
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js
 index c3f5501..fecbbe5 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/WeekView.js
@@ -80,10 +93,52 @@ index 1c60c0b..36e442e 100644
      }, [timezone]);
      // Memoize getMonthCalendar to avoid re-creation unless dependencies change
      var getMonthCalendar = useCallback(function (events, year, month) {
+diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendarStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendarStyles.js
+index b43f039..9bb0748 100644
+--- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendarStyles.js
++++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useCalendarStyles.js
+@@ -3,7 +3,6 @@ import { tokens } from "@fluentui/react-components";
+ export var useCalendarStyles = function () {
+     var styles = {
+         calendarWrapper: css({
+-            padding: "20px",
+             paddingTop: "10px",
+             overflow: "auto",
+             flex: 1,
+@@ -12,14 +11,14 @@ export var useCalendarStyles = function () {
+             gridTemplateRows: "auto", // Automatically sizes the header row
+             gridAutoRows: "minmax(100px, 1fr)", // Ensures all rows have a minimum height of 100px and grow equally
+             gap: "1px", // Gap between cells
+-            width: "calc(100% - 40px)", // Full width minus padding
++            width: "100%", // Full width
+         }),
+         header: css({
+             display: "flex",
+             justifyContent: "start",
+             gap: "10px",
+             alignItems: "center",
+-            padding: "16px",
++            paddingTop: "16px",
+         }),
+         dayHeader: css({
+             textAlign: "start",
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
-index 3fdcb8e..97e552a 100644
+index 3fdcb8e..d327fa4 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
 +++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useDayViewStyles.js
+@@ -6,10 +6,10 @@ export var useDayViewStyles = function () {
+         container: css({
+             display: "flex",
+             flexDirection: "column",
+-            width: "calc(100% - 40px)",
++            width: "100%",
+             height: "100vh", // Make the container take the full viewport height
+             overflow: "hidden", // Prevent window scrolling
+-            padding: "20px",
++            paddingTop: "10px",
+         }),
+         header: css({
+             display: "flex",
 @@ -88,6 +88,10 @@ export var useDayViewStyles = function () {
              padding: "5px",
              borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border for the label cell
@@ -124,9 +179,22 @@ index 832eb37..3b21f59 100644
          return { spanSlots: spanSlots, startSlot: startSlot, endSlot: endSlot };
      }, []);
 diff --git a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
-index ba0d802..4ca040d 100644
+index ba0d802..ef10fdd 100644
 --- a/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
 +++ b/node_modules/@pnp/spfx-controls-react/lib/controls/calendar/hooks/useWeekViewStyles.js
+@@ -6,10 +6,10 @@ export var useWeekViewStyles = function () {
+         container: css({
+             display: 'flex',
+             flexDirection: 'column',
+-            width: 'calc(100% - 40px)',
++            width: '100%',
+             height: '100vh', // Make the container take the full viewport height
+             overflow: 'hidden', // Prevent window scrolling
+-            padding: '20px',
++            paddingTop: '10px',
+         }),
+         header: css({
+             display: 'flex',
 @@ -86,6 +86,10 @@ export var useWeekViewStyles = function () {
              padding: '5px',
              borderRight: "1px solid ".concat(tokens.colorNeutralStroke1), // Right border for the label cell
