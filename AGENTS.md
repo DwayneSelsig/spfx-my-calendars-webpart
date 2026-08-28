@@ -1,3 +1,18 @@
+# Agent instructions
+
+The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** have the meanings in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174) only when they appear in all capitals.
+
+## Required reading
+
+Before a codebase change, an agent **MUST** read these sources in order:
+
+1. [README.md](README.md)
+2. [Architecture and behavior contract](docs/architecture-and-behavior.md)
+3. [Decisions, deviations, and open questions](docs/decisions-deviations-and-open-questions.md)
+4. The relevant source files
+
+An agent **MUST NOT** describe an intention, assumption, technical debt item, or inactive component as desired architecture.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
