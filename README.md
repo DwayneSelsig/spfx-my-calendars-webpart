@@ -152,6 +152,7 @@ The version history below is descriptive. It is not an architecture or behavior 
 | 0.0.8 | 2026-03-28 | Adjusted PnP Calendar menu styles. |
 | 0.0.9 | 2026-03-29 | Added automatic source loading options. |
 | 0.0.10 | 2026-04-06 | Improved responsive layout. |
+| 0.1.0 | 2026-08-23 | Replaced PnP Calendar with own calendar |
 
 ## Contributing
 
