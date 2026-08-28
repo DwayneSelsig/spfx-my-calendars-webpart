@@ -36,3 +36,6 @@ obj
 
 # Styles Generated Code
 *.scss.ts
+
+#graphify
+graphify-out/
