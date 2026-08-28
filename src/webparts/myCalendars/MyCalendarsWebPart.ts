@@ -3,37 +3,57 @@ import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration,
-  PropertyPaneDropdown,
-  PropertyPaneToggle,
-  PropertyPaneLabel
+  PropertyPaneLabel,
+  PropertyPaneToggle
 } from '@microsoft/sp-property-pane';
+import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import PnPTelemetry from '@pnp/telemetry-js';
 
-import * as strings from 'MyCalendarsWebPartStrings';
 import MyCalendars from './components/MyCalendars';
-import { IMyCalendarsProps } from './components/IMyCalendarsProps';
-import { ICalendarSettings, defaultCalendarSettings, CalendarViewType } from './models/ICalendarSettings';
+import type { IMyCalendarsProps } from './components/IMyCalendarsProps';
+import {
+  type IAdminWebPartSettings,
+  type ICalendarSettings,
+  type IUserCalendarSettings,
+  defaultAdminWebPartSettings,
+  defaultCalendarSettings,
+  defaultUserCalendarSettings
+} from './models/ICalendarSettings';
+import { PropertyPaneAdminCalendarManager } from './propertyPane/PropertyPaneAdminCalendarManager';
+import { AudienceService } from './services/AudienceService';
+import {
+  deriveUserCalendarSettings,
+  loadAdminWebPartSettings,
+  migrateLegacyUserSettings,
+  resolveCalendarSettings
+} from './services/CalendarSettingsService';
 import { SettingsStorageService } from './services/SettingsStorageService';
+import * as strings from 'MyCalendarsWebPartStrings';
 
 export interface IMyCalendarsWebPartProps {
-  settings: string;
+  settings?: string;
+  adminSettings?: string;
+  adminSettingsBackup?: string;
   disablePnpTelemetry?: boolean;
   enablePnpTelemetry?: boolean;
 }
 
 export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalendarsWebPartProps> {
-
   private _isDarkTheme: boolean = false;
   private _environmentMessage: string = '';
-  private _currentSettings: ICalendarSettings = { ...defaultCalendarSettings };
+  private _resolvedSettings: ICalendarSettings = { ...defaultCalendarSettings };
+  private _adminSettings: IAdminWebPartSettings = { ...defaultAdminWebPartSettings };
+  private _userSettings: IUserCalendarSettings = { ...defaultUserCalendarSettings };
+  private _matchedGroupIds: Set<string> = new Set<string>();
   private _storageService: SettingsStorageService | null = null;
   private _themeVariant: IReadonlyTheme | undefined;
+  private _graphClient: MSGraphClientV3 | undefined;
+  private _audienceService: AudienceService | null = null;
+  private _adminLoadNotice: string | undefined;
 
   public render(): void {
-    const settings = this.getSettings();
-    
     const element: React.ReactElement<IMyCalendarsProps> = React.createElement(
       MyCalendars,
       {
@@ -42,9 +62,9 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
-        settings: settings,
-        onSettingsChange: this.handleSettingsChange,
-        onResetSettings: this.handleResetSettings,
+        settings: this._resolvedSettings,
+        onSettingsChange: this.handleUserSettingsChange,
+        onResetSettings: this.handleResetUserSettings,
         context: this.context
       }
     );
@@ -52,124 +72,43 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     ReactDom.render(element, this.domElement);
   }
 
-  private getSettings(): ICalendarSettings {
-    // Always merge defaults with current persisted settings to ensure
-    // newly added fields (like proxy options) have values, and changes
-    // from the property pane are reflected immediately.
-    let persisted: Partial<ICalendarSettings> = {};
-    if (this.properties.settings) {
-      try {
-        persisted = JSON.parse(this.properties.settings);
-      } catch {
-        persisted = {};
-      }
-    }
-
-    // Merge order: defaults < previous current < persisted
-    const merged: ICalendarSettings = {
-      ...defaultCalendarSettings,
-      ...(this._currentSettings || {}),
-      ...(persisted as ICalendarSettings)
-    };
-
-    this._currentSettings = merged;
-    return merged;
-  }
-
-  private handleSettingsChange = (settings: ICalendarSettings): void => {
-    this._currentSettings = settings;
-    // Save to both web part properties (for backward compatibility) and App Folder (persistent)
-    this.properties.settings = JSON.stringify(settings);
-    
-    // Also persist to App Folder
-    if (this._storageService) {
-      this._storageService.saveSettings(settings).then(success => {
-        if (success) {
-          console.log('Settings persisted to App Folder');
-        } else {
-          console.error('Failed to persist settings to App Folder');
-        }
-      }).catch(err => console.error('Error saving settings:', err));
-    }
-    
-    this.render();
-  };
-
-  private handleResetSettings = (): void => {
-    // Delete user settings from App Folder
-    if (this._storageService) {
-      this._storageService.deleteSettings().then(success => {
-        if (success) {
-          console.log('User settings removed from App Folder, reverting to defaults');
-          // Reset to default admin settings
-          this._currentSettings = { ...defaultCalendarSettings };
-          // Clear web part property storage as well for consistency
-          this.properties.settings = JSON.stringify(defaultCalendarSettings);
-          this.render();
-        } else {
-          console.error('Failed to remove user settings from App Folder');
-        }
-      }).catch(err => console.error('Error deleting settings:', err));
-    }
-  };
-
-  protected onInit(): Promise<void> {
+  protected async onInit(): Promise<void> {
     this.applyTelemetryPreference();
 
-    // Initialize storage service
-    this._storageService = new SettingsStorageService(
-      this.context.msGraphClientFactory
-    );
+    this._storageService = new SettingsStorageService(this.context.msGraphClientFactory);
+    try {
+      this._graphClient = await this.context.msGraphClientFactory.getClient('3');
+      this._audienceService = new AudienceService(this._graphClient);
+    } catch (error) {
+      console.error('Failed to initialize Microsoft Graph client:', error);
+    }
 
-    // Load persisted settings from App Folder
-    return this._storageService.loadSettings().then(appFolderSettings => {
-      if (appFolderSettings) {
-        this._currentSettings = appFolderSettings;
-      }
-      return this._getEnvironmentMessage().then(message => {
-        this._environmentMessage = message;
-      });
+    const adminLoadResult = loadAdminWebPartSettings({
+      current: this.properties.adminSettings,
+      backup: this.properties.adminSettingsBackup,
+      legacy: this.properties.settings
     });
-  }
+    this._adminSettings = adminLoadResult.settings;
+    this._adminLoadNotice = adminLoadResult.notice;
 
-
-
-  private _getEnvironmentMessage(): Promise<string> {
-    if (!!this.context.sdks.microsoftTeams) { // running in Teams, office.com or Outlook
-      return this.context.sdks.microsoftTeams.teamsJs.app.getContext()
-        .then(context => {
-          let environmentMessage: string = '';
-          switch (context.app.host.name) {
-            case 'Office': // running in Office
-              environmentMessage = this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentOffice : strings.AppOfficeEnvironment;
-              break;
-            case 'Outlook': // running in Outlook
-              environmentMessage = this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentOutlook : strings.AppOutlookEnvironment;
-              break;
-            case 'Teams': // running in Teams
-            case 'TeamsModern':
-              environmentMessage = this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentTeams : strings.AppTeamsTabEnvironment;
-              break;
-            default:
-              environmentMessage = strings.UnknownEnvironment;
+    if (this._storageService) {
+      const persistedUserSettings = await this._storageService.loadUserSettings();
+      if (persistedUserSettings) {
+        this._userSettings = persistedUserSettings;
+      } else {
+        const legacyUserSettings = await this._storageService.loadLegacySettings();
+        if (legacyUserSettings) {
+          this._userSettings = migrateLegacyUserSettings(legacyUserSettings);
+          const saved = await this._storageService.saveUserSettings(this._userSettings);
+          if (!saved) {
+            console.error('Failed to persist migrated user settings.');
           }
-
-          return environmentMessage;
-        });
+        }
+      }
     }
 
-    return Promise.resolve(this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentSharePoint : strings.AppSharePointEnvironment);
-  }
-
-  private applyTelemetryPreference(): void {
-    // enablePnpTelemetry === false means user explicitly turned it off
-    // disablePnpTelemetry === true is kept for backward compatibility
-    const shouldDisable = this.properties.enablePnpTelemetry === false
-      || (this.properties.enablePnpTelemetry === undefined && this.properties.disablePnpTelemetry === true);
-    if (shouldDisable) {
-      const telemetry = PnPTelemetry.getInstance();
-      telemetry.optOut();
-    }
+    await this.rebuildResolvedSettings();
+    this._environmentMessage = await this._getEnvironmentMessage();
   }
 
   protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
@@ -179,10 +118,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
 
     this._isDarkTheme = !!currentTheme.isInverted;
     this._themeVariant = currentTheme;
-    const {
-      semanticColors,
-      palette
-    } = currentTheme;
+    const { semanticColors } = currentTheme;
 
     if (semanticColors) {
       this.domElement.style.setProperty('--bodyText', semanticColors.bodyText || null);
@@ -190,11 +126,14 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       this.domElement.style.setProperty('--linkHovered', semanticColors.linkHovered || null);
     }
 
-    // Update organization primary color from theme
-    if (palette && palette.themePrimary) {
-      this._currentSettings.organizationPrimaryColor = palette.themePrimary;
-    }
+    this._resolvedSettings = resolveCalendarSettings({
+      adminSettings: this._adminSettings,
+      userSettings: this._userSettings,
+      matchedGroupIds: this._matchedGroupIds,
+      organizationPrimaryColor: currentTheme.palette?.themePrimary
+    });
 
+    this.render();
   }
 
   protected onDispose(): void {
@@ -206,26 +145,22 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   protected getPropertyPaneConfiguration(): IPropertyPaneConfiguration {
-    const settings = this.getSettings();
-    
     return {
       pages: [
         {
           header: {
-            description: 'Configure your calendar sources and settings'
+            description: 'Configure administrator defaults and telemetry for this web part'
           },
           groups: [
             {
-              groupName: 'View Settings',
+              groupName: 'Administrator Defaults',
               groupFields: [
-                PropertyPaneDropdown('defaultView', {
-                  label: 'Default View',
-                  options: [
-                    { key: 'day', text: 'Day' },
-                    { key: 'week', text: 'Week' },
-                    { key: 'month', text: 'Month' }
-                  ],
-                  selectedKey: settings.defaultView
+                PropertyPaneAdminCalendarManager('adminSettingsManager', {
+                  label: 'Default calendars and ICS catalog',
+                  adminSettings: this._adminSettings,
+                  adminLoadNotice: this._adminLoadNotice,
+                  context: this.context,
+                  onSave: this.handleAdminSettingsSave
                 })
               ]
             },
@@ -250,18 +185,115 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   protected onPropertyPaneFieldChanged(propertyPath: string, oldValue: unknown, newValue: unknown): void {
-    const settings = this.getSettings();
-    
-    switch (propertyPath) {
-      case 'defaultView':
-        settings.defaultView = newValue as CalendarViewType;
-        break;
-      case 'enablePnpTelemetry':
-        this.properties.enablePnpTelemetry = newValue === true;
-        this.applyTelemetryPreference();
-        break;
+    if (propertyPath === 'enablePnpTelemetry') {
+      this.properties.enablePnpTelemetry = newValue === true;
+      this.applyTelemetryPreference();
     }
-    
-    this.handleSettingsChange(settings);
+  }
+
+  private applyTelemetryPreference(): void {
+    const shouldDisable = this.properties.enablePnpTelemetry === false
+      || (this.properties.enablePnpTelemetry === undefined && this.properties.disablePnpTelemetry === true);
+    if (shouldDisable) {
+      PnPTelemetry.getInstance().optOut();
+    }
+  }
+
+  private async rebuildResolvedSettings(): Promise<void> {
+    this._matchedGroupIds = await this.resolveMatchedGroupIds();
+    this._resolvedSettings = resolveCalendarSettings({
+      adminSettings: this._adminSettings,
+      userSettings: this._userSettings,
+      matchedGroupIds: this._matchedGroupIds,
+      organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
+    });
+  }
+
+  private async resolveMatchedGroupIds(): Promise<Set<string>> {
+    if (!this._audienceService) {
+      return new Set<string>();
+    }
+
+    const groupIds = new Set<string>();
+    this._adminSettings.assignedSources.forEach(item => item.audienceGroups.forEach(group => groupIds.add(group.groupId)));
+    this._adminSettings.icsCatalog.forEach(item => item.audienceGroups.forEach(group => groupIds.add(group.groupId)));
+
+    return this._audienceService.getMatchingGroupIds(Array.from(groupIds));
+  }
+
+  private handleUserSettingsChange = (settings: ICalendarSettings): void => {
+    this._userSettings = deriveUserCalendarSettings({
+      nextResolvedSettings: settings,
+      adminSettings: this._adminSettings,
+      matchedGroupIds: this._matchedGroupIds
+    });
+
+    this._resolvedSettings = resolveCalendarSettings({
+      adminSettings: this._adminSettings,
+      userSettings: this._userSettings,
+      matchedGroupIds: this._matchedGroupIds,
+      organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
+    });
+
+    if (this._storageService) {
+      this._storageService.saveUserSettings(this._userSettings).then(success => {
+        if (!success) {
+          console.error('Failed to persist user settings.');
+        }
+      }).catch(error => console.error('Error saving user settings:', error));
+    }
+
+    this.render();
+  };
+
+  private handleResetUserSettings = (): void => {
+    if (this._storageService) {
+      this._storageService.deleteUserSettings().then(success => {
+        if (!success) {
+          console.error('Failed to delete user settings.');
+          return;
+        }
+
+        this._userSettings = { ...defaultUserCalendarSettings };
+        this._resolvedSettings = resolveCalendarSettings({
+          adminSettings: this._adminSettings,
+          userSettings: this._userSettings,
+          matchedGroupIds: this._matchedGroupIds,
+          organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
+        });
+        this.render();
+      }).catch(error => console.error('Error deleting user settings:', error));
+    }
+  };
+
+  private handleAdminSettingsSave = async (settings: IAdminWebPartSettings): Promise<void> => {
+    this._adminSettings = settings;
+    const serialized = JSON.stringify(settings);
+    this.properties.adminSettings = serialized;
+    this.properties.adminSettingsBackup = serialized;
+    this._adminLoadNotice = undefined;
+
+    await this.rebuildResolvedSettings();
+    this.context.propertyPane.refresh();
+    this.render();
+  };
+
+  private async _getEnvironmentMessage(): Promise<string> {
+    if (this.context.sdks.microsoftTeams) {
+      const context = await this.context.sdks.microsoftTeams.teamsJs.app.getContext();
+      switch (context.app.host.name) {
+        case 'Office':
+          return this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentOffice : strings.AppOfficeEnvironment;
+        case 'Outlook':
+          return this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentOutlook : strings.AppOutlookEnvironment;
+        case 'Teams':
+        case 'TeamsModern':
+          return this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentTeams : strings.AppTeamsTabEnvironment;
+        default:
+          return strings.UnknownEnvironment;
+      }
+    }
+
+    return Promise.resolve(this.context.isServedFromLocalhost ? strings.AppLocalEnvironmentSharePoint : strings.AppSharePointEnvironment);
   }
 }

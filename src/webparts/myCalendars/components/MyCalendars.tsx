@@ -1,5 +1,4 @@
 import * as React from 'react';
-import styles from './MyCalendars.module.scss';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
 import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { CalendarViewType } from '../models/ICalendarSettings';
@@ -20,6 +19,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Text } from '@fluentui/react/lib/Text';
 import { CommandBarButton } from '@fluentui/react/lib/Button';
 import { SearchBox } from '@fluentui/react/lib/SearchBox';
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { SettingsPanel } from './SettingsPanel';
 //import { CalendarToolbar } from './CalendarToolbar';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
@@ -45,6 +45,65 @@ const defaultLoadErrors: Record<ServiceKey, string | undefined> = {
   teamsShifts: undefined,
   unifiedGroup: undefined
 };
+
+const styles = mergeStyleSets({
+  myCalendars: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    color: 'var(--bodyText, #323130)'
+  },
+  commandBar: {
+    flexShrink: 0,
+    borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    paddingBottom: 10
+  },
+  calendarContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    position: 'relative'
+  },
+  loadingStatusWrapper: {
+    display: 'inline-flex',
+    alignItems: 'center'
+  },
+  loadingStatusCallout: {
+    padding: '12px 14px',
+    minWidth: 260
+  },
+  loadingStatusTitle: {
+    display: 'block',
+    marginBottom: 8,
+    fontWeight: 600
+  },
+  loadingStatusList: {
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: 8
+  },
+  loadingStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    columnGap: 12
+  },
+  loadingStatusLabel: {
+    fontSize: 12,
+    color: 'var(--neutralPrimary, #323130)'
+  },
+  loadingStatusState: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    columnGap: 6,
+    fontSize: 12,
+    color: 'var(--neutralSecondary, #605e5c)'
+  },
+  loadingStatusError: {
+    fontSize: 11,
+    color: 'var(--errorText, #a80000)',
+    marginLeft: 4
+  }
+});
 
 interface IMyCalendarsState {
   appointments: IEvent[];
@@ -205,7 +264,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const enabledSources = this.props.settings.sources.filter(source => source.isEnabled);
 
     const sourceGroups: Record<ServiceKey, typeof enabledSources> = {
-      exchange: [],
+      exchange: enabledSources.filter(source => source.sourceType === 'exchange'),
       ics: enabledSources.filter(source => source.sourceType === 'ics'),
       sharepoint: enabledSources.filter(source => source.sourceType === 'sharepoint'),
       planner: enabledSources.filter(source => source.sourceType === 'planner'),
@@ -250,6 +309,38 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           const appointmentGroups = await Promise.all(calendarPromises);
           const flattenedAppointments = appointmentGroups.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
           appendAppointments(flattenedAppointments);
+
+          if (sourceGroups.exchange.length > 0) {
+            const manualExchangeAppointments = await Promise.all(sourceGroups.exchange.map(async source => {
+              try {
+                if (!source.exchangeCalendarId) {
+                  return [] as IEvent[];
+                }
+
+                const events = await exchangeService.getCalendarEvents(
+                  source.exchangeCalendarId,
+                  startDate,
+                  endDate,
+                  source.exchangeMailbox
+                );
+
+                return events.map(event => ({
+                  ...event,
+                  sourceId: source.id,
+                  colorHex: source.color,
+                  sourceType: 'exchange' as const,
+                  showSourceLogo: source.showSourceLogo ?? this.props.settings.exchangeShowSourceLogo ?? true
+                } as IEvent));
+              } catch (error) {
+                hadError = true;
+                console.error(`Failed to load Exchange source ${source.name}:`, error);
+                return [] as IEvent[];
+              }
+            }));
+
+            const flattenedManualAppointments = manualExchangeAppointments.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
+            appendAppointments(flattenedManualAppointments);
+          }
         } catch (error) {
           hadError = true;
           console.error('Failed to load user Exchange calendars:', error);
@@ -302,6 +393,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           const plans = await plannerService.getUserPlans();
           const autoPlannerSources = plans.map(plan => ({
             id: `auto_planner_${plan.id}`,
+            origin: 'user' as const,
             sourceType: 'planner' as const,
             name: plan.title,
             color: this.props.settings.organizationPrimaryColor || '#0078d4',
@@ -379,6 +471,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         let hadError = false;
         const autoSource = {
           id: 'auto_teamsShifts',
+          origin: 'user' as const,
           sourceType: 'teamsShifts' as const,
           name: 'Teams Shifts',
           color: this.props.settings.organizationPrimaryColor || '#4a4fbe',

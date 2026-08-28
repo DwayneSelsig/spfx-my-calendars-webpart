@@ -159,112 +159,55 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       // New calendar
       newCalendarColor: props.settings.organizationPrimaryColor || '#0078d4',
       newCalendarName: '',
-      expandedSections: {
-        outlook: true,
-        sharepoint: false,
-        planner: false,
-        unifiedGroup: false,
-        teamsShifts: false
-      }
+      expandedSections: { outlook: true, sharepoint: false, planner: false, unifiedGroup: false, teamsShifts: false }
     };
   }
-
   public componentDidMount(): void {
-    // Initialize GraphClient if available
-    if (this.props.graphClient) {
-      this.initializeGraphClient(this.props.graphClient);
-    }
+    if (this.props.graphClient) this.initializeGraphClient(this.props.graphClient);
   }
 
   public componentDidUpdate(prevProps: ISettingsPanelProps): void {
-    // If graphClient becomes available, initialize it
-    if (this.props.graphClient && !prevProps.graphClient) {
-      this.initializeGraphClient(this.props.graphClient);
-    }
-
-    // Reset state when panel is opened
+    if (this.props.graphClient && !prevProps.graphClient) this.initializeGraphClient(this.props.graphClient);
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
       this.setState({
-        settings: JSON.parse(JSON.stringify(this.props.settings)),
-        editingSourceId: undefined,
-        showAddDialog: false,
-        addingCalendarType: undefined,
-        addingCalendarStep: 'initial',
-        spCurrentPage: 0
+        settings: JSON.parse(JSON.stringify(this.props.settings)), editingSourceId: undefined, showAddDialog: false,
+        addingCalendarType: undefined, addingCalendarStep: 'initial', spCurrentPage: 0
       });
-      // Reload Exchange calendars when panel opens
       this.loadUserExchangeCalendars().catch(err => console.error('Failed to reload Exchange calendars:', err));
     }
   }
 
   private initializeGraphClient(client: MSGraphClientV3): void {
-    if (this.sharePointService) {
-      this.sharePointService.setGraphClient(client);
-    }
-    if (this.exchangeService) {
-      this.exchangeService.setGraphClient(client);
-    }
-    if (this.plannerService) {
-      this.plannerService.setGraphClient(client);
-    }
-    if (this.unifiedGroupService) {
-      this.unifiedGroupService.setGraphClient(client);
-    }
-    // Load user's Exchange calendars automatically
+    if (this.sharePointService) this.sharePointService.setGraphClient(client);
+    if (this.exchangeService) this.exchangeService.setGraphClient(client);
+    if (this.plannerService) this.plannerService.setGraphClient(client);
+    if (this.unifiedGroupService) this.unifiedGroupService.setGraphClient(client);
     this.loadUserExchangeCalendars().catch(err => console.error('Failed to load Exchange calendars:', err));
   }
 
   private loadUserExchangeCalendars = async (): Promise<void> => {
-    if (!this.exchangeService) {
-      return;
-    }
-
+    if (!this.exchangeService) return;
     this.setState({ userExchangeCalendarsLoading: true });
     try {
       const calendars = await this.exchangeService.getCalendars();
-      this.setState({
-        userExchangeCalendars: calendars,
-        userExchangeCalendarsLoading: false
-      });
+      this.setState({ userExchangeCalendars: calendars, userExchangeCalendarsLoading: false });
     } catch (error) {
       console.error('Error loading user Exchange calendars:', error);
-      this.setState({
-        userExchangeCalendars: [],
-        userExchangeCalendarsLoading: false
-      });
+      this.setState({ userExchangeCalendars: [], userExchangeCalendarsLoading: false });
     }
   };
 
-  private generateId(): string {
-    return `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
+  private generateId(): string { return `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
 
-  private handleOpenAddDialog = (): void => {
-    this.setState({ showAddDialog: true });
-  };
-
+  private handleOpenAddDialog = (): void => { this.setState({ showAddDialog: true }); };
   private handleCloseAddDialog = (): void => {
     this.setState({
-      showAddDialog: false,
-      addingCalendarType: undefined,
-      addingCalendarStep: 'initial',
-      spSites: [],
-      spSiteFilter: '',
-      spCurrentPage: 0,
-      spSelectedSite: undefined,
-      spLists: [],
-      spSelectedList: undefined,
-      exchangeCalendars: [],
-      exchangeMailbox: '',
-      exchangeMailboxResolved: false,
-      exchangeSelectedCalendarId: undefined,
-      icsUrl: '',
-      teamsShiftsShowLogo: true,
-      unifiedGroups: [],
-      unifiedGroupsLoading: false,
-      unifiedGroupsSelection: {},
-      newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
-      newCalendarName: ''
+      showAddDialog: false, addingCalendarType: undefined, addingCalendarStep: 'initial',
+      spSites: [], spSiteFilter: '', spCurrentPage: 0, spSelectedSite: undefined,
+      spLists: [], spSelectedList: undefined, exchangeCalendars: [], exchangeMailbox: '',
+      exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, icsUrl: '',
+      teamsShiftsShowLogo: true, unifiedGroups: [], unifiedGroupsLoading: false,
+      unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', newCalendarName: ''
     });
   };
 
@@ -282,86 +225,37 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       const plans = await this.plannerService?.getUserPlans() || [];
       this.setState({ plannerPlans: plans, plannerPlansLoading: false });
     } else if (type === 'unifiedGroup') {
-      this.setState({
-        addingCalendarType: type,
-        addingCalendarStep: 'unified-group-select',
-        unifiedGroupsLoading: true,
-        unifiedGroupsSelection: {},
-        newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4'
-      });
+      this.setState({ addingCalendarType: type, addingCalendarStep: 'unified-group-select', unifiedGroupsLoading: true, unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4' });
       await this.loadUnifiedGroups();
     } else if (type === 'teamsShifts') {
-      this.setState({
-        addingCalendarType: type,
-        addingCalendarStep: 'teams-shifts',
-        newCalendarName: 'Teams Shifts',
-        newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
-        teamsShiftsShowLogo: true
-      });
+      this.setState({ addingCalendarType: type, addingCalendarStep: 'teams-shifts', newCalendarName: 'Teams Shifts', newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', teamsShiftsShowLogo: true });
     }
   };
 
   private loadUnifiedGroups = async (): Promise<void> => {
-    if (!this.unifiedGroupService) {
-      this.setState({ unifiedGroupsLoading: false });
-      return;
-    }
-
+    if (!this.unifiedGroupService) { this.setState({ unifiedGroupsLoading: false }); return; }
     try {
       const [groups, joinedTeamIds] = await Promise.all([
         this.unifiedGroupService.getUnifiedGroups(),
         this.unifiedGroupService.getJoinedTeamIds()
       ]);
-
-      const mappedGroups = groups
-        .map(group => ({
-          ...group,
-          isTeam: joinedTeamIds.has(group.id)
-        }))
-        .sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-      this.setState({
-        unifiedGroups: mappedGroups,
-        unifiedGroupsLoading: false
-      });
+      const mappedGroups = groups.map(group => ({ ...group, isTeam: joinedTeamIds.has(group.id) })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+      this.setState({ unifiedGroups: mappedGroups, unifiedGroupsLoading: false });
     } catch (error) {
       console.error('Failed to load unified groups:', error);
-      this.setState({
-        unifiedGroups: [],
-        unifiedGroupsLoading: false
-      });
+      this.setState({ unifiedGroups: [], unifiedGroupsLoading: false });
     }
   };
 
   private handleBackToTypeSelection = (): void => {
     this.setState({
-      addingCalendarStep: 'initial',
-      spSites: [],
-      spSitesLoading: false,
-      spSiteFilter: '',
-      spCurrentPage: 0,
-      spSelectedSite: undefined,
-      spLists: [],
-      spListsLoading: false,
-      spSelectedList: undefined,
-      exchangeCalendars: [],
-      exchangeCalendarsLoading: false,
-      exchangeMailbox: '',
-      exchangeMailboxResolved: false,
-      exchangeSelectedCalendarId: undefined,
-      icsUrl: '',
-      plannerPlans: [],
-      plannerPlansLoading: false,
-      plannerSelectedPlanId: undefined,
-      plannerAssignedToMeOnly: false,
-      plannerShowCompleted: true,
-      plannerShowLogo: true,
-      teamsShiftsShowLogo: true,
-      unifiedGroups: [],
-      unifiedGroupsLoading: false,
-      unifiedGroupsSelection: {},
-      newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4',
-      newCalendarName: ''
+      addingCalendarStep: 'initial', spSites: [], spSitesLoading: false, spSiteFilter: '', spCurrentPage: 0,
+      spSelectedSite: undefined, spLists: [], spListsLoading: false, spSelectedList: undefined,
+      exchangeCalendars: [], exchangeCalendarsLoading: false, exchangeMailbox: '', exchangeMailboxResolved: false,
+      exchangeSelectedCalendarId: undefined, icsUrl: '', plannerPlans: [], plannerPlansLoading: false,
+      plannerSelectedPlanId: undefined, plannerAssignedToMeOnly: false, plannerShowCompleted: true,
+      plannerShowLogo: true, teamsShiftsShowLogo: true, unifiedGroups: [], unifiedGroupsLoading: false,
+      unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', newCalendarName: ''
     });
   };
 
@@ -433,9 +327,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   // SharePoint flow
-  private handleSharePointFilterChange = (value?: string): void => {
-    this.setState({ spSiteFilter: value || '', spCurrentPage: 0 });
-  };
+  private handleSharePointFilterChange = (value?: string): void => { this.setState({ spSiteFilter: value || '', spCurrentPage: 0 }); };
 
   private handleSharePointSearch = async (): Promise<void> => {
     this.setState({ spSitesLoading: true, spCurrentPage: 0 });
@@ -546,13 +438,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private parseFieldCandidates(value: string | undefined): string[] {
-    if (!value) {
-      return [];
-    }
-    return value
-      .split(';')
-      .map(candidate => candidate.trim())
-      .filter(Boolean);
+    if (!value) return [];
+    return value.split(';').map(candidate => candidate.trim()).filter(Boolean);
   }
 
   private getFieldCandidates(field: 'title' | 'start' | 'end'): string[] {
@@ -580,9 +467,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     });
   }
 
-  private normalizeFieldCandidate(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  }
+  private normalizeFieldCandidate(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
   private findBestMatchingFieldKey(options: IDropdownOption[], candidates: string[]): string | undefined {
     const normalizedCandidates = candidates.map(candidate => this.normalizeFieldCandidate(candidate));
@@ -620,8 +505,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       return;
     }
 
+    const newSourceId = this.generateId();
     const newSource: ICalendarSource = {
-      id: this.generateId(),
+      id: newSourceId,
+      userSourceId: newSourceId,
+      origin: 'user',
       sourceType: 'sharepoint',
       name: this.state.newCalendarName,
       color: this.state.newCalendarColor,
@@ -640,9 +528,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   // Exchange flow
-  private handleExchangeMailboxChange = (value?: string): void => {
-    this.setState({ exchangeMailbox: value || '' });
-  };
+  private handleExchangeMailboxChange = (value?: string): void => { this.setState({ exchangeMailbox: value || '' }); };
 
   private handleExchangeLookupMailbox = async (): Promise<void> => {
     if (!this.state.exchangeMailbox.trim()) {
@@ -670,16 +556,15 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleSelectExchangeCalendar = (calendar: IExchangeCalendar): void => {
-    this.setState({
-      exchangeSelectedCalendarId: calendar.id,
-      newCalendarName: calendar.name,
-      newCalendarColor: calendar.hexColor // Use the hex color from the calendar
-    });
+    this.setState({ exchangeSelectedCalendarId: calendar.id, newCalendarName: calendar.name, newCalendarColor: calendar.hexColor });
   };
 
   private handleConfirmExchangeCalendar = (): void => {
+    const newSourceId = this.generateId();
     const newSource: ICalendarSource = {
-      id: this.generateId(),
+      id: newSourceId,
+      userSourceId: newSourceId,
+      origin: 'user',
       sourceType: 'exchange',
       name: this.state.newCalendarName,
       color: this.state.newCalendarColor,
@@ -719,90 +604,37 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleUpdateSource = (id: string, updates: Partial<ICalendarSource>): void => {
-    const settings = {
-      ...this.state.settings,
-      sources: this.state.settings.sources.map(s =>
-        s.id === id ? { ...s, ...updates } : s
-      )
-    };
+    const settings = { ...this.state.settings, sources: this.state.settings.sources.map(s => s.id === id ? { ...s, ...updates } : s) };
     this.setState({ settings });
   };
 
   private handleToggleExchangeCalendar = (calendarId: string, isEnabled: boolean): void => {
-    const settings = {
-      ...this.state.settings,
-      exchangeCalendarStates: {
-        ...(this.state.settings.exchangeCalendarStates || {}),
-        [calendarId]: isEnabled
-      }
-    };
+    const settings = { ...this.state.settings, exchangeCalendarStates: { ...(this.state.settings.exchangeCalendarStates || {}), [calendarId]: isEnabled } };
     this.setState({ settings });
   };
 
-  private handleTogglePlannerShowAll = (checked: boolean): void => {
-    this.setState(prev => ({
-      settings: {
-        ...prev.settings,
-        plannerShowAllCalendars: checked
-      }
-    }));
-  };
-
-  private handleTogglePlannerAssignedToMeOnly = (checked: boolean): void => {
-    this.setState(prev => ({
-      settings: {
-        ...prev.settings,
-        plannerShowAllAssignedToMeOnly: checked
-      }
-    }));
-  };
-
-  private handleToggleUnifiedGroupShowAll = (checked: boolean): void => {
-    this.setState(prev => ({
-      settings: {
-        ...prev.settings,
-        unifiedGroupShowAllCalendars: checked
-      }
-    }));
-  };
-
-  private handleToggleTeamsShiftsShowAll = (checked: boolean): void => {
-    this.setState(prev => ({
-      settings: {
-        ...prev.settings,
-        teamsShiftsShowAllCalendars: checked
-      }
-    }));
-  };
+  private handleTogglePlannerShowAll = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, plannerShowAllCalendars: checked } })); };
+  private handleTogglePlannerAssignedToMeOnly = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, plannerShowAllAssignedToMeOnly: checked } })); };
+  private handleToggleUnifiedGroupShowAll = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, unifiedGroupShowAllCalendars: checked } })); };
+  private handleToggleTeamsShiftsShowAll = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, teamsShiftsShowAllCalendars: checked } })); };
 
   private isExchangeCalendarEnabled = (calendarId: string): boolean => {
     const states = this.state.settings.exchangeCalendarStates || {};
-    // If not set, default to enabled
     return states[calendarId] !== false;
   };
 
   private handleDeleteSource = (id: string): void => {
-    const settings = {
-      ...this.state.settings,
-      sources: this.state.settings.sources.filter(s => s.id !== id)
-    };
+    const settings = { ...this.state.settings, sources: this.state.settings.sources.filter(s => s.id !== id) };
     this.setState({ settings });
   };
 
-  private toggleEdit = (id: string | undefined): void => {
-    this.setState({ editingSourceId: id });
-  };
+  private toggleEdit = (id: string | undefined): void => { this.setState({ editingSourceId: id }); };
 
-  private handleSave = (): void => {
-    this.props.onSave(this.state.settings);
-    this.props.onDismiss();
-  };
+  private handleSave = (): void => { this.props.onSave(this.state.settings); this.props.onDismiss(); };
 
   private handleReset = (): void => {
     if (confirm('Are you sure you want to reset all settings to the defaults? This action cannot be undone.')) {
-      if (this.props.onReset) {
-        this.props.onReset();
-      }
+      if (this.props.onReset) this.props.onReset();
       this.props.onDismiss();
     }
   };
@@ -1149,11 +981,27 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private renderIcsFlow = (): React.ReactElement => {
-    const { icsUrl } = this.state;
+    const { icsUrl, settings } = this.state;
     const hasValidInput = icsUrl.trim() && this.state.newCalendarName.trim();
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
+        {settings.availableAdminIcsCatalogItems.length > 0 && (
+          <Stack tokens={{ childrenGap: 8 }}>
+            <Label>Beschikbaar via beheer</Label>
+            {settings.availableAdminIcsCatalogItems.map(item => (
+              <DefaultButton
+                key={item.adminIcsId}
+                text={item.displayName}
+                onClick={() => this.setState({
+                  newCalendarName: item.displayName,
+                  icsUrl: item.icsUrl
+                })}
+                style={{ textAlign: 'left', height: 'auto', padding: '8px 12px' }}
+              />
+            ))}
+          </Stack>
+        )}
         <TextField
           label="Calendar Name"
           value={this.state.newCalendarName}
@@ -1195,8 +1043,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       return;
     }
 
+    const newSourceId = this.generateId();
     const newSource: ICalendarSource = {
-      id: this.generateId(),
+      id: newSourceId,
+      userSourceId: newSourceId,
+      origin: 'user',
       sourceType: 'planner',
       name: this.state.newCalendarName,
       color: this.state.newCalendarColor,
@@ -1221,8 +1072,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       return;
     }
 
+    const newSourceId = this.generateId();
     const newSource: ICalendarSource = {
-      id: this.generateId(),
+      id: newSourceId,
+      userSourceId: newSourceId,
+      origin: 'user',
       sourceType: 'teamsShifts',
       name: this.state.newCalendarName.trim(),
       color: this.state.newCalendarColor,
@@ -1256,15 +1110,20 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     }
 
     const selectedGroups = this.state.unifiedGroups.filter(group => selectedIds.indexOf(group.id) >= 0);
-    const newSources = selectedGroups.map(group => ({
-      id: this.generateId(),
-      sourceType: 'unifiedGroup' as const,
-      name: group.displayName,
-      color: this.state.newCalendarColor,
-      isEnabled: true,
-      groupId: group.id,
-      showSourceLogo: true
-    }));
+    const newSources = selectedGroups.map(group => {
+      const newSourceId = this.generateId();
+      return {
+        id: newSourceId,
+        userSourceId: newSourceId,
+        origin: 'user' as const,
+        sourceType: 'unifiedGroup' as const,
+        name: group.displayName,
+        color: this.state.newCalendarColor,
+        isEnabled: true,
+        groupId: group.id,
+        showSourceLogo: true
+      };
+    });
 
     const settings = {
       ...this.state.settings,
@@ -1716,6 +1575,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private renderCalendarSource = (source: ICalendarSource, index: number = 0): React.ReactElement => {
     const { editingSourceId } = this.state;
     const isEditing = editingSourceId === source.id;
+    const isAdminSource = source.origin === 'admin';
 
     return (
       <div
@@ -1749,7 +1609,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             />
             <Stack horizontal tokens={{ childrenGap: 8 }}>
               <PrimaryButton text="Done" onClick={() => this.toggleEdit(undefined)} />
-              <DefaultButton text="Delete" onClick={() => this.handleDeleteSource(source.id)} />
+              <DefaultButton text={isAdminSource ? 'Remove for me' : 'Delete'} onClick={() => this.handleDeleteSource(source.id)} />
             </Stack>
           </Stack>
         ) : (
@@ -1763,6 +1623,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             }} />
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 13 }}>{source.name}</strong>
+              {isAdminSource && (
+                <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>(Admin default)</span>
+              )}
+              {isAdminSource && source.audienceGroupNames && source.audienceGroupNames.length > 0 && (
+                <div style={{ fontSize: 11, color: '#605e5c' }}>
+                  Via: {source.audienceGroupNames.join(', ')}
+                </div>
+              )}
             </div>
             <IconButton
               iconProps={{ iconName: 'Edit' }}

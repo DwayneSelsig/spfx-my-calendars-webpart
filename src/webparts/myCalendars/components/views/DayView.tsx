@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
 import { Icon } from '@fluentui/react/lib/Icon';
-import styles from './CalendarView.module.scss';
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
 
 export interface ICalendarViewProps {
@@ -14,6 +14,83 @@ export interface ICalendarViewProps {
   showWeekends: boolean;
   slotDuration: number;
 }
+
+const styles = mergeStyleSets({
+  dayView: {
+    width: '100%',
+    height: '100%',
+    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box'
+  },
+  timeGridContainer: {
+    flex: 1,
+    overflowY: 'auto',
+    border: '1px solid var(--neutralLight, #edebe9)',
+    borderRadius: 4
+  },
+  timeGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative'
+  },
+  hourRow: {
+    display: 'flex',
+    borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    minHeight: 60
+  },
+  hourLabel: {
+    width: 60,
+    padding: '6px 8px',
+    fontSize: 12,
+    color: 'var(--neutralSecondary, #605e5c)',
+    textAlign: 'right',
+    boxSizing: 'border-box'
+  },
+  hourSlot: {
+    flex: 1,
+    minHeight: 60
+  },
+  appointmentsLayerDay: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    zIndex: 2
+  },
+  appointment: {
+    padding: '6px 8px',
+    borderRadius: 6,
+    borderLeft: '4px solid',
+    cursor: 'pointer',
+    position: 'relative',
+    zIndex: 1,
+    pointerEvents: 'auto',
+    boxSizing: 'border-box',
+    overflow: 'hidden'
+  },
+  appointmentTitle: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--neutralPrimary, #323130)',
+    marginBottom: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0
+  },
+  appointmentTime: {
+    fontSize: 10,
+    color: 'var(--neutralSecondary, #605e5c)',
+    marginTop: 2,
+    lineHeight: 1.2
+  },
+  appointmentLocation: {
+    fontSize: 11,
+    color: 'var(--neutralSecondary, #605e5c)',
+    marginTop: 2
+  }
+});
 
 export const DayView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, startHour } = props;

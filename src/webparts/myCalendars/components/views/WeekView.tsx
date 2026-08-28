@@ -1,9 +1,174 @@
 import * as React from 'react';
 import { Icon } from '@fluentui/react/lib/Icon';
-import styles from './CalendarView.module.scss';
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { ICalendarViewProps } from './DayView';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
 import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+
+const styles = mergeStyleSets({
+  weekView: {
+    width: '100%',
+    height: '100%',
+    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'auto',
+    background: 'var(--neutralLighterAlt, #faf9f8)',
+    boxSizing: 'border-box'
+  },
+  weekGrid: {
+    display: 'inline-flex',
+    minWidth: '100%',
+    border: '1px solid var(--neutralLight, #edebe9)',
+    borderRadius: 10,
+    background: 'var(--white, #ffffff)',
+    overflowY: 'auto'
+  },
+  timeColumn: {
+    width: 60,
+    flexShrink: 0,
+    background: 'var(--neutralLighterAlt, #faf9f8)',
+    borderRight: '1px solid var(--neutralLight, #edebe9)',
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  dayHeader: {
+    padding: '10px 6px 12px',
+    textAlign: 'center',
+    borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    backgroundColor: 'var(--neutralLighterAlt, #faf9f8)',
+    minHeight: 66,
+    boxSizing: 'border-box',
+    flexShrink: 0
+  },
+  allDayPlaceholder: {
+    borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    height: 48,
+    minHeight: 48,
+    backgroundColor: 'var(--neutralLighterAlt, #faf9f8)',
+    boxSizing: 'border-box'
+  },
+  timeColumnSlots: {
+    display: 'grid',
+    gridAutoRows: '60px',
+    flex: 1
+  },
+  hourLabel: {
+    padding: '6px 8px',
+    fontSize: 11,
+    color: 'var(--neutralTertiary, #a19f9d)',
+    height: 60,
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+    boxSizing: 'border-box'
+  },
+  dayColumn: {
+    flex: 1,
+    minWidth: 140,
+    borderLeft: '1px solid var(--neutralLight, #edebe9)',
+    background: 'var(--white, #ffffff)',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  weekendColumn: {
+    background: 'var(--neutralLighter, #f3f2f1)'
+  },
+  todayColumn: {
+    background: 'var(--themeLighter, #eef6fc)'
+  },
+  todayHeader: {
+    color: 'var(--themePrimary, #0078d4)'
+  },
+  dayName: {
+    fontSize: 11,
+    color: 'var(--neutralSecondary, #605e5c)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em'
+  },
+  dayNumber: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: 'var(--neutralPrimary, #323130)',
+    marginTop: 4
+  },
+  allDaySection: {
+    borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    padding: 8,
+    minHeight: 48,
+    backgroundColor: 'var(--neutralLighter, #f3f2f1)',
+    boxSizing: 'border-box'
+  },
+  allDayAppointment: {
+    fontSize: 11,
+    padding: '4px 6px',
+    marginBottom: 3,
+    borderRadius: 3,
+    borderLeft: '3px solid',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  daySlotsWrapper: {
+    position: 'relative',
+    flex: 1
+  },
+  hourBorders: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    zIndex: 1
+  },
+  hourBorderLine: {
+    height: 60,
+    borderTop: '1px solid var(--neutralLight, #edebe9)',
+    width: '100%',
+    boxSizing: 'border-box'
+  },
+  daySlots: {
+    position: 'relative',
+    display: 'grid',
+    gridAutoRows: '60px'
+  },
+  hourSlot: {
+    minHeight: 60
+  },
+  appointmentsLayer: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    zIndex: 2
+  },
+  appointment: {
+    padding: '6px 8px',
+    borderRadius: 6,
+    borderLeft: '4px solid',
+    cursor: 'pointer',
+    position: 'relative',
+    zIndex: 1,
+    pointerEvents: 'auto',
+    boxSizing: 'border-box',
+    overflow: 'hidden'
+  },
+  appointmentTitle: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--neutralPrimary, #323130)',
+    marginBottom: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0
+  },
+  appointmentTime: {
+    fontSize: 10,
+    color: 'var(--neutralSecondary, #605e5c)',
+    marginTop: 2,
+    lineHeight: 1.2
+  }
+});
 
 export const WeekView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, startHour, endHour, showWeekends } = props;

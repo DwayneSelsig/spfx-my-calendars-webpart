@@ -1,8 +1,72 @@
 import * as React from 'react';
 import { Icon } from '@fluentui/react/lib/Icon';
-import styles from './CalendarView.module.scss';
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { ICalendarViewProps } from './DayView';
 import { getSourceIcon } from '../../utils/sourceIconHelper';
+
+const styles = mergeStyleSets({
+  monthView: {
+    width: '100%',
+    height: '100%',
+    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box'
+  },
+  monthGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: 1,
+    backgroundColor: 'var(--neutralLight, #edebe9)',
+    border: '1px solid var(--neutralLight, #edebe9)'
+  },
+  weekDayHeader: {
+    padding: '12px 8px',
+    textAlign: 'center',
+    backgroundColor: 'var(--neutralLighter, #f3f2f1)',
+    fontWeight: 600,
+    fontSize: 12,
+    color: 'var(--neutralPrimary, #323130)',
+    textTransform: 'uppercase'
+  },
+  dayCell: {
+    backgroundColor: 'var(--white, #ffffff)',
+    minHeight: 100,
+    minWidth: 0,
+    padding: 8,
+    cursor: 'pointer',
+    boxSizing: 'border-box'
+  },
+  otherMonth: {
+    opacity: 0.5
+  },
+  dayNumber: {
+    fontSize: 14,
+    fontWeight: 600,
+    marginBottom: 4,
+    color: 'var(--neutralPrimary, #323130)'
+  },
+  dayAppointments: {
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: 2
+  },
+  monthAppointment: {
+    fontSize: 11,
+    padding: '2px 6px',
+    borderRadius: 2,
+    borderLeft: '3px solid',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  moreAppointments: {
+    fontSize: 11,
+    color: 'var(--themePrimary, #0078d4)',
+    padding: '2px 6px',
+    cursor: 'pointer'
+  }
+});
 
 export const MonthView: React.FC<ICalendarViewProps> = (props) => {
   const { appointments, currentDate, onDateChange } = props;
