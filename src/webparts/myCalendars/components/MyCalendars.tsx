@@ -837,8 +837,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         <SearchBox
           placeholder="Search appointments..."
           onChange={(_event, newValue) => this.handleSearch(newValue || '')}
-          style={{
-            width: 200
+          styles={{
+            root: {
+              width: '100%',
+              marginTop: 8
+            }
           }}
         />
       )
@@ -1161,7 +1164,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           items={this.getCommandBarItems()}
           farItems={this.getFarCommandBarItems()}
           className={styles.commandBar}
-          style={{padding:0}}
+          styles={{
+            root: { padding: 0 },
+            primarySet: { padding: 0 },
+            secondarySet: { padding: 0 }
+          }}
         />
         {!isSearchMode && (
           <CalendarToolbar
