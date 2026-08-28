@@ -16,9 +16,9 @@ The web part does not create, change, or delete events or tasks in a source syst
 | Microsoft 365 Group and Teams calendars | Available | Uses one calendar source per selected group or Team. |
 | Teams Shifts | Available | Includes shared and draft shifts. |
 | ICS subscription | Available | Opens the Exchange Online subscription wizard with a generated deep link. The web part does not parse ICS data. |
-| Day, Week, and Month views | Temporary implementation | Uses the PnP Calendar control. A replacement is planned but is not selected. |
-| Search view | Available | Uses a custom search result view. The PnP calendar stays mounted while search is active. |
-| Schedule and inactive custom views | Planned but not decided | The repository contains inactive view code. This code is not a supported capability. |
+| Day, Week, and Month views | Available | Uses the local read-only calendar renderer. |
+| Search view | Available | Uses a custom search result view. The active calendar stays mounted while search is active. |
+| Schedule view | Not supported | The repository contains inactive schedule code. This code is not a supported capability. |
 | Partial source results | Available | A source failure does not remove events that other sources loaded successfully. |
 
 ## Main features
@@ -26,7 +26,8 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Combine supported calendar sources in one view.
 - Enable or disable individual sources.
 - Set a color for each configured source.
-- Set working hours, weekends, the first day of the week, and slot duration.
+- Set a preferred timeline start, visible hours, weekends, and a 15, 30, or 60 minute grid.
+- Navigate beyond the initial seven-month window with source- and month-aware loading.
 - Search event titles and locations.
 - Show source logos by service type.
 - Use organization theme colors and light or dark themes.
@@ -44,8 +45,7 @@ The web part does not:
 - create, update, or delete source events;
 - create, update, or delete Planner tasks;
 - parse or display ICS feeds directly;
-- provide a supported Schedule view;
-- define the future replacement for PnP Calendar.
+- provide a Schedule view.
 
 ## Configuration
 
@@ -58,13 +58,12 @@ Administrator settings include:
 - audience-assigned calendar sources;
 - audience-assigned ICS catalog entries;
 - automatic loading defaults for Planner, Groups and Teams, and Teams Shifts;
-- optional PnP telemetry preference.
 
 Personal settings include:
 
 - personal calendar sources;
 - source names, colors, and enabled states;
-- personal working hours and default view;
+- personal start-time and visible-hour overrides and a default view;
 - Exchange calendar visibility;
 - automatic loading and source-logo overrides.
 
@@ -167,7 +166,6 @@ The version history below is descriptive. It is not an architecture or behavior 
 - [SharePoint App Catalog](https://learn.microsoft.com/sharepoint/use-app-catalog)
 - [Microsoft Graph Calendar API](https://learn.microsoft.com/graph/api/resources/calendar)
 - [Microsoft Graph Planner API](https://learn.microsoft.com/graph/api/resources/planner-overview)
-- [PnP SPFx React Controls Calendar](https://pnp.github.io/sp-dev-fx-controls-react/controls/Calendar/)
 - [Heft documentation](https://heft.rushstack.io/)
 
 The icon is from Microsoft Fluent UI System Icons and uses the MIT License.

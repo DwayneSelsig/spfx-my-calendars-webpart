@@ -2,20 +2,18 @@ import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
-  type IPropertyPaneConfiguration,
-  PropertyPaneLabel,
-  PropertyPaneToggle
+  type IPropertyPaneConfiguration
 } from '@microsoft/sp-property-pane';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
-import PnPTelemetry from '@pnp/telemetry-js';
 
 import MyCalendars from './components/MyCalendars';
 import type { IMyCalendarsProps } from './components/IMyCalendarsProps';
 import {
   type IAdminWebPartSettings,
   type ICalendarSettings,
+  type CalendarViewType,
   type IUserCalendarSettings,
   defaultAdminWebPartSettings,
   defaultCalendarSettings,
@@ -36,8 +34,6 @@ export interface IMyCalendarsWebPartProps {
   settings?: string;
   adminSettings?: string;
   adminSettingsBackup?: string;
-  disablePnpTelemetry?: boolean;
-  enablePnpTelemetry?: boolean;
 }
 
 export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalendarsWebPartProps> {
@@ -64,6 +60,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         userDisplayName: this.context.pageContext.user.displayName,
         settings: this._resolvedSettings,
         onSettingsChange: this.handleUserSettingsChange,
+        onDefaultViewChange: this.handleDefaultViewChange,
         onResetSettings: this.handleResetUserSettings,
         context: this.context
       }
@@ -73,8 +70,6 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   protected async onInit(): Promise<void> {
-    this.applyTelemetryPreference();
-
     this._storageService = new SettingsStorageService(this.context.msGraphClientFactory);
     try {
       this._graphClient = await this.context.msGraphClientFactory.getClient('3');
@@ -149,7 +144,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       pages: [
         {
           header: {
-            description: 'Configure administrator defaults and telemetry for this web part'
+            description: 'Configure administrator defaults for this web part'
           },
           groups: [
             {
@@ -163,40 +158,11 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
                   onSave: this.handleAdminSettingsSave
                 })
               ]
-            },
-            {
-              groupName: 'PnP Controls',
-              groupFields: [
-                PropertyPaneToggle('enablePnpTelemetry', {
-                  label: 'PnP Controls telemetry',
-                  checked: this.properties.enablePnpTelemetry !== false,
-                  onText: 'Aan',
-                  offText: 'Uit'
-                }),
-                PropertyPaneLabel('telemetryInfo', {
-                  text: 'Standaard staat telemetry aan. Schakel hier telemetry in of uit voor deze webpart.'
-                })
-              ]
             }
           ]
         }
       ]
     };
-  }
-
-  protected onPropertyPaneFieldChanged(propertyPath: string, oldValue: unknown, newValue: unknown): void {
-    if (propertyPath === 'enablePnpTelemetry') {
-      this.properties.enablePnpTelemetry = newValue === true;
-      this.applyTelemetryPreference();
-    }
-  }
-
-  private applyTelemetryPreference(): void {
-    const shouldDisable = this.properties.enablePnpTelemetry === false
-      || (this.properties.enablePnpTelemetry === undefined && this.properties.disablePnpTelemetry === true);
-    if (shouldDisable) {
-      PnPTelemetry.getInstance().optOut();
-    }
   }
 
   private async rebuildResolvedSettings(): Promise<void> {
@@ -225,7 +191,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     this._userSettings = deriveUserCalendarSettings({
       nextResolvedSettings: settings,
       adminSettings: this._adminSettings,
-      matchedGroupIds: this._matchedGroupIds
+      matchedGroupIds: this._matchedGroupIds,
+      existingUserSettings: this._userSettings
     });
 
     this._resolvedSettings = resolveCalendarSettings({
@@ -241,6 +208,30 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
           console.error('Failed to persist user settings.');
         }
       }).catch(error => console.error('Error saving user settings:', error));
+    }
+
+    this.render();
+  };
+
+  private handleDefaultViewChange = (defaultView: CalendarViewType): void => {
+    this._userSettings = {
+      ...this._userSettings,
+      defaultView
+    };
+
+    this._resolvedSettings = resolveCalendarSettings({
+      adminSettings: this._adminSettings,
+      userSettings: this._userSettings,
+      matchedGroupIds: this._matchedGroupIds,
+      organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
+    });
+
+    if (this._storageService) {
+      this._storageService.saveUserSettings(this._userSettings).then(success => {
+        if (!success) {
+          console.error('Failed to persist the personal default calendar view.');
+        }
+      }).catch(error => console.error('Error saving the personal default calendar view:', error));
     }
 
     this.render();

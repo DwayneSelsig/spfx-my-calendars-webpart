@@ -1,4 +1,4 @@
-import { ICalendarSettings } from '../models/ICalendarSettings';
+import { CalendarViewType, ICalendarSettings } from '../models/ICalendarSettings';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 
 export interface IMyCalendarsProps {
@@ -9,6 +9,7 @@ export interface IMyCalendarsProps {
   userDisplayName: string;
   settings: ICalendarSettings;
   onSettingsChange: (settings: ICalendarSettings) => void;
+  onDefaultViewChange: (view: CalendarViewType) => void;
   onResetSettings?: () => void;
   context: WebPartContext;
 }

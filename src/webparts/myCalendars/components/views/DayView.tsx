@@ -1,201 +1,42 @@
 import * as React from 'react';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
-import { Icon } from '@fluentui/react/lib/Icon';
-import { mergeStyleSets } from '@fluentui/react/lib/Styling';
-import { getSourceIcon } from '../../utils/sourceIconHelper';
+import type { ICalendarEvent } from '../../models/ICalendarEvent';
+import { EventDetailsDialog } from './EventDetailsDialog';
+import { ALL_DAY_SECTION_HEIGHT, TimelineDay } from './TimelineDay';
+import { minutesToTimelinePixels } from './calendarUtils';
 
-export interface ICalendarViewProps {
-  appointments: IEvent[];
+export interface IDayViewProps {
+  appointments: ICalendarEvent[];
   currentDate: Date;
-  onDateChange: (date: Date) => void;
-  isLoading: boolean;
-  startHour: number;
-  endHour: number;
-  showWeekends: boolean;
-  slotDuration: number;
+  preferredStartMinutes: number;
+  visibleHourCount: number;
+  slotDurationMinutes: 15 | 30 | 60;
 }
 
-const styles = mergeStyleSets({
-  dayView: {
-    width: '100%',
-    height: '100%',
-    padding: 16,
-    display: 'flex',
-    flexDirection: 'column',
-    boxSizing: 'border-box'
-  },
-  timeGridContainer: {
-    flex: 1,
-    overflowY: 'auto',
-    border: '1px solid var(--neutralLight, #edebe9)',
-    borderRadius: 4
-  },
-  timeGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative'
-  },
-  hourRow: {
-    display: 'flex',
-    borderBottom: '1px solid var(--neutralLight, #edebe9)',
-    minHeight: 60
-  },
-  hourLabel: {
-    width: 60,
-    padding: '6px 8px',
-    fontSize: 12,
-    color: 'var(--neutralSecondary, #605e5c)',
-    textAlign: 'right',
-    boxSizing: 'border-box'
-  },
-  hourSlot: {
-    flex: 1,
-    minHeight: 60
-  },
-  appointmentsLayerDay: {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    zIndex: 2
-  },
-  appointment: {
-    padding: '6px 8px',
-    borderRadius: 6,
-    borderLeft: '4px solid',
-    cursor: 'pointer',
-    position: 'relative',
-    zIndex: 1,
-    pointerEvents: 'auto',
-    boxSizing: 'border-box',
-    overflow: 'hidden'
-  },
-  appointmentTitle: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: 'var(--neutralPrimary, #323130)',
-    marginBottom: 4,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 0
-  },
-  appointmentTime: {
-    fontSize: 10,
-    color: 'var(--neutralSecondary, #605e5c)',
-    marginTop: 2,
-    lineHeight: 1.2
-  },
-  appointmentLocation: {
-    fontSize: 11,
-    color: 'var(--neutralSecondary, #605e5c)',
-    marginTop: 2
-  }
-});
+export const DayView: React.FC<IDayViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes }) => {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const restoreFocusRef = React.useRef<HTMLElement>();
+  const [selectedEvent, setSelectedEvent] = React.useState<ICalendarEvent>();
 
-export const DayView: React.FC<ICalendarViewProps> = (props) => {
-  const { appointments, currentDate, startHour } = props;
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = minutesToTimelinePixels(preferredStartMinutes);
+  }, [currentDate, preferredStartMinutes]);
 
-  // Render full day (0-24) to allow scrolling
-  const hours: number[] = [];
-  for (let h = 0; h < 24; h++) {
-    hours.push(h);
-  }
-
-  // Scroll to show startHour after component renders
-  React.useLayoutEffect(() => {
-    if (scrollContainerRef.current) {
-      // Use setTimeout to ensure DOM is ready
-      const timer = setTimeout(() => {
-        if (scrollContainerRef.current) {
-          // Measure the actual height of one hour row
-          const firstRow = scrollContainerRef.current.querySelector('[data-hour="0"]') as HTMLElement;
-          let hourRowHeight = 60;
-          
-          if (firstRow) {
-            hourRowHeight = firstRow.offsetHeight;
-          }
-          
-          const scrollPosition = startHour * hourRowHeight;
-          scrollContainerRef.current.scrollTop = scrollPosition;
-        }
-      }, 0);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [startHour]);
-
-  const dayAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.start);
-    return aptDate.getDate() === currentDate.getDate() &&
-           aptDate.getMonth() === currentDate.getMonth() &&
-           aptDate.getFullYear() === currentDate.getFullYear();
-  });
+  const dismiss = React.useCallback((): void => {
+    setSelectedEvent(undefined);
+    window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
+  }, []);
 
   return (
-    <div className={styles.dayView}>
-      <div className={styles.timeGridContainer} ref={scrollContainerRef}>
-        <div className={styles.timeGrid}>
-          {hours.map(hour => (
-            <div key={hour} className={styles.hourRow} data-hour={hour}>
-              <div className={styles.hourLabel}>
-                {hour.toString().length === 1 ? `0${hour}:00` : `${hour}:00`}
-              </div>
-              <div className={styles.hourSlot} />
-            </div>
-          ))}
-          {/* Appointments layer with absolute positioning */}
-          <div className={styles.appointmentsLayerDay}>
-            {dayAppointments.map(apt => {
-              const aptStartDate = new Date(apt.start);
-              const aptEndDate = new Date(apt.end);
-              const aptStartHour = aptStartDate.getHours();
-              const aptStartMinutes = aptStartDate.getMinutes();
-              const aptEndHour = aptEndDate.getHours();
-              const aptEndMinutes = aptEndDate.getMinutes();
-              
-              // Calculate position from midnight (hour 0)
-              const minutesFromMidnight = aptStartHour * 60 + aptStartMinutes;
-              const minutesFromMidnightEnd = aptEndHour * 60 + aptEndMinutes;
-              const durationMinutes = minutesFromMidnightEnd - minutesFromMidnight;
-              
-              // Position from the top (61px per hour due to 1px border = 61/60 px per minute)
-              const topPosition = minutesFromMidnight * (61 / 60);
-              const height = durationMinutes * (61 / 60);
-              
-              return (
-                <div
-                  key={apt.id}
-                  className={styles.appointment}
-                  style={{
-                    position: 'absolute',
-                    top: `${topPosition}px`,
-                    height: `${height}px`,
-                    left: '88px', // Account for hourLabel width (60px) + padding + 20px
-                    right: '8px',
-                    backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
-                    borderLeftColor: apt.colorHex ?? '#0078d4',
-                    margin: 0
-                  }}
-                  title={`${apt.title} (${aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${aptEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
-                >
-                  <div className={styles.appointmentTitle}>
-                    {apt.showSourceLogo && apt.sourceType && (
-                      <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
-                    )}
-                    <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
-                  </div>
-                  <div className={styles.appointmentTime}>
-                    {aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                  {apt.location && <div className={styles.appointmentLocation}>{apt.location}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+    <div>
+      <div ref={scrollRef} style={{ height: Math.min(24, Math.max(1, visibleHourCount)) * 60 + ALL_DAY_SECTION_HEIGHT, overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--neutralLight, #edebe9)', borderRadius: 4 }}>
+        <TimelineDay
+          day={currentDate}
+          events={appointments}
+          slotDurationMinutes={slotDurationMinutes}
+          onSelectEvent={(event, focusElement) => { restoreFocusRef.current = focusElement; setSelectedEvent(event); }}
+        />
       </div>
+      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} />
     </div>
   );
 };
-

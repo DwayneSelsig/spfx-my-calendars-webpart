@@ -1,9 +1,14 @@
 import * as React from 'react';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../../models/ICalendarEvent';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
-import { ICalendarViewProps } from './DayView';
-import { getSourceIcon } from '../../utils/sourceIconHelper';
+import { getSourceIconName } from '../../utils/sourceIconHelper';
+
+interface IScheduleViewProps {
+  appointments: IEvent[];
+  currentDate: Date;
+  isLoading: boolean;
+}
 
 const styles = mergeStyleSets({
   scheduleView: {
@@ -67,7 +72,7 @@ const styles = mergeStyleSets({
   }
 });
 
-export const ScheduleView: React.FC<ICalendarViewProps> = (props) => {
+export const ScheduleView: React.FC<IScheduleViewProps> = (props) => {
   const { appointments, currentDate, isLoading } = props;
 
   const getDayAppointments = (): IEvent[] => {
@@ -131,8 +136,8 @@ export const ScheduleView: React.FC<ICalendarViewProps> = (props) => {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div className={styles.appointmentTitle}>
-                    {apt.showSourceLogo && apt.sourceType && (
-                      <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                    {apt.showSourceLogo !== false && (
+                      <Icon iconName={getSourceIconName(apt.sourceType, apt.sourceIconName)} style={{ marginRight: 4, fontSize: 12 }} />
                     )}
                     <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                   </div>

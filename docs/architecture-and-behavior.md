@@ -45,14 +45,16 @@ The application uses this flow:
 4. `AudienceService` evaluates the current user's membership of configured Entra security groups.
 5. `CalendarSettingsService` resolves administrator settings, audience results, and personal overrides into runtime settings.
 6. `MyCalendars` starts enabled source loads in parallel.
-7. Source services convert external data to the common PnP `IEvent` model.
-8. PnP Calendar renders Day, Week, and Month. `SearchResultsView` renders search results.
+7. Source services convert external data to the local `ICalendarEvent` model.
+8. Local renderers display Day, Week, and Month. `SearchResultsView` renders search results.
 
-**Fact:** Search hides the PnP view but keeps it mounted. This reduces the cost when the user clears a search.
+**Fact:** Search hides the active calendar view but keeps it mounted. This preserves its view state and scroll position when the user clears a search.
 
-**Fact:** The current retrieval window starts on the first day of the month three months before today. It ends on the last day of the month three months after today. Navigation does not change this window.
+**Fact:** The initial retrieval window starts on the first day of the month three months before today. It ends at the start of the month four months after today.
 
-**Technical debt:** A user can navigate outside the loaded window. The visible period can then contain no events even when source events exist.
+**Fact:** Navigation requests missing months that intersect the visible Day, Week, or Month range. The runtime caches successful source and month combinations. Failed combinations remain eligible for retry.
+
+**Fact:** Event results are merged by source identifier and event identifier. Results from an obsolete load generation are ignored.
 
 ## Component boundaries
 
@@ -76,6 +78,8 @@ The application uses this flow:
 **Fact:** `MyCalendars` creates source service instances for each load. It starts independent asynchronous tasks and appends successful event groups to component state.
 
 **Fact:** The settings panels contain source discovery and selection flows. They do not write events to those sources.
+
+**Fact:** The administrator manager registers its React lifecycle through the SPFx custom property-field contract. Opening the personal settings panel closes an open SharePoint property pane through the SPFx property-pane accessor.
 
 ## Settings and source policy
 
@@ -124,7 +128,7 @@ The application uses this flow:
 
 ## Common event contract
 
-The repository augments the PnP `IEvent` type with source metadata.
+The repository defines `ICalendarEvent` as its canonical local event model.
 
 ### Normative requirements
 
@@ -134,13 +138,14 @@ The repository augments the PnP `IEvent` type with source metadata.
 - A source adapter **MUST** reject an event when it cannot produce valid date values.
 - A source adapter **MUST NOT** replace an invalid source date with the current time.
 - A normalized event **MUST** identify its source type before rendering when the UI can show a source logo.
+- A renderer **MUST NOT** expose an internal source type key as a user-facing source name.
 - A normalized event **SHOULD** include a display color.
 - A normalized event **MAY** include an all-day flag, attendees, a location, progress, draft status, or a source deep link.
 - The common contract **MUST NOT** imply write access to the source.
 
 ### Current source mapping
 
-**Fact:** Exchange and Group events can include attendee, organizer, online-meeting, and web-link data.
+**Fact:** Exchange and Group events can include attendee, organizer, online-meeting join-link, and web-link data.
 
 **Fact:** SharePoint list events use explicit or detected field mappings. Items without a title are skipped.
 
@@ -148,19 +153,33 @@ The repository augments the PnP `IEvent` type with source metadata.
 
 **Fact:** Teams Shifts can emit a draft or shared shift event. Draft shifts use italic display text.
 
+**Fact:** Events can carry a concrete source display name. The shared source registry supplies a friendly type name and default Fluent UI icon when an adapter does not supply an override.
+
 **Fact:** ICS URLs are not converted to events. The settings flow creates an Exchange Online subscription deep link.
 
 ## Rendering
 
-**Fact:** PnP Calendar is the active renderer for Day, Week, and Month.
+**Fact:** A local Fluent UI renderer is active for Day, Week, and Month.
+
+**Fact:** The shared toolbar selects Day, Week, or Month through one compact dropdown. Each option has a view-specific icon. On very small screens, the closed selector hides its text and keeps the selected icon visible.
+
+**Fact:** The administrator view is the initial default. A toolbar view selection is stored immediately as an explicit personal override, including when it equals the administrator default. Reset to defaults removes that override and restores the current administrator default.
+
+**Fact:** Month uses a Sunday-first grid with seven columns and six rows. Each day cell scrolls its own event list.
+
+**Fact:** Week starts at the selected date. It renders seven consecutive calendar days, or the next five weekdays when weekends are disabled. Day cards use a synchronized 24-hour timeline.
+
+**Fact:** Day uses the same timeline calculations as Week. It shows all-day events, overlapping timed events, a current-time indicator, and an accessible event-details dialog.
+
+**Fact:** In Day and Week, the preferred start time is the first timeline time below the sticky all-day section. The all-day section does not add an offset to the preferred start time.
+
+**Fact:** Month, Week, Day, Search, and event details use the same source-icon fallback. An explicit user setting can hide the icon.
+
+**Fact:** Timeline settings use schema version 3. Administrator settings supply a preferred start time, visible-hour count, slot duration, and weekend policy. Personal settings can override the preferred start time and visible-hour count.
 
 **Fact:** Search uses `SearchResultsView`. It filters a prepared lower-case index of event titles and locations.
 
-**Fact:** The repository contains inactive custom Day, Week, Month, and Schedule view code. It also contains an inactive toolbar.
-
-**Intention:** The current hybrid behavior will remain until a replacement for PnP Calendar is selected.
-
-**Open question:** The future renderer and supported view set are not selected.
+**Fact:** The repository contains inactive Schedule view code. Schedule is not a supported view.
 
 ## Error behavior
 
@@ -172,15 +191,13 @@ The repository augments the PnP `IEvent` type with source metadata.
 - A service **SHOULD** preserve enough error context for diagnosis without exposing sensitive event content.
 - Invalid event data **MUST NOT** create a fabricated event.
 
-### Current deviations
+### Current behavior
 
 **Fact:** `MyCalendars` loads sources independently and preserves successful partial results.
 
-**Deviation:** Several source services catch Graph errors and return an empty array. The caller can then report a ready state instead of a failed state.
+**Fact:** Active source retrieval methods propagate failures to the coordinator. The coordinator keeps failed source/month combinations eligible for retry.
 
-**Technical debt:** Exchange and Group date conversion can replace an invalid date with the current time. SharePoint conversion can also use the current time when fields are absent.
-
-**Intention:** Source-level errors will remain visible. Invalid events will be rejected instead of receiving invented dates.
+**Fact:** Exchange, Group, and SharePoint mappings reject missing or invalid required dates. They do not replace invalid dates with the current time.
 
 ## Installation, permissions, and build
 

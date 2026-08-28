@@ -1,6 +1,10 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
-import { IPropertyPaneField, PropertyPaneFieldType } from '@microsoft/sp-property-pane';
+import {
+  type IPropertyPaneCustomFieldProps,
+  type IPropertyPaneField,
+  PropertyPaneFieldType
+} from '@microsoft/sp-property-pane';
 import { DefaultButton } from '@fluentui/react/lib/Button';
 import { Label } from '@fluentui/react/lib/Label';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
@@ -88,40 +92,21 @@ class AdminCalendarManagerControl extends React.Component<IPropertyPaneAdminCale
   }
 }
 
-class PropertyPaneAdminCalendarManagerInternal implements IPropertyPaneField<IPropertyPaneAdminCalendarManagerProps> {
-  public type: PropertyPaneFieldType = PropertyPaneFieldType.Custom;
-  public targetProperty: string;
-  public properties: IPropertyPaneAdminCalendarManagerProps;
-  private elem: HTMLElement | undefined;
-
-  constructor(targetProperty: string, properties: IPropertyPaneAdminCalendarManagerProps) {
-    this.targetProperty = targetProperty;
-    this.properties = properties;
-  }
-
-  public render(): void {
-    if (!this.elem) {
-      return;
-    }
-
-    this.onRender(this.elem);
-  }
-
-  private onRender(elem: HTMLElement): void {
-    this.elem = elem;
-    ReactDOM.render(<AdminCalendarManagerControl {...this.properties} />, elem);
-  }
-
-  public onDispose(elem: HTMLElement): void {
-    if (elem) {
-      ReactDOM.unmountComponentAtNode(elem);
-    }
-  }
-}
-
 export function PropertyPaneAdminCalendarManager(
   targetProperty: string,
   properties: IPropertyPaneAdminCalendarManagerProps
-): IPropertyPaneField<IPropertyPaneAdminCalendarManagerProps> {
-  return new PropertyPaneAdminCalendarManagerInternal(targetProperty, properties);
+): IPropertyPaneField<IPropertyPaneCustomFieldProps> {
+  return {
+    type: PropertyPaneFieldType.Custom,
+    targetProperty,
+    properties: {
+      key: targetProperty,
+      onRender: (elem: HTMLElement): void => {
+        ReactDOM.render(<AdminCalendarManagerControl {...properties} />, elem);
+      },
+      onDispose: (elem: HTMLElement): void => {
+        ReactDOM.unmountComponentAtNode(elem);
+      }
+    }
+  };
 }

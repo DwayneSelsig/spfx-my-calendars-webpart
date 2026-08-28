@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../../models/ICalendarEvent';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
-import { getSourceIcon } from '../../utils/sourceIconHelper';
+import { getSourceIconName } from '../../utils/sourceIconHelper';
 
 export interface ISearchResultsViewProps {
   appointments: IEvent[];
@@ -217,8 +217,8 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div className={styles.appointmentTitle}>
-                        {apt.showSourceLogo && apt.sourceType && (
-                          <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                        {apt.showSourceLogo !== false && (
+                          <Icon iconName={getSourceIconName(apt.sourceType, apt.sourceIconName)} style={{ marginRight: 4, fontSize: 12 }} />
                         )}
                         <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                       </div>

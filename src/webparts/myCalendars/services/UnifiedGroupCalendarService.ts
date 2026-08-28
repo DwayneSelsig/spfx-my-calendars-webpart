@@ -1,5 +1,5 @@
 import { HttpClient } from '@microsoft/sp-http';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
@@ -27,6 +27,7 @@ interface IGraphEvent {
   isReminderOn: boolean;
   isAllDay?: boolean;
   isOnlineMeeting?: boolean;
+  onlineMeeting?: { joinUrl?: string };
   webLink?: string;
   location?: { displayName: string };
   organizer?: { emailAddress: { name?: string; address?: string } };
@@ -63,8 +64,7 @@ export class UnifiedGroupCalendarService {
    */
   public async getUnifiedGroups(): Promise<IUnifiedGroupItem[]> {
     if (!this.graphClient) {
-      console.error('GraphClient not initialized');
-      return [];
+      throw new Error('GraphClient not initialized');
     }
 
     try {
@@ -90,7 +90,7 @@ export class UnifiedGroupCalendarService {
         }));
     } catch (error) {
       console.error('Error fetching Unified groups:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -99,8 +99,7 @@ export class UnifiedGroupCalendarService {
    */
   public async getJoinedTeamIds(): Promise<Set<string>> {
     if (!this.graphClient) {
-      console.error('GraphClient not initialized');
-      return new Set();
+      throw new Error('GraphClient not initialized');
     }
 
     try {
@@ -121,7 +120,7 @@ export class UnifiedGroupCalendarService {
       return new Set(teamIds);
     } catch (error) {
       console.error('Error fetching joined Teams:', error);
-      return new Set();
+      throw error;
     }
   }
 
@@ -138,21 +137,21 @@ export class UnifiedGroupCalendarService {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
       const mailboxSettings = await UserHelper.getCurrentUserMailboxSettings(this.graphClient);
-      const userTimeZone = mailboxSettings?.timeZone || 'UTC';
       console.log('[UnifiedGroupCalendarService] Timezone debug', {
         groupId,
         graphTimeZone: mailboxSettings?.timeZone || null,
-        appliedTimeZone: userTimeZone,
+        appliedTimeZone: 'UTC',
         startISO,
         endISO
       });
 
       const data = await this.graphClient
-        .api(`/groups/${groupId}/events`)
-        .header('Prefer', `outlook.timezone="${userTimeZone}"`)
+        .api(`/groups/${groupId}/calendarView`)
+        .header('Prefer', 'outlook.timezone="UTC"')
         .query({
-          $filter: `start/dateTime ge '${startISO}' and end/dateTime le '${endISO}'`,
-          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,webLink,location,organizer,attendees',
+          startDateTime: startISO,
+          endDateTime: endISO,
+          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees',
           $top: 500
         })
         .get();
@@ -163,13 +162,13 @@ export class UnifiedGroupCalendarService {
       return Promise.all((data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail)));
     } catch (error) {
       console.error('Error fetching group calendar events:', error);
-      return [];
+      throw error;
     }
   }
 
   private async mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string): Promise<IEvent> {
-    const startISO = UnifiedGroupCalendarService.toSafeISOString(graphEvent.start.dateTime, graphEvent.start.date);
-    const endISO = UnifiedGroupCalendarService.toSafeISOString(graphEvent.end.dateTime, graphEvent.end.date);
+    const startISO = UnifiedGroupCalendarService.toSafeISOString(graphEvent.start.dateTime, graphEvent.start.date, graphEvent.isAllDay);
+    const endISO = UnifiedGroupCalendarService.toSafeISOString(graphEvent.end.dateTime, graphEvent.end.date, graphEvent.isAllDay);
     const organizerEmail = graphEvent.organizer?.emailAddress?.address;
 
     // Map attendees excluding the organizer
@@ -193,31 +192,35 @@ export class UnifiedGroupCalendarService {
       sourceId: '',
       color: undefined,
       isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail),
+      organizer: {
+        name: graphEvent.organizer?.emailAddress?.name,
+        email: organizerEmail
+      },
       attendees: mappedAttendees,
       isOnlineMeeting: graphEvent.isOnlineMeeting || false,
+      joinUrl: graphEvent.onlineMeeting?.joinUrl || undefined,
       webLink: graphEvent.webLink || undefined
     };
   }
 
   /**
    * Normalises a Graph date value to a valid ISO string.
-   * Graph all-day events supply only a date string ("2026-03-25") without a
-   * time component; anchoring to noon UTC prevents timezone-boundary drift
-   * and avoids the RangeError: Invalid time value that toISOString() throws
-   * on an Invalid Date.
+   * All-day dates become local midnights so Graph's exclusive end date stays
+   * on the intended local calendar boundary. Timed values are requested in UTC.
    */
-  private static toSafeISOString(dateTime: string | undefined, dateOnly: string | undefined): string {
+  private static toSafeISOString(dateTime: string | undefined, dateOnly: string | undefined, isAllDay?: boolean): string {
     const raw = dateTime || dateOnly;
     if (!raw) {
-      return new Date().toISOString();
+      throw new Error('Group event has no usable date.');
     }
-    // Date-only value (e.g. "2026-03-25"): anchor to noon UTC so it is
-    // treated as an all-day event regardless of the viewer's local timezone.
-    const normalized = raw.includes('T') ? raw : `${raw}T12:00:00.000Z`;
+    if (isAllDay || !raw.includes('T')) {
+      const parts = raw.substring(0, 10).split('-').map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2]).toISOString();
+    }
+    const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(raw) ? raw : `${raw}Z`;
     const d = new Date(normalized);
     if (isNaN(d.getTime())) {
-      console.warn('[UnifiedGroupCalendarService] Unparseable date value, falling back to now:', raw);
-      return new Date().toISOString();
+      throw new Error(`Group event has an invalid date: ${raw}`);
     }
     return d.toISOString();
   }

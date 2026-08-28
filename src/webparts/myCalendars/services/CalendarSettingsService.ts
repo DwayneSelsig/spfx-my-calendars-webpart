@@ -33,6 +33,29 @@ interface IParsedSourceShape extends Partial<ICalendarSourceBase> {
 
 const SOURCE_TYPES = new Set(['ics', 'exchange', 'sharepoint', 'planner', 'teamsShifts', 'unifiedGroup']);
 
+function normalizeSlotDuration(value: unknown): 15 | 30 | 60 {
+  return value === 15 || value === 30 || value === 60 ? value : 30;
+}
+
+function normalizeVisibleHourCount(value: unknown, legacyStart?: unknown, legacyEnd?: unknown): number {
+  const migrated = typeof legacyStart === 'number' && typeof legacyEnd === 'number' ? legacyEnd - legacyStart : undefined;
+  const candidate = typeof value === 'number' ? value : migrated;
+  return Math.max(1, Math.min(24, Number.isFinite(candidate) ? Math.round(candidate as number) : 10));
+}
+
+function normalizePreferredStartMinutes(
+  value: unknown,
+  legacyStart: unknown,
+  visibleHourCount: number,
+  slotDuration: 15 | 30 | 60
+): number {
+  const migrated = typeof legacyStart === 'number' ? legacyStart * 60 : 8 * 60;
+  const candidate = typeof value === 'number' ? value : migrated;
+  const latestStart = Math.max(0, 24 * 60 - visibleHourCount * 60);
+  const clamped = Math.max(0, Math.min(latestStart, Number.isFinite(candidate) ? candidate as number : migrated));
+  return Math.floor(clamped / slotDuration) * slotDuration;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -270,26 +293,19 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
     icsIdentityKeys.add(identityKey);
   }
 
+  const slotDurationMinutes = normalizeSlotDuration(value.slotDurationMinutes ?? value.slotDuration);
+  const visibleHourCount = normalizeVisibleHourCount(value.visibleHourCount, value.startHour, value.endHour);
+
   return {
     ...defaultAdminWebPartSettings,
-    schemaVersion: typeof value.schemaVersion === 'number' ? value.schemaVersion : CALENDAR_SETTINGS_SCHEMA_VERSION,
+    schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
     defaultView: value.defaultView === 'day' || value.defaultView === 'week' || value.defaultView === 'month'
       ? value.defaultView
       : defaultAdminWebPartSettings.defaultView,
     showWeekends: typeof value.showWeekends === 'boolean' ? value.showWeekends : defaultAdminWebPartSettings.showWeekends,
-    startHour: typeof value.startHour === 'number' ? value.startHour : defaultAdminWebPartSettings.startHour,
-    endHour: typeof value.endHour === 'number' ? value.endHour : defaultAdminWebPartSettings.endHour,
-    slotDuration: typeof value.slotDuration === 'number' ? value.slotDuration : defaultAdminWebPartSettings.slotDuration,
-    firstDayOfWeek: typeof value.firstDayOfWeek === 'number' ? value.firstDayOfWeek : defaultAdminWebPartSettings.firstDayOfWeek,
-    useCustomProxy: typeof value.useCustomProxy === 'boolean' ? value.useCustomProxy : defaultAdminWebPartSettings.useCustomProxy,
-    customProxyUrl: typeof value.customProxyUrl === 'string' ? value.customProxyUrl : defaultAdminWebPartSettings.customProxyUrl,
-    useWhateverOrigin: typeof value.useWhateverOrigin === 'boolean' ? value.useWhateverOrigin : defaultAdminWebPartSettings.useWhateverOrigin,
-    proxyPriority1: value.proxyPriority1 === 'custom' || value.proxyPriority1 === 'whateverorigin'
-      ? value.proxyPriority1
-      : defaultAdminWebPartSettings.proxyPriority1,
-    proxyPriority2: value.proxyPriority2 === 'custom' || value.proxyPriority2 === 'whateverorigin'
-      ? value.proxyPriority2
-      : defaultAdminWebPartSettings.proxyPriority2,
+    preferredStartMinutes: normalizePreferredStartMinutes(value.preferredStartMinutes, value.startHour, visibleHourCount, slotDurationMinutes),
+    visibleHourCount,
+    slotDurationMinutes,
     organizationPrimaryColor: typeof value.organizationPrimaryColor === 'string' && value.organizationPrimaryColor.trim()
       ? value.organizationPrimaryColor.trim()
       : defaultAdminWebPartSettings.organizationPrimaryColor,
@@ -366,10 +382,16 @@ export function normalizeUserCalendarSettings(value: unknown): IUserCalendarSett
 
   return {
     ...defaultUserCalendarSettings,
-    schemaVersion: typeof value.schemaVersion === 'number' ? value.schemaVersion : CALENDAR_SETTINGS_SCHEMA_VERSION,
+    schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
     defaultView: value.defaultView === 'day' || value.defaultView === 'week' || value.defaultView === 'month' ? value.defaultView : undefined,
-    userStartHour: typeof value.userStartHour === 'number' ? value.userStartHour : undefined,
-    userEndHour: typeof value.userEndHour === 'number' ? value.userEndHour : undefined,
+    userPreferredStartMinutes: typeof value.userPreferredStartMinutes === 'number'
+      ? value.userPreferredStartMinutes
+      : typeof value.userStartHour === 'number' ? value.userStartHour * 60 : undefined,
+    userVisibleHourCount: typeof value.userVisibleHourCount === 'number'
+      ? normalizeVisibleHourCount(value.userVisibleHourCount)
+      : typeof value.userStartHour === 'number' && typeof value.userEndHour === 'number'
+        ? normalizeVisibleHourCount(undefined, value.userStartHour, value.userEndHour)
+        : undefined,
     exchangeCalendarStates,
     exchangeShowSourceLogo: typeof value.exchangeShowSourceLogo === 'boolean' ? value.exchangeShowSourceLogo : undefined,
     sharePointShowSourceLogo: typeof value.sharePointShowSourceLogo === 'boolean' ? value.sharePointShowSourceLogo : undefined,
@@ -410,25 +432,18 @@ export function migrateLegacyAdminSettings(value: unknown): IAdminWebPartSetting
     return { ...defaultAdminWebPartSettings };
   }
 
+  const slotDurationMinutes = normalizeSlotDuration(value.slotDuration);
+  const visibleHourCount = normalizeVisibleHourCount(undefined, value.startHour, value.endHour);
+
   return {
     ...defaultAdminWebPartSettings,
     defaultView: value.defaultView === 'day' || value.defaultView === 'week' || value.defaultView === 'month'
       ? value.defaultView
       : defaultAdminWebPartSettings.defaultView,
     showWeekends: typeof value.showWeekends === 'boolean' ? value.showWeekends : defaultAdminWebPartSettings.showWeekends,
-    startHour: typeof value.startHour === 'number' ? value.startHour : defaultAdminWebPartSettings.startHour,
-    endHour: typeof value.endHour === 'number' ? value.endHour : defaultAdminWebPartSettings.endHour,
-    slotDuration: typeof value.slotDuration === 'number' ? value.slotDuration : defaultAdminWebPartSettings.slotDuration,
-    firstDayOfWeek: typeof value.firstDayOfWeek === 'number' ? value.firstDayOfWeek : defaultAdminWebPartSettings.firstDayOfWeek,
-    useCustomProxy: typeof value.useCustomProxy === 'boolean' ? value.useCustomProxy : defaultAdminWebPartSettings.useCustomProxy,
-    customProxyUrl: typeof value.customProxyUrl === 'string' ? value.customProxyUrl : defaultAdminWebPartSettings.customProxyUrl,
-    useWhateverOrigin: typeof value.useWhateverOrigin === 'boolean' ? value.useWhateverOrigin : defaultAdminWebPartSettings.useWhateverOrigin,
-    proxyPriority1: value.proxyPriority1 === 'custom' || value.proxyPriority1 === 'whateverorigin'
-      ? value.proxyPriority1
-      : defaultAdminWebPartSettings.proxyPriority1,
-    proxyPriority2: value.proxyPriority2 === 'custom' || value.proxyPriority2 === 'whateverorigin'
-      ? value.proxyPriority2
-      : defaultAdminWebPartSettings.proxyPriority2,
+    preferredStartMinutes: normalizePreferredStartMinutes(undefined, value.startHour, visibleHourCount, slotDurationMinutes),
+    visibleHourCount,
+    slotDurationMinutes,
     organizationPrimaryColor: typeof value.organizationPrimaryColor === 'string' ? value.organizationPrimaryColor : defaultAdminWebPartSettings.organizationPrimaryColor
   };
 }
@@ -445,8 +460,10 @@ export function migrateLegacyUserSettings(value: unknown): IUserCalendarSettings
   return {
     ...defaultUserCalendarSettings,
     defaultView: value.defaultView,
-    userStartHour: typeof value.userStartHour === 'number' ? value.userStartHour : undefined,
-    userEndHour: typeof value.userEndHour === 'number' ? value.userEndHour : undefined,
+    userPreferredStartMinutes: typeof value.userStartHour === 'number' ? value.userStartHour * 60 : undefined,
+    userVisibleHourCount: typeof value.userStartHour === 'number' && typeof value.userEndHour === 'number'
+      ? normalizeVisibleHourCount(undefined, value.userStartHour, value.userEndHour)
+      : undefined,
     exchangeCalendarStates: isRecord(value.exchangeCalendarStates)
       ? Object.keys(value.exchangeCalendarStates).reduce<{ [calendarId: string]: boolean }>((acc, key) => {
         const state = value.exchangeCalendarStates?.[key];
@@ -567,6 +584,17 @@ export function resolveCalendarSettings(params: {
 
   const availableAdminIcsCatalogItems = adminSettings.icsCatalog
     .filter(item => item.audienceGroups.some(group => matchedGroupIds.has(group.groupId)));
+  const userVisibleHourCount = userSettings.userVisibleHourCount === undefined
+    ? undefined
+    : normalizeVisibleHourCount(userSettings.userVisibleHourCount);
+  const userPreferredStartMinutes = userSettings.userPreferredStartMinutes === undefined
+    ? undefined
+    : normalizePreferredStartMinutes(
+      userSettings.userPreferredStartMinutes,
+      undefined,
+      userVisibleHourCount ?? adminSettings.visibleHourCount,
+      adminSettings.slotDurationMinutes
+    );
 
   return {
     ...defaultCalendarSettings,
@@ -575,17 +603,11 @@ export function resolveCalendarSettings(params: {
     sources: [...resolvedAdminSources, ...resolvedUserSources],
     availableAdminIcsCatalogItems,
     showWeekends: adminSettings.showWeekends,
-    startHour: adminSettings.startHour,
-    endHour: adminSettings.endHour,
-    slotDuration: adminSettings.slotDuration,
-    firstDayOfWeek: adminSettings.firstDayOfWeek,
-    userStartHour: userSettings.userStartHour,
-    userEndHour: userSettings.userEndHour,
-    useCustomProxy: adminSettings.useCustomProxy,
-    customProxyUrl: adminSettings.customProxyUrl,
-    useWhateverOrigin: adminSettings.useWhateverOrigin,
-    proxyPriority1: adminSettings.proxyPriority1,
-    proxyPriority2: adminSettings.proxyPriority2,
+    preferredStartMinutes: adminSettings.preferredStartMinutes,
+    visibleHourCount: adminSettings.visibleHourCount,
+    slotDurationMinutes: adminSettings.slotDurationMinutes,
+    userPreferredStartMinutes,
+    userVisibleHourCount,
     organizationPrimaryColor: organizationPrimaryColor || adminSettings.organizationPrimaryColor || defaultCalendarSettings.organizationPrimaryColor,
     exchangeCalendarStates: { ...userSettings.exchangeCalendarStates },
     exchangeShowSourceLogo: userSettings.exchangeShowSourceLogo ?? adminSettings.exchangeShowSourceLogo,
@@ -617,8 +639,9 @@ export function deriveUserCalendarSettings(params: {
   nextResolvedSettings: ICalendarSettings;
   adminSettings: IAdminWebPartSettings;
   matchedGroupIds: Set<string>;
+  existingUserSettings?: IUserCalendarSettings;
 }): IUserCalendarSettings {
-  const { nextResolvedSettings, adminSettings, matchedGroupIds } = params;
+  const { nextResolvedSettings, adminSettings, matchedGroupIds, existingUserSettings } = params;
   const adminSourceMap = createAdminSourceMap(adminSettings, matchedGroupIds);
   const seenAdminSourceIds = new Set<string>();
   const personalSources: IUserCalendarSource[] = [];
@@ -663,9 +686,11 @@ export function deriveUserCalendarSettings(params: {
 
   return {
     schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
-    defaultView: nextResolvedSettings.defaultView !== adminSettings.defaultView ? nextResolvedSettings.defaultView : undefined,
-    userStartHour: nextResolvedSettings.userStartHour,
-    userEndHour: nextResolvedSettings.userEndHour,
+    defaultView: existingUserSettings?.defaultView !== undefined || nextResolvedSettings.defaultView !== adminSettings.defaultView
+      ? nextResolvedSettings.defaultView
+      : undefined,
+    userPreferredStartMinutes: nextResolvedSettings.userPreferredStartMinutes,
+    userVisibleHourCount: nextResolvedSettings.userVisibleHourCount,
     exchangeCalendarStates: copyExchangeCalendarStates(nextResolvedSettings.exchangeCalendarStates),
     exchangeShowSourceLogo: nextResolvedSettings.exchangeShowSourceLogo !== adminSettings.exchangeShowSourceLogo ? nextResolvedSettings.exchangeShowSourceLogo : undefined,
     sharePointShowSourceLogo: nextResolvedSettings.sharePointShowSourceLogo !== adminSettings.sharePointShowSourceLogo ? nextResolvedSettings.sharePointShowSourceLogo : undefined,

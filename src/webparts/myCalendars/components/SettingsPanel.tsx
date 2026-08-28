@@ -1653,6 +1653,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   public render(): React.ReactElement {
     const { isOpen, onDismiss } = this.props;
     const { settings, showAddDialog, userExchangeCalendars, userExchangeCalendarsLoading } = this.state;
+    const effectiveVisibleHours = settings.userVisibleHourCount ?? settings.visibleHourCount;
+    const effectiveStartMinutes = settings.userPreferredStartMinutes ?? settings.preferredStartMinutes;
+    const startOptions: IDropdownOption[] = [];
+    const latestStart = Math.max(0, 24 * 60 - effectiveVisibleHours * 60);
+    for (let minutes = 0; minutes <= latestStart; minutes += settings.slotDurationMinutes) {
+      startOptions.push({ key: minutes, text: new Date(2000, 0, 1, 0, minutes).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) });
+    }
+    const visibleHourOptions = Array.from({ length: 24 }, (_, index) => ({ key: index + 1, text: String(index + 1) }));
 
     return (
       <Panel
@@ -1667,6 +1675,41 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           this.renderAddCalendarFlow()
         ) : (
           <Stack tokens={{ childrenGap: 16 }}>
+            <div>
+              <Label>Timeline preferences</Label>
+              <Toggle
+                label="Use a personal start time"
+                checked={settings.userPreferredStartMinutes !== undefined}
+                onChange={(_, checked) => this.setState({ settings: { ...settings, userPreferredStartMinutes: checked ? settings.preferredStartMinutes : undefined } })}
+              />
+              <Dropdown
+                label="Preferred start time"
+                disabled={settings.userPreferredStartMinutes === undefined}
+                selectedKey={effectiveStartMinutes}
+                options={startOptions}
+                onChange={(_, option) => this.setState({ settings: { ...settings, userPreferredStartMinutes: Number(option?.key) } })}
+              />
+              <Toggle
+                label="Use a personal number of visible hours"
+                checked={settings.userVisibleHourCount !== undefined}
+                onChange={(_, checked) => this.setState({ settings: { ...settings, userVisibleHourCount: checked ? settings.visibleHourCount : undefined } })}
+              />
+              <Dropdown
+                label="Visible hours"
+                disabled={settings.userVisibleHourCount === undefined}
+                selectedKey={effectiveVisibleHours}
+                options={visibleHourOptions}
+                onChange={(_, option) => {
+                  const userVisibleHourCount = Number(option?.key);
+                  const userPreferredStartMinutes = Math.min(effectiveStartMinutes, 24 * 60 - userVisibleHourCount * 60);
+                  this.setState({ settings: { ...settings, userVisibleHourCount, userPreferredStartMinutes: settings.userPreferredStartMinutes === undefined ? undefined : userPreferredStartMinutes } });
+                }}
+              />
+              <div style={{ marginTop: 6, fontSize: 12, color: '#605e5c' }}>
+                Grid: {settings.slotDurationMinutes} minutes · Weekends: {settings.showWeekends ? 'shown' : 'hidden'}
+              </div>
+            </div>
+
             {/* Add Calendar Button at Top */}
             <div>
               <PrimaryButton

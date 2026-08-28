@@ -1,9 +1,9 @@
 export type CalendarViewType = 'day' | 'week' | 'month' | 'search';
 export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 export type CalendarSourceOrigin = 'admin' | 'user';
-export type ProxyType = 'custom' | 'whateverorigin';
+export type CalendarSlotDuration = 15 | 30 | 60;
 
-export const CALENDAR_SETTINGS_SCHEMA_VERSION = 2;
+export const CALENDAR_SETTINGS_SCHEMA_VERSION = 3;
 
 export interface ISharePointFieldMapping {
   titleField?: string;
@@ -66,15 +66,9 @@ export interface IAdminWebPartSettings {
   schemaVersion: number;
   defaultView: CalendarViewType;
   showWeekends: boolean;
-  startHour: number;
-  endHour: number;
-  slotDuration: number;
-  firstDayOfWeek: number;
-  useCustomProxy: boolean;
-  customProxyUrl: string;
-  useWhateverOrigin: boolean;
-  proxyPriority1?: ProxyType;
-  proxyPriority2?: ProxyType;
+  preferredStartMinutes: number;
+  visibleHourCount: number;
+  slotDurationMinutes: CalendarSlotDuration;
   organizationPrimaryColor?: string;
   exchangeShowSourceLogo: boolean;
   sharePointShowSourceLogo: boolean;
@@ -92,8 +86,8 @@ export interface IAdminWebPartSettings {
 export interface IUserCalendarSettings {
   schemaVersion: number;
   defaultView?: CalendarViewType;
-  userStartHour?: number;
-  userEndHour?: number;
+  userPreferredStartMinutes?: number;
+  userVisibleHourCount?: number;
   exchangeCalendarStates: { [calendarId: string]: boolean };
   exchangeShowSourceLogo?: boolean;
   sharePointShowSourceLogo?: boolean;
@@ -122,17 +116,11 @@ export interface ICalendarSettings {
   sources: ICalendarSource[];
   availableAdminIcsCatalogItems: IAdminIcsCatalogItem[];
   showWeekends: boolean;
-  startHour: number;
-  endHour: number;
-  slotDuration: number;
-  firstDayOfWeek: number;
-  userStartHour?: number;
-  userEndHour?: number;
-  useCustomProxy: boolean;
-  customProxyUrl: string;
-  useWhateverOrigin: boolean;
-  proxyPriority1?: ProxyType;
-  proxyPriority2?: ProxyType;
+  preferredStartMinutes: number;
+  visibleHourCount: number;
+  slotDurationMinutes: CalendarSlotDuration;
+  userPreferredStartMinutes?: number;
+  userVisibleHourCount?: number;
   organizationPrimaryColor?: string;
   exchangeCalendarStates: { [calendarId: string]: boolean };
   exchangeShowSourceLogo: boolean;
@@ -160,11 +148,6 @@ export interface ILegacyCalendarSettings {
   firstDayOfWeek: number;
   userStartHour?: number;
   userEndHour?: number;
-  useCustomProxy?: boolean;
-  customProxyUrl?: string;
-  useWhateverOrigin?: boolean;
-  proxyPriority1?: ProxyType;
-  proxyPriority2?: ProxyType;
   organizationPrimaryColor?: string;
   exchangeCalendarStates?: { [calendarId: string]: boolean };
   exchangeShowSourceLogo?: boolean;
@@ -182,15 +165,9 @@ export const defaultAdminWebPartSettings: IAdminWebPartSettings = {
   schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
   defaultView: 'month',
   showWeekends: true,
-  startHour: 8,
-  endHour: 18,
-  slotDuration: 30,
-  firstDayOfWeek: 1,
-  useCustomProxy: false,
-  customProxyUrl: '',
-  useWhateverOrigin: true,
-  proxyPriority1: 'custom',
-  proxyPriority2: 'whateverorigin',
+  preferredStartMinutes: 8 * 60,
+  visibleHourCount: 10,
+  slotDurationMinutes: 30,
   organizationPrimaryColor: '#0078d4',
   exchangeShowSourceLogo: true,
   sharePointShowSourceLogo: true,
@@ -218,15 +195,9 @@ export const defaultCalendarSettings: ICalendarSettings = {
   sources: [],
   availableAdminIcsCatalogItems: [],
   showWeekends: true,
-  startHour: 8,
-  endHour: 18,
-  slotDuration: 30,
-  firstDayOfWeek: 1,
-  useCustomProxy: false,
-  customProxyUrl: '',
-  useWhateverOrigin: true,
-  proxyPriority1: 'custom',
-  proxyPriority2: 'whateverorigin',
+  preferredStartMinutes: 8 * 60,
+  visibleHourCount: 10,
+  slotDurationMinutes: 30,
   organizationPrimaryColor: '#0078d4',
   exchangeCalendarStates: {},
   exchangeShowSourceLogo: true,

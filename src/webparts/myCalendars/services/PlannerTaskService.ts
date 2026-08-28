@@ -1,5 +1,5 @@
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
 
 export interface IPlannerPlan {
@@ -90,8 +90,7 @@ export class PlannerTaskService {
   public async getUserPlans(): Promise<IPlannerPlan[]> {
     try {
       if (!this.graphClient) {
-        console.error('GraphClient not initialized');
-        return [];
+        throw new Error('GraphClient not initialized');
       }
 
       console.log('Fetching Planner plans via groups...');
@@ -136,7 +135,7 @@ export class PlannerTaskService {
       return allPlans;
     } catch (error) {
       console.error('Error fetching Planner plans:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -202,7 +201,7 @@ export class PlannerTaskService {
       });
     } catch (error) {
       console.error('Error fetching Planner tasks:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -260,6 +259,7 @@ export class PlannerTaskService {
       end: endDate.toISOString(),
       isFullDay: true, // Planner tasks are always all-day (no time component)
       sourceId: source.id,
+      sourceDisplayName: source.name,
       colorHex: source.color,
       sourceType: 'planner',
       showSourceLogo: showSourceLogo,

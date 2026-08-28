@@ -31,12 +31,13 @@ Future contributors preserve these labels when they update this register. They d
 - **Decision:** The web part does not parse or render ICS content.
 - **Consequence:** The administrator ICS catalog offers approved subscription links to selected audiences. It does not supply runtime events.
 
-### DEC-003 — Temporary renderer strategy
+### DEC-003 — Local calendar renderer
 
 - **Status:** Decision
-- **Decision:** PnP Calendar remains the temporary Day, Week, and Month renderer.
+- **Decision:** A local, read-only renderer provides Day, Week, and Month.
+- **Decision:** Month preserves the established seven-column, six-row calendar behavior. Week uses rolling day cards and a complete 24-hour timeline. Day uses the Microsoft 365 Companion interaction and visual direction.
 - **Decision:** The custom Search view remains active.
-- **Consequence:** Search can use a custom renderer while the hidden PnP calendar stays mounted.
+- **Consequence:** The runtime does not depend on PnP Calendar. Search keeps the hidden active calendar mounted.
 
 ### DEC-004 — Independent source loading
 
@@ -58,13 +59,21 @@ Future contributors preserve these labels when they update this register. They d
 - **Decision:** The project will introduce automated tests as one repository-wide initiative.
 - **Consequence:** Individual documentation changes do not define a partial future test architecture.
 
+### DEC-007 — Dynamic retrieval range
+
+- **Status:** Decision
+- **Decision:** The initial load covers the current month plus or minus three months. Navigation loads missing visible months per source.
+- **Decision:** Only successful source/month responses enter the range cache. Manual refresh clears events and range state.
+- **Consequence:** Navigation is not limited to the initial retrieval window. Failed sources remain eligible for retry.
+
+### DEC-008 — Source errors and invalid dates
+
+- **Status:** Decision
+- **Decision:** Active source retrieval failures remain visible to the coordinator and do not receive a successful range-cache entry.
+- **Decision:** A source adapter rejects an event with unusable required dates. It does not invent the current time.
+- **Consequence:** A later navigation or manual refresh can retry failed source/month combinations.
+
 ## Intentions
-
-### INT-001 — Replace PnP Calendar
-
-- **Status:** Intention
-- **Intention:** Replace PnP Calendar because it does not provide enough flexibility.
-- **Constraint:** No replacement library or custom architecture is selected.
 
 ### INT-002 — Mandatory-source failure records
 
@@ -73,28 +82,13 @@ Future contributors preserve these labels when they update this register. They d
 - **Intention:** Retry the mandatory source after a delay.
 - **Constraint:** Do not store source event content in an error record unless a later decision explicitly permits it.
 
-### INT-003 — Error and date handling
-
-- **Status:** Intention
-- **Intention:** Keep source-level errors visible.
-- **Intention:** Reject events with unusable dates.
-- **Intention:** Do not replace unusable dates with the current time.
-
 ## Technical debt and deviations
 
-### DEBT-001 — Legacy ICS parser
+### DEBT-002 — Inactive Schedule view
 
 - **Status:** Technical debt
-- **Current state:** `src/webparts/myCalendars/services/IcsParser.ts` is not used by the active appointment-loading flow.
-- **Desired state:** Remove the file and related dead references in a separate code change after a final reference check.
-- **Warning:** Its presence does not mean that direct ICS aggregation is supported.
-
-### DEBT-002 — Inactive calendar views and toolbar
-
-- **Status:** Technical debt
-- **Current state:** The repository contains custom Day, Week, Month, and Schedule views. It also contains `CalendarToolbar`.
-- **Current state:** The active runtime uses PnP Day, Week, and Month. Search uses its own result view.
-- **Warning:** Inactive view code does not define the future renderer architecture.
+- **Current state:** The repository contains an inactive Schedule view.
+- **Warning:** Its presence does not make Schedule a supported capability.
 
 ### DEV-001 — Administrator sources are always overridable
 
@@ -102,27 +96,6 @@ Future contributors preserve these labels when they update this register. They d
 - **Current state:** A user can rename, recolor, disable, or remove every audience-assigned administrator source for that user.
 - **Desired state:** Enforcement varies by source policy.
 - **Missing decision:** The repository has no source-policy schema or migration rule.
-
-### DEV-002 — Some source errors appear successful
-
-- **Status:** Deviation
-- **Current state:** Several source services catch Graph errors and return an empty array.
-- **Effect:** `MyCalendars` can mark the service as ready because no error reaches its source-level status handler.
-- **Desired state:** Keep partial results and show an error for each failed source.
-
-### DEBT-003 — Invalid dates can become current-time events
-
-- **Status:** Technical debt
-- **Current state:** Exchange and Group mappings can use the current time for an invalid date. SharePoint mapping can use the current time when date fields are absent.
-- **Risk:** The UI can show a fabricated event that looks valid.
-- **Desired state:** Reject the invalid event and report source-level diagnostic information.
-
-### DEV-003 — Retrieval window does not follow navigation
-
-- **Status:** Deviation
-- **Current state:** The load window is based on today and covers a fixed seven-month span.
-- **Effect:** Navigation can move to a period for which the web part did not request events.
-- **Desired state:** Not decided. Future renderer work must address navigation and data retrieval together.
 
 ### DEBT-004 — No automated project tests
 
@@ -162,13 +135,6 @@ Future contributors preserve these labels when they update this register. They d
 
 ## Open questions
 
-### OQ-001 — Renderer replacement
-
-- **Status:** Open question
-- Which rendering library or custom architecture will replace PnP Calendar?
-- Which views will the replacement support?
-- Which navigation and range-loading contract will it use?
-
 ### OQ-002 — Administrator source policy schema
 
 - **Status:** Open question
@@ -199,7 +165,7 @@ Future contributors preserve these labels when they update this register. They d
 
 ## Rules for future decisions
 
-Future agents and contributors do not select a renderer, source-policy schema, retry policy, log schema, retention rule, or test architecture without a confirmed decision.
+Future agents and contributors do not select a source-policy schema, retry policy, log schema, retention rule, or test architecture without a confirmed decision.
 
 When a decision is confirmed:
 

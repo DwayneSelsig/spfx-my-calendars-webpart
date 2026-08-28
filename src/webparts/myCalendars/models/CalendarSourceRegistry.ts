@@ -2,7 +2,7 @@ import type { CalendarSourceType } from './ICalendarSettings';
 
 export interface ICalendarSourceDefinition {
   type: CalendarSourceType;
-  title: string;
+  displayName: string;
   description: string;
   iconName: string;
   defaultColor: string;
@@ -14,7 +14,7 @@ export interface ICalendarSourceDefinition {
 export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   {
     type: 'sharepoint',
-    title: 'SharePoint Calendar',
+    displayName: 'SharePoint Calendar',
     description: 'Select a calendar from a SharePoint site',
     iconName: 'SharepointLogo',
     defaultColor: '#038186',
@@ -23,7 +23,7 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'exchange',
-    title: 'Outlook Calendar',
+    displayName: 'Outlook Calendar',
     description: 'Manage Outlook calendars (opens in new window)',
     iconName: 'OutlookLogo',
     defaultColor: '#0078d4',
@@ -32,7 +32,7 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'planner',
-    title: 'Microsoft Planner',
+    displayName: 'Microsoft Planner',
     description: 'Voeg taken toe vanuit een Planner plan',
     iconName: 'PlannerLogo',
     defaultColor: '#107c41',
@@ -41,7 +41,7 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'unifiedGroup',
-    title: 'M365 Group / Teams',
+    displayName: 'Microsoft 365 Group / Teams',
     description: 'Add a calendar from a Microsoft 365 group or Team',
     iconName: 'Group',
     defaultColor: '#5b5fc7',
@@ -50,7 +50,7 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'teamsShifts',
-    title: 'Teams Shifts',
+    displayName: 'Teams Shifts',
     description: 'Toon diensten uit Teams shifts',
     iconName: 'Clock',
     defaultColor: '#4a4fbe',
@@ -59,7 +59,7 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'ics',
-    title: 'Internet Calendar',
+    displayName: 'Internet Calendar',
     description: 'Add calendar from URL or paste ICS content',
     iconName: 'World',
     defaultColor: '#605e5c',

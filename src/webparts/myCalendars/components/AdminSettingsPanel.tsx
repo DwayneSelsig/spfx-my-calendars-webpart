@@ -29,6 +29,7 @@ import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 import { AudienceService, IEntraSecurityGroup } from '../services/AudienceService';
 import { createAdminAssignedSource, generateStableId } from '../services/CalendarSettingsService';
+import { getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 
 type AdminAddStep =
   | 'initial'
@@ -1169,7 +1170,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             {calendarSourceRegistry.filter(definition => definition.adminSelectable).map(definition => (
               <PrimaryButton
                 key={definition.type}
-                text={definition.title}
+                text={definition.displayName}
                 secondaryText={definition.adminCatalogOnly ? 'Publish this ICS feed as a selectable catalog item' : definition.description}
                 iconProps={{ iconName: definition.iconName }}
                 onClick={() => this.handleSelectAddType(definition.type).catch(err => console.error(err))}
@@ -1222,7 +1223,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             <div style={{ width: 16, height: 16, backgroundColor: item.source.color, borderRadius: 2, flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 13 }}>{item.source.name}</strong>
-              <div style={{ fontSize: 11, color: '#605e5c' }}>{item.source.sourceType} • {audienceText}</div>
+              <div style={{ fontSize: 11, color: '#605e5c' }}>{getSourceTypeDisplayName(item.source.sourceType)} • {audienceText}</div>
             </div>
             <IconButton iconProps={{ iconName: 'Edit' }} title="Edit" onClick={() => this.toggleEditSource(item.adminSourceId)} />
           </Stack>
@@ -1274,6 +1275,12 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   public render(): React.ReactElement {
     const { isOpen, onDismiss, loadNotice } = this.props;
     const { settings, showAddDialog } = this.state;
+    const startOptions: IDropdownOption[] = [];
+    const latestStart = Math.max(0, 24 * 60 - settings.visibleHourCount * 60);
+    for (let minutes = 0; minutes <= latestStart; minutes += settings.slotDurationMinutes) {
+      startOptions.push({ key: minutes, text: new Date(2000, 0, 1, 0, minutes).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) });
+    }
+    const visibleHourOptions = Array.from({ length: 24 }, (_, index) => ({ key: index + 1, text: String(index + 1) }));
 
     return (
       <Panel isOpen={isOpen} onDismiss={onDismiss} type={PanelType.medium} headerText={showAddDialog ? 'Add Admin Calendar Default' : 'Admin Calendar Defaults'} onRenderFooterContent={!showAddDialog ? this.onRenderFooterContent : undefined} isFooterAtBottom={true}>
@@ -1301,6 +1308,37 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
                   defaultView: option?.key as IAdminWebPartSettings['defaultView']
                 }
               }))}
+            />
+
+            <Label>Timeline defaults</Label>
+            <Toggle
+              label="Show weekends"
+              checked={settings.showWeekends}
+              onChange={(_, checked) => this.setState(prev => ({ settings: { ...prev.settings, showWeekends: checked !== false } }))}
+            />
+            <Dropdown
+              label="Slot duration"
+              selectedKey={settings.slotDurationMinutes}
+              options={[{ key: 15, text: '15 minutes' }, { key: 30, text: '30 minutes' }, { key: 60, text: '60 minutes' }]}
+              onChange={(_, option) => {
+                const slot = option?.key as 15 | 30 | 60;
+                this.setState(prev => ({ settings: { ...prev.settings, slotDurationMinutes: slot, preferredStartMinutes: Math.floor(Math.min(prev.settings.preferredStartMinutes, 24 * 60 - prev.settings.visibleHourCount * 60) / slot) * slot } }));
+              }}
+            />
+            <Dropdown
+              label="Preferred start time"
+              selectedKey={settings.preferredStartMinutes}
+              options={startOptions}
+              onChange={(_, option) => this.setState(prev => ({ settings: { ...prev.settings, preferredStartMinutes: Number(option?.key) } }))}
+            />
+            <Dropdown
+              label="Visible hours"
+              selectedKey={settings.visibleHourCount}
+              options={visibleHourOptions}
+              onChange={(_, option) => {
+                const visibleHourCount = Number(option?.key);
+                this.setState(prev => ({ settings: { ...prev.settings, visibleHourCount, preferredStartMinutes: Math.min(prev.settings.preferredStartMinutes, 24 * 60 - visibleHourCount * 60) } }));
+              }}
             />
 
             <div>
