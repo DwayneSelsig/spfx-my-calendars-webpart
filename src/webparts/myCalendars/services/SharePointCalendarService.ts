@@ -1,5 +1,5 @@
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ISharePointFieldMapping } from '../models/ICalendarSettings';
 
 export interface ISharePointSite {
@@ -108,8 +108,7 @@ export class SharePointCalendarService {
     }
 
     if (!this.graphClient) {
-      console.error('GraphClient not initialized');
-      return [];
+      throw new Error('GraphClient not initialized');
     }
 
     try {
@@ -194,8 +193,7 @@ export class SharePointCalendarService {
     fieldMapping?: ISharePointFieldMapping
   ): Promise<IEvent[]> {
     if (!this.graphClient) {
-      console.error('GraphClient not initialized');
-      return [];
+      throw new Error('GraphClient not initialized');
     }
 
     try {
@@ -213,7 +211,7 @@ export class SharePointCalendarService {
         .filter((apt: IEvent | null): apt is IEvent => apt !== null);
     } catch (error) {
       console.error('Error fetching list events:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -281,13 +279,15 @@ export class SharePointCalendarService {
 
     const startDateValue = fields[startDateFieldName] as string | undefined;
     const endDateValue = fields[endDateFieldName] as string | undefined;
-    const eventStart = startDateValue ? new Date(startDateValue) : new Date();
-    const eventEnd = endDateValue ? new Date(endDateValue) : (startDateValue ? new Date(startDateValue) : new Date());
+    if (!startDateValue) return null;
+    const eventStart = new Date(startDateValue);
+    const eventEnd = endDateValue ? new Date(endDateValue) : new Date(eventStart);
+    if (Number.isNaN(eventStart.getTime()) || Number.isNaN(eventEnd.getTime())) return null;
     const isAllDay = (fields[allDayFieldName] as boolean | undefined) === true;
 
     // Client-side date range filtering
     if (startDate && endDate) {
-      if (eventEnd < startDate || eventStart > endDate) {
+      if (eventEnd <= startDate || eventStart >= endDate) {
         return null; // Event is outside the requested date range
       }
     }

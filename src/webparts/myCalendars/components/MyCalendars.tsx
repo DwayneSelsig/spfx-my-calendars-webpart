@@ -1,18 +1,17 @@
 import * as React from 'react';
-import styles from './MyCalendars.module.scss';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { CalendarViewType } from '../models/ICalendarSettings';
-import { ExchangeCalendarService } from '../services/ExchangeCalendarService';
+import { ExchangeCalendarService, type IExchangeCalendar } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService } from '../services/SharePointCalendarService';
-import { PlannerTaskService } from '../services/PlannerTaskService';
+import { PlannerTaskService, type IPlannerPlan } from '../services/PlannerTaskService';
 import { TeamsShiftsService } from '../services/TeamsShiftsService';
-import { UnifiedGroupCalendarService } from '../services/UnifiedGroupCalendarService';
+import { UnifiedGroupCalendarService, type IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
-import { CommunityCalendarView } from './views/CommunityCalendarView';
 import { SearchResultsView } from './views/SearchResultsView';
+import { CalendarToolbar } from './CalendarToolbar';
 import { CommandBar, ICommandBarItemProps } from '@fluentui/react/lib/CommandBar';
 import { Callout } from '@fluentui/react/lib/Callout';
 import { Icon } from '@fluentui/react/lib/Icon';
@@ -20,9 +19,11 @@ import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Text } from '@fluentui/react/lib/Text';
 import { CommandBarButton } from '@fluentui/react/lib/Button';
 import { SearchBox } from '@fluentui/react/lib/SearchBox';
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { SettingsPanel } from './SettingsPanel';
 //import { CalendarToolbar } from './CalendarToolbar';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 
 type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 type ServiceStatus = 'loading' | 'ready' | 'error';
@@ -46,6 +47,65 @@ const defaultLoadErrors: Record<ServiceKey, string | undefined> = {
   unifiedGroup: undefined
 };
 
+const styles = mergeStyleSets({
+  myCalendars: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    color: 'var(--bodyText, #323130)'
+  },
+  commandBar: {
+    flexShrink: 0,
+    borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    paddingBottom: 10
+  },
+  calendarContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    position: 'relative'
+  },
+  loadingStatusWrapper: {
+    display: 'inline-flex',
+    alignItems: 'center'
+  },
+  loadingStatusCallout: {
+    padding: '12px 14px',
+    minWidth: 260
+  },
+  loadingStatusTitle: {
+    display: 'block',
+    marginBottom: 8,
+    fontWeight: 600
+  },
+  loadingStatusList: {
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: 8
+  },
+  loadingStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    columnGap: 12
+  },
+  loadingStatusLabel: {
+    fontSize: 12,
+    color: 'var(--neutralPrimary, #323130)'
+  },
+  loadingStatusState: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    columnGap: 6,
+    fontSize: 12,
+    color: 'var(--neutralSecondary, #605e5c)'
+  },
+  loadingStatusError: {
+    fontSize: 11,
+    color: 'var(--errorText, #a80000)',
+    marginLeft: 4
+  }
+});
+
 interface IMyCalendarsState {
   appointments: IEvent[];
   currentDate: Date;
@@ -59,15 +119,24 @@ interface IMyCalendarsState {
   loadErrors: Record<ServiceKey, string | undefined>;
   isLoadingStatusOpen: boolean;
   showRefreshButton: boolean;
-  usePnpCalendar: boolean;
 }
 
 export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyCalendarsState> {
-  private debounceTimer: number | null = null;
   private searchDebounceTimer: number | null = null;
   private activeLoadId = 0;
   private loadingStatusWrapperRef = React.createRef<HTMLDivElement>();
   private refreshTimer: number | null = null;
+  private loadedMonthsBySource = new Map<string, Set<string>>();
+  private knownSourceIdsByService: Record<ServiceKey, Set<string>> = {
+    exchange: new Set(), ics: new Set(), sharepoint: new Set(), planner: new Set(), teamsShifts: new Set(), unifiedGroup: new Set()
+  };
+  private rangeLoadPromise: Promise<void> = Promise.resolve();
+  private loadGeneration = 0;
+  private exchangeCalendarsPromise?: Promise<IExchangeCalendar[]>;
+  private plannerPlansPromise?: Promise<IPlannerPlan[]>;
+  private unifiedGroupsPromise?: Promise<IUnifiedGroupItem[]>;
+  private joinedTeamIdsPromise?: Promise<Set<string>>;
+  private teamsShiftsService?: TeamsShiftsService;
 
   constructor(props: IMyCalendarsProps) {
     super(props);
@@ -84,40 +153,56 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       loadingSources: { ...defaultLoadingSources },
       loadErrors: { ...defaultLoadErrors },
       isLoadingStatusOpen: false,
-      showRefreshButton: true,
-      usePnpCalendar: true
+      showRefreshButton: true
     };
   }
 
   public componentDidMount(): void {
-    this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
+    this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
     // Resolve and store graphClient for use in SettingsPanel
     this.props.context.msGraphClientFactory.getClient('3')
       .then(client => this.setState({ graphClient: client }))
       .catch(err => console.error('Failed to initialize graph client:', err));
   }
 
+  private getLoadingSettingsFingerprint(settings: import('../models/ICalendarSettings').ICalendarSettings): string {
+    const loadingSettings = { ...settings } as unknown as Record<string, unknown>;
+    ['defaultView', 'preferredStartMinutes', 'visibleHourCount', 'slotDurationMinutes', 'showWeekends', 'userPreferredStartMinutes', 'userVisibleHourCount']
+      .forEach(key => delete loadingSettings[key]);
+    return JSON.stringify(loadingSettings);
+  }
+
   public componentDidUpdate(prevProps: IMyCalendarsProps): void {
+    const defaultViewChanged = prevProps.settings.defaultView !== this.props.settings.defaultView;
+    if (defaultViewChanged) {
+      const defaultView = this.props.settings.defaultView;
+      this.setState(prevState => ({
+        currentView: prevState.currentView === 'search' ? 'search' : defaultView,
+        previousView: defaultView
+      }), () => {
+        this.ensureVisibleRange(this.state.currentDate, defaultView).catch(err => console.error('Failed to load visible range:', err));
+      });
+    }
+
     try {
       const prevJson = JSON.stringify(prevProps.settings);
       const currJson = JSON.stringify(this.props.settings);
       if (prevJson !== currJson) {
-        this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
+        if (this.getLoadingSettingsFingerprint(prevProps.settings) !== this.getLoadingSettingsFingerprint(this.props.settings)) {
+          this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
+        } else if (!defaultViewChanged) {
+          this.ensureVisibleRange().catch(err => console.error('Failed to load visible range:', err));
+        }
       }
     } catch {
       // Fallback to sources change detection
       if (prevProps.settings.sources !== this.props.settings.sources) {
-        this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
+        this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
       }
     }
   }
 
   public componentWillUnmount(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
-
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = null;
@@ -129,23 +214,113 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     }
   }
 
-  private async loadAppointments(): Promise<void> {
+  private getMonthKeys(startDate: Date, endDate: Date): string[] {
+    const keys: string[] = [];
+    const firstMonth = startDate.getFullYear() * 12 + startDate.getMonth();
+    const lastInstant = new Date(Math.max(startDate.getTime(), endDate.getTime() - 1));
+    const lastMonth = lastInstant.getFullYear() * 12 + lastInstant.getMonth();
+    for (let monthIndex = firstMonth; monthIndex <= lastMonth; monthIndex++) {
+      const year = Math.floor(monthIndex / 12);
+      keys.push(`${year}-${monthIndex - year * 12 + 1}`);
+    }
+    return keys;
+  }
+
+  private clearRangeCache(): void {
+    this.loadedMonthsBySource.clear();
+    (Object.keys(this.knownSourceIdsByService) as ServiceKey[]).forEach(key => this.knownSourceIdsByService[key].clear());
+    this.exchangeCalendarsPromise = undefined;
+    this.plannerPlansPromise = undefined;
+    this.unifiedGroupsPromise = undefined;
+    this.joinedTeamIdsPromise = undefined;
+    this.teamsShiftsService = undefined;
+  }
+
+  private registerSource(service: ServiceKey, sourceId: string): void {
+    this.knownSourceIdsByService[service].add(sourceId);
+  }
+
+  private areMonthsLoaded(sourceId: string, monthKeys: string[]): boolean {
+    const loaded = this.loadedMonthsBySource.get(sourceId);
+    return !!loaded && monthKeys.every(key => loaded.has(key));
+  }
+
+  private markMonthsLoaded(sourceId: string, monthKeys: string[]): void {
+    const loaded = this.loadedMonthsBySource.get(sourceId) || new Set<string>();
+    monthKeys.forEach(key => loaded.add(key));
+    this.loadedMonthsBySource.set(sourceId, loaded);
+  }
+
+  private getVisibleRange(date: Date = this.state.currentDate, view: CalendarViewType = this.state.previousView): { start: Date; end: Date } {
+    if (view === 'month') {
+      const first = new Date(date.getFullYear(), date.getMonth(), 1);
+      const start = new Date(first);
+      start.setDate(first.getDate() - first.getDay());
+      const end = new Date(start);
+      end.setDate(start.getDate() + 42);
+      return { start, end };
+    }
+    if (view === 'week') {
+      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      if (!this.props.settings.showWeekends) {
+        while (start.getDay() === 0 || start.getDay() === 6) start.setDate(start.getDate() + 1);
+      }
+      const end = new Date(start);
+      if (this.props.settings.showWeekends) {
+        end.setDate(end.getDate() + 7);
+      } else {
+        let weekdays = 0;
+        while (weekdays < 5) {
+          if (end.getDay() !== 0 && end.getDay() !== 6) weekdays++;
+          end.setDate(end.getDate() + 1);
+        }
+      }
+      return { start, end };
+    }
+    const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
+
+  private ensureVisibleRange(date: Date = this.state.currentDate, view: CalendarViewType = this.state.previousView): Promise<void> {
+    const range = this.getVisibleRange(date, view);
+    const monthKeys = this.getMonthKeys(range.start, range.end);
+    const missingServices = new Set(this.getEnabledServiceKeys().filter(service => {
+      const knownSources = Array.from(this.knownSourceIdsByService[service]);
+      return knownSources.length === 0 || knownSources.some(sourceId => !this.areMonthsLoaded(sourceId, monthKeys));
+    }));
+    if (missingServices.size === 0) return Promise.resolve();
+    const generation = this.loadGeneration;
+    this.rangeLoadPromise = this.rangeLoadPromise
+      .catch(() => undefined)
+      .then(() => generation === this.loadGeneration
+        ? this.loadAppointments(range.start, range.end, false, missingServices)
+        : Promise.resolve());
+    return this.rangeLoadPromise;
+  }
+
+  private async loadAppointments(requestStart?: Date, requestEnd?: Date, reset: boolean = true, requestedServices?: Set<ServiceKey>): Promise<void> {
+    if (reset) this.loadGeneration++;
+    const currentGeneration = this.loadGeneration;
     const loadId = ++this.activeLoadId;
+    if (reset) this.clearRangeCache();
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
     const enabledServices = this.getEnabledServiceKeys();
-    const initialLoadingSources = enabledServices.reduce((acc, key) => {
+    const servicesToLoad = requestedServices || new Set(enabledServices);
+    const initialLoadingSources = Array.from(servicesToLoad).reduce((acc, key) => {
       acc[key] = 'loading';
       return acc;
-    }, { ...defaultLoadingSources });
+    }, reset ? { ...defaultLoadingSources } : { ...this.state.loadingSources });
 
     this.setState({
       isLoading: true,
-      appointments: [],
+      appointments: reset ? [] : this.state.appointments,
       loadingSources: initialLoadingSources,
-      loadErrors: { ...defaultLoadErrors },
+      loadErrors: reset ? { ...defaultLoadErrors } : this.state.loadErrors,
       isLoadingStatusOpen: false,
       showRefreshButton: false
     });
@@ -158,20 +333,33 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     sharePointService.setGraphClient(graphClient);
     const plannerService = new PlannerTaskService(httpClient, graphClient);
     plannerService.setGraphClient(graphClient);
-    const teamsShiftsService = new TeamsShiftsService(httpClient, graphClient);
+    const teamsShiftsService = this.teamsShiftsService || new TeamsShiftsService(httpClient, graphClient);
     teamsShiftsService.setGraphClient(graphClient);
+    this.teamsShiftsService = teamsShiftsService;
     const unifiedGroupService = new UnifiedGroupCalendarService(httpClient, graphClient);
     unifiedGroupService.setGraphClient(graphClient);
     
     // Calculate date range for filtering (current month ± 3 months)
     const today = new Date();
-    const startDate = new Date(today.getFullYear(), today.getMonth() - 3, 1);
-    const endDate = new Date(today.getFullYear(), today.getMonth() + 4, 0);
+    const startDate = requestStart || new Date(today.getFullYear(), today.getMonth() - 3, 1);
+    const endDate = requestEnd || new Date(today.getFullYear(), today.getMonth() + 4, 1);
+    const requestedMonthKeys = this.getMonthKeys(startDate, endDate);
+    const markLoaded = (sourceId: string): void => {
+      if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) {
+        this.markMonthsLoaded(sourceId, requestedMonthKeys);
+      }
+    };
+    const registerLoadedSource = (service: ServiceKey, sourceId: string): void => {
+      if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) this.registerSource(service, sourceId);
+    };
+    Array.from(servicesToLoad).forEach(service => this.registerSource(service, `$service:${service}`));
     
     const updateStatus = (service: ServiceKey, status: ServiceStatus, errorMessage?: string): void => {
       if (loadId !== this.activeLoadId) {
         return;
       }
+
+      if (status === 'ready') markLoaded(`$service:${service}`);
 
       this.setState(prev => ({
         loadingSources: {
@@ -193,38 +381,50 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       const normalizedAppointments: IndexedEvent[] = appointments.map(apt => ({
         ...apt,
         colorHex: apt.colorHex || '#0078d4',
+        sourceIconName: getSourceIconName(apt.sourceType, apt.sourceIconName),
+        sourceDisplayName: apt.sourceDisplayName || getSourceTypeDisplayName(apt.sourceType, apt.sourceIconName),
         // Build a reusable lowercase search index per event to avoid repeated string work while typing.
         searchIndexText: this.buildSearchIndexText(apt)
       }));
 
-      this.setState(prev => ({
-        appointments: [...prev.appointments, ...normalizedAppointments]
-      }));
+      this.setState(prev => {
+        const byIdentity = new Map<string, IndexedEvent>();
+        prev.appointments.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event as IndexedEvent));
+        normalizedAppointments.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event));
+        return { appointments: Array.from(byIdentity.values()) };
+      });
     };
 
     const enabledSources = this.props.settings.sources.filter(source => source.isEnabled);
 
     const sourceGroups: Record<ServiceKey, typeof enabledSources> = {
-      exchange: [],
+      exchange: enabledSources.filter(source => source.sourceType === 'exchange'),
       ics: enabledSources.filter(source => source.sourceType === 'ics'),
       sharepoint: enabledSources.filter(source => source.sourceType === 'sharepoint'),
       planner: enabledSources.filter(source => source.sourceType === 'planner'),
       teamsShifts: enabledSources.filter(source => source.sourceType === 'teamsShifts'),
       unifiedGroup: enabledSources.filter(source => source.sourceType === 'unifiedGroup')
     };
+    (Object.keys(sourceGroups) as ServiceKey[]).forEach(service => {
+      sourceGroups[service].forEach(source => this.registerSource(service, source.id));
+    });
 
     const tasks: Array<Promise<void>> = [];
 
     // Load Exchange calendars (user's own calendars)
-    if (enabledServices.indexOf('exchange') >= 0) {
+    if (servicesToLoad.has('exchange')) {
       tasks.push((async () => {
         let hadError = false;
 
         try {
-          const userCalendars = await exchangeService.getCalendars();
+          this.exchangeCalendarsPromise = this.exchangeCalendarsPromise || exchangeService.getCalendars();
+          const userCalendars = await this.exchangeCalendarsPromise;
           const exchangeCalendarStates = this.props.settings.exchangeCalendarStates || {};
+          userCalendars.filter(calendar => exchangeCalendarStates[calendar.id] !== false)
+            .forEach(calendar => registerLoadedSource('exchange', `exchange_${calendar.id}`));
           const calendarPromises = userCalendars
             .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
+            .filter(calendar => !this.areMonthsLoaded(`exchange_${calendar.id}`, requestedMonthKeys))
             .map(async calendar => {
               try {
                 const events = await exchangeService.getCalendarEvents(
@@ -233,9 +433,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                   endDate,
                   undefined // current user
                 );
+                markLoaded(`exchange_${calendar.id}`);
                 return events.map(event => ({
                   ...event,
                   sourceId: `exchange_${calendar.id}`,
+                  sourceDisplayName: calendar.name,
                   colorHex: calendar.hexColor,
                   sourceType: 'exchange' as const,
                   showSourceLogo: this.props.settings.exchangeShowSourceLogo ?? true
@@ -250,8 +452,43 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           const appointmentGroups = await Promise.all(calendarPromises);
           const flattenedAppointments = appointmentGroups.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
           appendAppointments(flattenedAppointments);
+
+          if (sourceGroups.exchange.length > 0) {
+            const manualExchangeAppointments = await Promise.all(sourceGroups.exchange.map(async source => {
+              try {
+                if (!source.exchangeCalendarId || this.areMonthsLoaded(source.id, requestedMonthKeys)) {
+                  return [] as IEvent[];
+                }
+
+                const events = await exchangeService.getCalendarEvents(
+                  source.exchangeCalendarId,
+                  startDate,
+                  endDate,
+                  source.exchangeMailbox
+                );
+                markLoaded(source.id);
+
+                return events.map(event => ({
+                  ...event,
+                  sourceId: source.id,
+                  sourceDisplayName: source.name,
+                  colorHex: source.color,
+                  sourceType: 'exchange' as const,
+                  showSourceLogo: source.showSourceLogo ?? this.props.settings.exchangeShowSourceLogo ?? true
+                } as IEvent));
+              } catch (error) {
+                hadError = true;
+                console.error(`Failed to load Exchange source ${source.name}:`, error);
+                return [] as IEvent[];
+              }
+            }));
+
+            const flattenedManualAppointments = manualExchangeAppointments.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
+            appendAppointments(flattenedManualAppointments);
+          }
         } catch (error) {
           hadError = true;
+          if (currentGeneration === this.loadGeneration) this.exchangeCalendarsPromise = undefined;
           console.error('Failed to load user Exchange calendars:', error);
         }
 
@@ -259,12 +496,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (sourceGroups.sharepoint.length > 0) {
+    if (servicesToLoad.has('sharepoint') && sourceGroups.sharepoint.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         const appointmentsBySource = await Promise.all(sourceGroups.sharepoint.map(async source => {
           try {
-            if (source.sharePointSiteId && source.sharePointListId) {
+            if (source.sharePointSiteId && source.sharePointListId && !this.areMonthsLoaded(source.id, requestedMonthKeys)) {
               const items = await sharePointService.getListEvents(
                 source.sharePointSiteId,
                 source.sharePointListId,
@@ -272,9 +509,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 endDate,
                 source.sharePointFieldMapping
               );
+              markLoaded(source.id);
               return items.map(item => ({
                 ...item,
                 sourceId: source.id,
+                sourceDisplayName: source.name,
                 colorHex: source.color,
                 sourceType: 'sharepoint' as const,
                 showSourceLogo: this.props.settings.sharePointShowSourceLogo ?? true
@@ -294,14 +533,16 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (this.props.settings.plannerShowAllCalendars) {
+    if (servicesToLoad.has('planner') && this.props.settings.plannerShowAllCalendars) {
       tasks.push((async () => {
         let hadError = false;
 
         try {
-          const plans = await plannerService.getUserPlans();
+          this.plannerPlansPromise = this.plannerPlansPromise || plannerService.getUserPlans();
+          const plans = await this.plannerPlansPromise;
           const autoPlannerSources = plans.map(plan => ({
             id: `auto_planner_${plan.id}`,
+            origin: 'user' as const,
             sourceType: 'planner' as const,
             name: plan.title,
             color: this.props.settings.organizationPrimaryColor || '#0078d4',
@@ -312,14 +553,15 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             showCompletedTasks: true,
             showSourceLogo: this.props.settings.plannerShowSourceLogo ?? true
           }));
+          autoPlannerSources.forEach(source => registerLoadedSource('planner', source.id));
 
           const appointmentsBySource = await Promise.all(autoPlannerSources.map(async source => {
             try {
-              if (!source.plannerPlanId) {
+              if (!source.plannerPlanId || this.areMonthsLoaded(source.id, requestedMonthKeys)) {
                 return [] as IEvent[];
               }
 
-              return await plannerService.getTasks(
+              const events = await plannerService.getTasks(
                 source.plannerPlanId,
                 startDate,
                 endDate,
@@ -328,6 +570,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source,
                 this.props.settings.plannerShowSourceLogo ?? true
               );
+              markLoaded(source.id);
+              return events;
             } catch (error) {
               hadError = true;
               console.error(`Failed to load Planner tasks ${source.name}:`, error);
@@ -339,18 +583,19 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           appendAppointments(flattenedAppointments);
         } catch (error) {
           hadError = true;
+          if (currentGeneration === this.loadGeneration) this.plannerPlansPromise = undefined;
           console.error('Failed to load Planner plans for auto mode:', error);
         }
 
         updateStatus('planner', hadError ? 'error' : 'ready', hadError ? 'One or more Planner sources failed.' : undefined);
       })());
-    } else if (sourceGroups.planner.length > 0) {
+    } else if (servicesToLoad.has('planner') && sourceGroups.planner.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         const appointmentsBySource = await Promise.all(sourceGroups.planner.map(async source => {
           try {
-            if (source.plannerPlanId) {
-              return await plannerService.getTasks(
+            if (source.plannerPlanId && !this.areMonthsLoaded(source.id, requestedMonthKeys)) {
+              const events = await plannerService.getTasks(
                 source.plannerPlanId,
                 startDate,
                 endDate,
@@ -359,6 +604,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source,
                 this.props.settings.plannerShowSourceLogo ?? true
               );
+              markLoaded(source.id);
+              return events;
             }
           } catch (error) {
             hadError = true;
@@ -374,11 +621,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (this.props.settings.teamsShiftsShowAllCalendars) {
+    if (servicesToLoad.has('teamsShifts') && this.props.settings.teamsShiftsShowAllCalendars) {
       tasks.push((async () => {
         let hadError = false;
         const autoSource = {
           id: 'auto_teamsShifts',
+          origin: 'user' as const,
           sourceType: 'teamsShifts' as const,
           name: 'Teams Shifts',
           color: this.props.settings.organizationPrimaryColor || '#4a4fbe',
@@ -387,13 +635,17 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         };
 
         try {
-          const events = await teamsShiftsService.getShiftsForJoinedTeams(
-            startDate,
-            endDate,
-            autoSource,
-            this.props.settings.teamsShiftsShowSourceLogo ?? true
-          );
-          appendAppointments(events);
+          registerLoadedSource('teamsShifts', autoSource.id);
+          if (!this.areMonthsLoaded(autoSource.id, requestedMonthKeys)) {
+            const events = await teamsShiftsService.getShiftsForJoinedTeams(
+              startDate,
+              endDate,
+              autoSource,
+              this.props.settings.teamsShiftsShowSourceLogo ?? true
+            );
+            markLoaded(autoSource.id);
+            appendAppointments(events);
+          }
         } catch (error) {
           hadError = true;
           console.error('Failed to load Teams shifts for auto mode:', error);
@@ -401,17 +653,20 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
         updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? 'One or more Teams Shifts sources failed.' : undefined);
       })());
-    } else if (sourceGroups.teamsShifts.length > 0) {
+    } else if (servicesToLoad.has('teamsShifts') && sourceGroups.teamsShifts.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         const appointmentsBySource = await Promise.all(sourceGroups.teamsShifts.map(async source => {
           try {
-            return await teamsShiftsService.getShiftsForJoinedTeams(
+            if (this.areMonthsLoaded(source.id, requestedMonthKeys)) return [] as IEvent[];
+            const events = await teamsShiftsService.getShiftsForJoinedTeams(
               startDate,
               endDate,
               source,
               this.props.settings.teamsShiftsShowSourceLogo ?? true
             );
+            markLoaded(source.id);
+            return events;
           } catch (error) {
             hadError = true;
             console.error(`Failed to load Teams shifts ${source.name}:`, error);
@@ -425,23 +680,27 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
-    if (this.props.settings.unifiedGroupShowAllCalendars) {
+    if (servicesToLoad.has('unifiedGroup') && this.props.settings.unifiedGroupShowAllCalendars) {
       tasks.push((async () => {
         let hadError = false;
 
         try {
-          const [groups, joinedTeamIds] = await Promise.all([
-            unifiedGroupService.getUnifiedGroups(),
-            unifiedGroupService.getJoinedTeamIds()
-          ]);
+          this.unifiedGroupsPromise = this.unifiedGroupsPromise || unifiedGroupService.getUnifiedGroups();
+          this.joinedTeamIdsPromise = this.joinedTeamIdsPromise || unifiedGroupService.getJoinedTeamIds();
+          const [groups, joinedTeamIds] = await Promise.all([this.unifiedGroupsPromise, this.joinedTeamIdsPromise]);
+          groups.forEach(group => registerLoadedSource('unifiedGroup', `auto_unifiedGroup_${group.id}`));
 
           const appointmentsByGroup = await Promise.all(groups.map(async group => {
             try {
+              const sourceId = `auto_unifiedGroup_${group.id}`;
+              if (this.areMonthsLoaded(sourceId, requestedMonthKeys)) return [] as IEvent[];
               const iconName = joinedTeamIds.has(group.id) ? 'TeamsLogo' : 'Group';
               const events = await unifiedGroupService.getGroupEvents(group.id, startDate, endDate);
+              markLoaded(sourceId);
               return events.map(event => ({
                 ...event,
                 sourceId: `auto_unifiedGroup_${group.id}`,
+                sourceDisplayName: group.displayName,
                 colorHex: this.props.settings.organizationPrimaryColor || '#5b5fc7',
                 sourceType: 'unifiedGroup' as const,
                 showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
@@ -458,34 +717,42 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           appendAppointments(flattenedAppointments);
         } catch (error) {
           hadError = true;
+          if (currentGeneration === this.loadGeneration) {
+            this.unifiedGroupsPromise = undefined;
+            this.joinedTeamIdsPromise = undefined;
+          }
           console.error('Failed to load group calendars for auto mode:', error);
         }
 
         updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? 'One or more group calendars failed.' : undefined);
       })());
-    } else if (sourceGroups.unifiedGroup.length > 0) {
+    } else if (servicesToLoad.has('unifiedGroup') && sourceGroups.unifiedGroup.length > 0) {
       tasks.push((async () => {
         let hadError = false;
         let joinedTeamIds: Set<string> = new Set();
 
         try {
-          joinedTeamIds = await unifiedGroupService.getJoinedTeamIds();
+          this.joinedTeamIdsPromise = this.joinedTeamIdsPromise || unifiedGroupService.getJoinedTeamIds();
+          joinedTeamIds = await this.joinedTeamIdsPromise;
         } catch (error) {
           hadError = true;
+          if (currentGeneration === this.loadGeneration) this.joinedTeamIdsPromise = undefined;
           console.error('Failed to load joined Teams for group calendars:', error);
         }
 
         const appointmentsBySource = await Promise.all(sourceGroups.unifiedGroup.map(async source => {
           try {
-            if (!source.groupId) {
+            if (!source.groupId || this.areMonthsLoaded(source.id, requestedMonthKeys)) {
               return [] as IEvent[];
             }
 
             const iconName = joinedTeamIds.has(source.groupId) ? 'TeamsLogo' : 'Group';
             const events = await unifiedGroupService.getGroupEvents(source.groupId, startDate, endDate);
+            markLoaded(source.id);
             return events.map(event => ({
               ...event,
               sourceId: source.id,
+              sourceDisplayName: source.name,
               colorHex: source.color,
               sourceType: 'unifiedGroup' as const,
               showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
@@ -504,6 +771,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       })());
     }
 
+    if (servicesToLoad.has('ics')) {
+      sourceGroups.ics.forEach(source => markLoaded(source.id));
+      updateStatus('ics', 'ready');
+    }
     await Promise.all(tasks.map(task => task.catch(() => undefined)));
 
     if (loadId === this.activeLoadId) {
@@ -517,26 +788,18 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   private handleDateChange = (date: Date): void => {
-    this.setState({ currentDate: date });
+    this.setState({ currentDate: date }, () => {
+      this.ensureVisibleRange(date).catch(err => console.error('Failed to load visible range:', err));
+    });
   };
 
   private handleViewChange = (view: CalendarViewType): void => {
     if (view !== 'search') {
-      this.setState({ currentView: view, previousView: view });
-      
-      const newSettings = { ...this.props.settings, defaultView: view };
-      this.debouncedSettingsChange(newSettings);
+      this.setState({ currentView: view, previousView: view }, () => {
+        this.ensureVisibleRange(this.state.currentDate, view).catch(err => console.error('Failed to load visible range:', err));
+      });
+      this.props.onDefaultViewChange(view);
     }
-  };
-
-  private debouncedSettingsChange = (settings: import('../models/ICalendarSettings').ICalendarSettings): void => {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-    
-    this.debounceTimer = window.setTimeout(() => {
-      this.props.onSettingsChange(settings);
-    }, 500);
   };
 
   private navigateDate = (direction: 'prev' | 'next'): void => {
@@ -548,14 +811,23 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
         break;
       case 'week':
-        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+        if (this.props.settings.showWeekends) {
+          newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+        } else {
+          const step = direction === 'next' ? 1 : -1;
+          let remaining = 5;
+          while (remaining > 0) {
+            newDate.setDate(newDate.getDate() + step);
+            if (newDate.getDay() !== 0 && newDate.getDay() !== 6) remaining--;
+          }
+        }
         break;
       case 'month':
         newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
         break;
     }
 
-    this.setState({ currentDate: newDate });
+    this.handleDateChange(newDate);
   };
 
   private getCommandBarItems = (): ICommandBarItemProps[] => {
@@ -584,7 +856,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       key: 'refresh',
       iconProps: { iconName: 'Refresh' },
       onClick: () => {
-        this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
+        this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
       }
     };
 
@@ -639,10 +911,17 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       {
         key: 'settings',
         iconProps: { iconName: 'Settings' },
-        onClick: () => this.setState({ isSettingsPanelOpen: true })
+        onClick: this.openSettingsPanel
       },
       showRefreshButton ? refreshItem : loadingStatusItem
     ];
+  };
+
+  private openSettingsPanel = (): void => {
+    if (this.props.context.propertyPane.isPropertyPaneOpen()) {
+      this.props.context.propertyPane.close();
+    }
+    this.setState({ isSettingsPanelOpen: true });
   };
 
   private getEnabledServiceKeys(): ServiceKey[] {
@@ -755,11 +1034,19 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         return currentDate.toLocaleDateString(undefined, { ...options, day: 'numeric' });
       case 'week': {
         const weekStart = new Date(currentDate);
-        const day = weekStart.getDay();
-        const diff = day === 0 ? -6 : 1 - day;
-        weekStart.setDate(weekStart.getDate() + diff);
+        if (!this.props.settings.showWeekends) {
+          while (weekStart.getDay() === 0 || weekStart.getDay() === 6) weekStart.setDate(weekStart.getDate() + 1);
+        }
         const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
+        if (this.props.settings.showWeekends) {
+          weekEnd.setDate(weekStart.getDate() + 6);
+        } else {
+          let remaining = 4;
+          while (remaining > 0) {
+            weekEnd.setDate(weekEnd.getDate() + 1);
+            if (weekEnd.getDay() !== 0 && weekEnd.getDay() !== 6) remaining--;
+          }
+        }
         return `${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
       }
       case 'month':
@@ -775,11 +1062,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   private renderCalendarView(): React.ReactElement {
-    const { appointments, currentDate, currentView, previousView, isLoading, usePnpCalendar } = this.state;
+    const { appointments, currentDate, currentView, previousView } = this.state;
     const { settings } = this.props;
 
-    const startHour = settings.userStartHour !== undefined ? settings.userStartHour : settings.startHour;
-    const endHour = settings.userEndHour !== undefined ? settings.userEndHour : settings.endHour;
+    const preferredStartMinutes = settings.userPreferredStartMinutes ?? settings.preferredStartMinutes;
+    const visibleHourCount = settings.userVisibleHourCount ?? settings.visibleHourCount;
 
     // While search is active keep rendering the last calendar layout so it
     // stays mounted and appears instantly when the user clears the query.
@@ -788,32 +1075,20 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const calendarViewProps = {
       appointments,
       currentDate,
-      onDateChange: this.handleDateChange,
-      isLoading,
-      startHour,
-      endHour,
+      preferredStartMinutes,
+      visibleHourCount,
+      slotDurationMinutes: settings.slotDurationMinutes,
       showWeekends: settings.showWeekends
-    };
-
-    const scheduleViewProps = {
-      ...calendarViewProps,
-      slotDuration: settings.slotDuration
     };
 
     switch (displayView) {
       case 'day':
-        return usePnpCalendar
-          ? <CommunityCalendarView {...calendarViewProps} viewType="day" />
-          : <DayView {...scheduleViewProps} />;
+        return <DayView {...calendarViewProps} />;
       case 'week':
-        return usePnpCalendar
-          ? <CommunityCalendarView {...calendarViewProps} viewType="week" />
-          : <WeekView {...scheduleViewProps} />;
+        return <WeekView {...calendarViewProps} />;
       case 'month':
       default:
-        return usePnpCalendar
-          ? <CommunityCalendarView {...calendarViewProps} viewType="month" />
-          : <MonthView {...scheduleViewProps} />;
+        return <MonthView appointments={appointments} currentDate={currentDate} />;
     }
   }
 
@@ -888,11 +1163,22 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           className={styles.commandBar}
           style={{padding:0}}
         />
+        {!isSearchMode && (
+          <CalendarToolbar
+            currentDate={this.state.currentDate}
+            currentView={this.state.previousView}
+            dateRangeText={this.getDateRangeText()}
+            onToday={() => this.handleDateChange(new Date())}
+            onNavigate={this.navigateDate}
+            onDateChange={this.handleDateChange}
+            onViewChange={this.handleViewChange}
+          />
+        )}
         <div className={styles.calendarContainer}>
           {/*
             Keep the calendar mounted at all times (hidden via CSS when searching).
-            This prevents the remount cost when clearing a search query, which was
-            causing noticeable lag before the PnP calendar became interactive again.
+            This prevents the remount cost when clearing a search query and preserves
+            the active view's scroll position.
           */}
           <div style={{ display: isSearchMode ? 'none' : 'block' }}>
             {this.renderCalendarView()}

@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../../models/ICalendarEvent';
 import { Icon } from '@fluentui/react/lib/Icon';
-import styles from './CalendarView.module.scss';
-import { getSourceIcon } from '../../utils/sourceIconHelper';
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
+import { getSourceIconName } from '../../utils/sourceIconHelper';
 
 export interface ISearchResultsViewProps {
   appointments: IEvent[];
@@ -22,6 +22,68 @@ interface ISearchResultAppointment {
   startTimeLabel: string;
   durationLabel: string;
 }
+
+const styles = mergeStyleSets({
+  scheduleView: {
+    width: '100%',
+    height: '100%',
+    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box',
+    maxWidth: 900,
+    margin: '0 auto'
+  },
+  noAppointments: {
+    textAlign: 'center',
+    padding: '40px 20px',
+    color: 'var(--neutralSecondary, #605e5c)',
+    fontSize: 14
+  },
+  scheduleDay: {
+    marginBottom: 32
+  },
+  scheduleDate: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottom: '2px solid var(--neutralLight, #edebe9)'
+  },
+  scheduleDayName: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: 'var(--neutralPrimary, #323130)'
+  },
+  scheduleAppointments: {
+    display: 'flex',
+    flexDirection: 'column',
+    rowGap: 12
+  },
+  scheduleAppointment: {
+    padding: '14px 16px',
+    borderRadius: 6,
+    borderLeft: '5px solid',
+    backgroundColor: 'var(--white, #ffffff)',
+    boxSizing: 'border-box'
+  },
+  appointmentTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: 'var(--neutralPrimary, #323130)',
+    marginBottom: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0
+  },
+  appointmentTime: {
+    fontSize: 12,
+    color: 'var(--neutralSecondary, #605e5c)',
+    marginBottom: 4
+  }
+});
 
 export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
   const { appointments, isLoading, searchQuery } = props;
@@ -155,8 +217,8 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div className={styles.appointmentTitle}>
-                        {apt.showSourceLogo && apt.sourceType && (
-                          <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
+                        {apt.showSourceLogo !== false && (
+                          <Icon iconName={getSourceIconName(apt.sourceType, apt.sourceIconName)} style={{ marginRight: 4, fontSize: 12 }} />
                         )}
                         <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
                       </div>

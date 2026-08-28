@@ -1,217 +1,83 @@
 import * as React from 'react';
-import { Icon } from '@fluentui/react/lib/Icon';
-import styles from './CalendarView.module.scss';
-import { ICalendarViewProps } from './DayView';
-import { getSourceIcon } from '../../utils/sourceIconHelper';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent } from '../../models/ICalendarEvent';
+import { EventDetailsDialog } from './EventDetailsDialog';
+import { ALL_DAY_SECTION_HEIGHT, TimelineDay } from './TimelineDay';
+import { addLocalDays, isToday, minutesToTimelinePixels } from './calendarUtils';
 
-export const WeekView: React.FC<ICalendarViewProps> = (props) => {
-  const { appointments, currentDate, startHour, endHour, showWeekends } = props;
-  const weekGridRef = React.useRef<HTMLDivElement>(null);
-  const [pixelsPerMinute, setPixelsPerMinute] = React.useState(1);
+export interface IWeekViewProps {
+  appointments: ICalendarEvent[];
+  currentDate: Date;
+  preferredStartMinutes: number;
+  visibleHourCount: number;
+  slotDurationMinutes: 15 | 30 | 60;
+  showWeekends: boolean;
+}
 
-  const getWeekDays = (): Date[] => {
-    const days: Date[] = [];
-    const startOfWeek = new Date(currentDate);
-    const day = startOfWeek.getDay();
-    const diff = day === 0 ? -6 : 1 - day; // Monday = 1
-    startOfWeek.setDate(startOfWeek.getDate() + diff);
-
-    for (let i = 0; i < (showWeekends ? 7 : 5); i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      days.push(date);
-    }
-    return days;
-  };
-
-  const weekDays = getWeekDays();
-  const hours: number[] = [];
-  for (let h = startHour; h < endHour; h++) {
-    hours.push(h);
+function getVisibleDays(start: Date, showWeekends: boolean): Date[] {
+  if (showWeekends) return Array.from({ length: 7 }, (_, index) => addLocalDays(start, index));
+  const result: Date[] = [];
+  let offset = 0;
+  while (result.length < 5) {
+    const day = addLocalDays(start, offset++);
+    if (day.getDay() !== 0 && day.getDay() !== 6) result.push(day);
   }
+  return result;
+}
 
-  React.useLayoutEffect(() => {
-    if (!weekGridRef.current) {
-      return;
-    }
+export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes, showWeekends }) => {
+  const days = React.useMemo(() => getVisibleDays(currentDate, showWeekends), [currentDate, showWeekends]);
+  const scrollRefs = React.useRef<Array<HTMLDivElement | null>>([]);
+  const syncingRef = React.useRef(false);
+  const restoreFocusRef = React.useRef<HTMLElement>();
+  const [selectedEvent, setSelectedEvent] = React.useState<ICalendarEvent>();
 
-    const timer = setTimeout(() => {
-      if (!weekGridRef.current) {
-        return;
-      }
+  React.useEffect(() => {
+    const scrollTop = minutesToTimelinePixels(preferredStartMinutes);
+    scrollRefs.current.forEach(element => { if (element) element.scrollTop = scrollTop; });
+  }, [currentDate, preferredStartMinutes, showWeekends]);
 
-      const hourLines = weekGridRef.current.querySelectorAll(`.${styles.hourBorderLine}`) as NodeListOf<HTMLElement>;
-      if (hourLines.length >= 2) {
-        const firstTop = hourLines[0].getBoundingClientRect().top;
-        const secondTop = hourLines[1].getBoundingClientRect().top;
-        const hourHeight = secondTop - firstTop;
-        setPixelsPerMinute(hourHeight / 60);
-        return;
-      }
-
-      const firstHourLine = hourLines[0];
-      const fallbackHeight = firstHourLine?.offsetHeight ?? 60;
-      setPixelsPerMinute(fallbackHeight / 60);
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [startHour, endHour, showWeekends]);
-
-  // Helper function to check if appointment is all-day (starts at 00:00 or spans entire day)
-  const isAllDayAppointment = (apt: IEvent): boolean => {
-    const start = new Date(apt.start);
-    const end = new Date(apt.end);
-    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    // Consider it all-day if it's 12+ hours or starts at midnight and longer than 4 hours
-    return durationHours >= 12 || (start.getHours() === 0 && start.getMinutes() === 0 && durationHours > 4);
+  const synchronize = (sourceIndex: number): void => {
+    if (syncingRef.current) return;
+    const source = scrollRefs.current[sourceIndex];
+    if (!source) return;
+    syncingRef.current = true;
+    scrollRefs.current.forEach((element, index) => {
+      if (element && index !== sourceIndex && element.scrollTop !== source.scrollTop) element.scrollTop = source.scrollTop;
+    });
+    window.requestAnimationFrame(() => { syncingRef.current = false; });
   };
 
-  // Check if any day in the week has all-day appointments
-  const hasAnyAllDayAppointments = weekDays.some(day => {
-    const dayAppointments = appointments.filter(apt => {
-      const aptDate = new Date(apt.start);
-      return aptDate.getDate() === day.getDate() &&
-             aptDate.getMonth() === day.getMonth() &&
-             aptDate.getFullYear() === day.getFullYear();
-    });
-    return dayAppointments.some(isAllDayAppointment);
-  });
+  const dismiss = (): void => {
+    setSelectedEvent(undefined);
+    window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
+  };
 
   return (
-    <div className={styles.weekView}>
-      <div className={styles.weekGrid} ref={weekGridRef}>
-        <div className={styles.timeColumn}>
-          <div className={styles.dayHeader} />
-          {/* Placeholder for all-day section to keep alignment */}
-          {hasAnyAllDayAppointments && (
-            <div className={styles.allDayPlaceholder} />
-          )}
-          <div className={styles.timeColumnSlots}>
-            {hours.map(hour => {
-              const displayHour = hour === 0 ? 0 : hour;
-              const hourStr = displayHour.toString().length === 1 ? `0${displayHour}:00` : `${displayHour}:00`;
-              return (
-                <div key={hour} className={styles.hourLabel}>
-                  {hourStr}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {weekDays.map((day, dayIdx) => {
-          const dayAppointments = appointments.filter(apt => {
-            const aptDate = new Date(apt.start);
-            return aptDate.getDate() === day.getDate() &&
-                   aptDate.getMonth() === day.getMonth() &&
-                   aptDate.getFullYear() === day.getFullYear();
-          });
-          
-          const allDayAppointments = dayAppointments.filter(isAllDayAppointment);
-          const timedAppointments = dayAppointments.filter(apt => !isAllDayAppointment(apt));
-          
-          const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-          const isToday = day.getDate() === currentDate.getDate() &&
-            day.getMonth() === currentDate.getMonth() &&
-            day.getFullYear() === currentDate.getFullYear();
-          const dayColumnClassName = `${styles.dayColumn} ${isWeekend ? styles.weekendColumn : ''} ${isToday ? styles.todayColumn : ''}`;
-          const dayHeaderClassName = `${styles.dayHeader} ${isToday ? styles.todayHeader : ''}`;
-
-          return (
-            <div key={dayIdx} className={dayColumnClassName}>
-              <div className={dayHeaderClassName}>
-                <div className={styles.dayName}>{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>
-                <div className={styles.dayNumber}>{day.getDate()}</div>
-              </div>
-              {/* Always render all-day section for consistent alignment */}
-              {hasAnyAllDayAppointments && (
-                <div className={styles.allDaySection}>
-                  {allDayAppointments.map(apt => (
-                    <div
-                      key={apt.id}
-                      className={styles.allDayAppointment}
-                      style={{
-                        backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
-                        borderLeftColor: apt.colorHex ?? '#0078d4'
-                      }}
-                      title={apt.title}
-                    >
-                      <div className={styles.appointmentTitle}>
-                        {apt.showSourceLogo && apt.sourceType && (
-                          <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
-                        )}
-                        <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className={styles.daySlotsWrapper}>
-                {/* Absolute layer for hour borders */}
-                <div className={styles.hourBorders}>
-                  {hours.map(hour => (
-                    <div key={`border-${hour}`} className={styles.hourBorderLine} />
-                  ))}
-                </div>
-                {/* Grid for hour slots */}
-                <div className={styles.daySlots}>
-                  {hours.map(hour => (
-                    <div key={hour} className={styles.hourSlot} />
-                  ))}
-                </div>
-                {/* Appointments layer with absolute positioning */}
-                <div className={styles.appointmentsLayer}>
-                  {timedAppointments.map(apt => {
-                    const aptStartDate = new Date(apt.start);
-                    const aptEndDate = new Date(apt.end);
-                    const aptStartHour = aptStartDate.getHours();
-                    const aptStartMinutes = aptStartDate.getMinutes();
-                    const aptEndHour = aptEndDate.getHours();
-                    const aptEndMinutes = aptEndDate.getMinutes();
-                    
-                    // Calculate position from the start of visible hours (startHour prop)
-                    const minutesFromViewStart = (aptStartHour - startHour) * 60 + aptStartMinutes;
-                    const minutesFromViewEnd = (aptEndHour - startHour) * 60 + aptEndMinutes;
-                    const durationMinutes = minutesFromViewEnd - minutesFromViewStart;
-                    
-                    // Position from the top of the day slots using measured hour height
-                    const topPosition = minutesFromViewStart * pixelsPerMinute;
-                    const height = durationMinutes * pixelsPerMinute;
-                    
-                    return (
-                      <div
-                        key={apt.id}
-                        className={styles.appointment}
-                        style={{
-                          position: 'absolute',
-                          top: `${topPosition}px`,
-                          height: `${height}px`,
-                          left: '4px',
-                          right: '4px',
-                          backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 20%, transparent)`,
-                          borderLeftColor: apt.colorHex ?? '#0078d4'
-                        }}
-                        title={`${apt.title} (${aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${aptEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
-                      >
-                        <div className={styles.appointmentTitle}>
-                          {apt.showSourceLogo && apt.sourceType && (
-                            <Icon iconName={apt.sourceIconName ?? getSourceIcon(apt.sourceType)} style={{ marginRight: 4, fontSize: 12 }} />
-                          )}
-                          <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
-                        </div>
-                        <div className={styles.appointmentTime}>
-                          {aptStartDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+    <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8, minWidth: 'max-content' }}>
+        {days.map((day, index) => (
+          <section key={day.getTime()} style={{ width: 300, border: '1px solid var(--neutralLight, #edebe9)', borderRadius: 5, overflow: 'hidden', background: 'var(--white, #fff)' }}>
+            <header style={{ padding: '9px 10px', borderBottom: '1px solid var(--neutralLight, #edebe9)', background: isToday(day) ? 'var(--themeLighterAlt, #eff6fc)' : 'var(--white, #fff)' }}>
+              <div style={{ fontSize: 12, color: 'var(--neutralSecondary, #605e5c)', textTransform: 'capitalize' }}>{day.toLocaleDateString(undefined, { weekday: 'long' })}</div>
+              <div style={{ fontSize: 18, fontWeight: 600 }}>{day.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
+            </header>
+            <div
+              ref={element => { scrollRefs.current[index] = element; }}
+              onScroll={() => synchronize(index)}
+              style={{ height: Math.min(24, Math.max(1, visibleHourCount)) * 60 + ALL_DAY_SECTION_HEIGHT, overflowY: 'auto', overflowX: 'hidden' }}
+            >
+              <TimelineDay
+                day={day}
+                events={appointments}
+                slotDurationMinutes={slotDurationMinutes}
+                compact
+                onSelectEvent={(event, focusElement) => { restoreFocusRef.current = focusElement; setSelectedEvent(event); }}
+              />
             </div>
-          );
-        })}
+          </section>
+        ))}
       </div>
+      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} />
     </div>
   );
 };
-

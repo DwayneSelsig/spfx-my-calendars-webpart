@@ -1,5 +1,5 @@
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
 
 interface IGraphTeam {
@@ -34,6 +34,7 @@ interface IGraphShift {
 export class TeamsShiftsService {
   private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | undefined;
+  private joinedTeamsPromise?: Promise<IGraphTeam[]>;
 
   constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
     this.httpClient = httpClient;
@@ -57,11 +58,14 @@ export class TeamsShiftsService {
     showSourceLogo: boolean = true
   ): Promise<IEvent[]> {
     if (!this.graphClient) {
-      console.error('GraphClient not initialized');
-      return [];
+      throw new Error('GraphClient not initialized');
     }
 
-    const teams = await this.getJoinedTeams();
+    this.joinedTeamsPromise = this.joinedTeamsPromise || this.getJoinedTeams().catch(error => {
+      this.joinedTeamsPromise = undefined;
+      throw error;
+    });
+    const teams = await this.joinedTeamsPromise;
     if (teams.length === 0) {
       return [];
     }
@@ -86,8 +90,7 @@ export class TeamsShiftsService {
   private async getJoinedTeams(): Promise<IGraphTeam[]> {
     try {
       if (!this.graphClient) {
-        console.error('GraphClient not initialized');
-        return [];
+        throw new Error('GraphClient not initialized');
       }
 
       const teams: IGraphTeam[] = [];
@@ -106,15 +109,14 @@ export class TeamsShiftsService {
       return teams;
     } catch (error) {
       console.error('Error fetching joined Teams:', error);
-      return [];
+      throw error;
     }
   }
 
   private async getTeamShifts(teamId: string, startDate: Date, endDate: Date): Promise<IGraphShift[]> {
     try {
       if (!this.graphClient) {
-        console.error('GraphClient not initialized');
-        return [];
+        throw new Error('GraphClient not initialized');
       }
 
       const shifts: IGraphShift[] = [];
@@ -136,10 +138,9 @@ export class TeamsShiftsService {
       const message = (error as { message?: string }).message || '';
       const isNotFound = statusCode === 404 || message.includes('TeamNotFound');
 
-      if (!isNotFound) {
-        console.error(`Error fetching shifts for team ${teamId}:`, error);
-      }
-      return [];
+      if (isNotFound) return [];
+      console.error(`Error fetching shifts for team ${teamId}:`, error);
+      throw error;
     }
   }
 
@@ -150,8 +151,8 @@ export class TeamsShiftsService {
       const draftStart = shift.draftShift?.startDateTime ? new Date(shift.draftShift.startDateTime) : undefined;
       const draftEnd = shift.draftShift?.endDateTime ? new Date(shift.draftShift.endDateTime) : undefined;
 
-      const sharedInRange = sharedStart && sharedEnd && sharedStart >= startDate && sharedEnd <= endDate;
-      const draftInRange = draftStart && draftEnd && draftStart >= startDate && draftEnd <= endDate;
+      const sharedInRange = sharedStart && sharedEnd && sharedStart < endDate && sharedEnd > startDate;
+      const draftInRange = draftStart && draftEnd && draftStart < endDate && draftEnd > startDate;
 
       return !!sharedInRange || !!draftInRange;
     });
@@ -230,6 +231,7 @@ export class TeamsShiftsService {
       end: normalizedEnd.toISOString(),
       isFullDay: isAllDay,
       sourceId: source.id,
+      sourceDisplayName: source.name,
       colorHex: this.mapThemeToColor(shiftItem.theme) || source.color,
       sourceType: 'teamsShifts',
       showSourceLogo,

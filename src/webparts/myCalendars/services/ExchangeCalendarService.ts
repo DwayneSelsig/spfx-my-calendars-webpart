@@ -1,5 +1,5 @@
 import { HttpClient } from '@microsoft/sp-http';
-import { IEvent } from '@pnp/spfx-controls-react/lib/controls/calendar/models/IEvents';
+import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
@@ -33,6 +33,7 @@ interface IGraphEvent {
   isReminderOn: boolean;
   isAllDay?: boolean;
   isOnlineMeeting?: boolean;
+  onlineMeeting?: { joinUrl?: string };
   webLink?: string;
   location?: { displayName: string };
   organizer?: { emailAddress: { name?: string; address?: string } };
@@ -112,8 +113,7 @@ export class ExchangeCalendarService {
   public async getCalendars(mailbox?: string): Promise<IExchangeCalendar[]> {
     try {
       if (!this.graphClient) {
-        console.error('GraphClient not initialized');
-        return [];
+        throw new Error('GraphClient not initialized');
       }
 
       console.log('Fetching Exchange calendars...');
@@ -141,7 +141,7 @@ export class ExchangeCalendarService {
       }));
     } catch (error) {
       console.error('Error fetching Exchange calendars:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -160,35 +160,34 @@ export class ExchangeCalendarService {
   ): Promise<IEvent[]> {
     try {
       if (!this.graphClient) {
-        console.error('GraphClient not initialized');
-        return [];
+        throw new Error('GraphClient not initialized');
       }
 
       const endpoint = mailbox
-        ? `/users/${encodeURIComponent(mailbox)}/calendars/${calendarId}/events`
-        : `/me/calendars/${calendarId}/events`;
+        ? `/users/${encodeURIComponent(mailbox)}/calendars/${calendarId}/calendarView`
+        : `/me/calendars/${calendarId}/calendarView`;
 
       // Filter by date range
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
 
       const mailboxSettings = await UserHelper.getCurrentUserMailboxSettings(this.graphClient);
-      const userTimeZone = mailboxSettings?.timeZone || 'UTC';
       console.log('[ExchangeCalendarService] Timezone debug', {
         calendarId,
         mailbox: mailbox || 'me',
         graphTimeZone: mailboxSettings?.timeZone || null,
-        appliedTimeZone: userTimeZone,
+        appliedTimeZone: 'UTC',
         startISO,
         endISO
       });
 
       const data = await this.graphClient
         .api(endpoint)
-        .header('Prefer', `outlook.timezone="${userTimeZone}"`)
+        .header('Prefer', 'outlook.timezone="UTC"')
         .query({
-          $filter: `start/dateTime ge '${startISO}' and end/dateTime le '${endISO}'`,
-          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,webLink,location,organizer,attendees',
+          startDateTime: startISO,
+          endDateTime: endISO,
+          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees',
           $top: 500
         })
         .get();
@@ -199,7 +198,7 @@ export class ExchangeCalendarService {
       return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail));
     } catch (error) {
       console.error('Error fetching Exchange calendar events:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -207,8 +206,8 @@ export class ExchangeCalendarService {
    * Map Microsoft Graph event to IEvent
    */
   private mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string): IEvent {
-    const startISO = ExchangeCalendarService.toSafeISOString(graphEvent.start.dateTime, graphEvent.start.date);
-    const endISO = ExchangeCalendarService.toSafeISOString(graphEvent.end.dateTime, graphEvent.end.date);
+    const startISO = ExchangeCalendarService.toSafeISOString(graphEvent.start.dateTime, graphEvent.start.date, graphEvent.isAllDay);
+    const endISO = ExchangeCalendarService.toSafeISOString(graphEvent.end.dateTime, graphEvent.end.date, graphEvent.isAllDay);
     const organizerEmail = graphEvent.organizer?.emailAddress?.address;
 
     // Map attendees excluding the organizer
@@ -230,11 +229,16 @@ export class ExchangeCalendarService {
       description: graphEvent.bodyPreview || '',
       location: graphEvent.location?.displayName || undefined,
       isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail),
+      organizer: {
+        name: graphEvent.organizer?.emailAddress?.name,
+        email: organizerEmail
+      },
       attendees: mappedAttendees,
       sourceId: '', // Will be set by caller
       color: undefined, // Will be set by caller
       // Extended properties
       isOnlineMeeting: graphEvent.isOnlineMeeting || false,
+      joinUrl: graphEvent.onlineMeeting?.joinUrl || undefined,
       webLink: graphEvent.webLink || undefined
     };
   }
@@ -257,23 +261,22 @@ export class ExchangeCalendarService {
 
   /**
    * Normalises a Graph date value to a valid ISO string.
-   * Graph all-day events supply only a date string ("2026-03-25") without a
-   * time component; anchoring to noon UTC prevents timezone-boundary drift
-   * and avoids the RangeError: Invalid time value that toISOString() throws
-   * on an Invalid Date.
+   * All-day dates become local midnights so Graph's exclusive end date stays
+   * on the intended local calendar boundary. Timed values are requested in UTC.
    */
-  private static toSafeISOString(dateTime: string | undefined, dateOnly: string | undefined): string {
+  private static toSafeISOString(dateTime: string | undefined, dateOnly: string | undefined, isAllDay?: boolean): string {
     const raw = dateTime || dateOnly;
     if (!raw) {
-      return new Date().toISOString();
+      throw new Error('Exchange event has no usable date.');
     }
-    // Date-only value (e.g. "2026-03-25"): anchor to noon UTC so it is
-    // treated as an all-day event regardless of the viewer's local timezone.
-    const normalized = raw.includes('T') ? raw : `${raw}T12:00:00.000Z`;
+    if (isAllDay || !raw.includes('T')) {
+      const parts = raw.substring(0, 10).split('-').map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2]).toISOString();
+    }
+    const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(raw) ? raw : `${raw}Z`;
     const d = new Date(normalized);
     if (isNaN(d.getTime())) {
-      console.warn('[ExchangeCalendarService] Unparseable date value, falling back to now:', raw);
-      return new Date().toISOString();
+      throw new Error(`Exchange event has an invalid date: ${raw}`);
     }
     return d.toISOString();
   }

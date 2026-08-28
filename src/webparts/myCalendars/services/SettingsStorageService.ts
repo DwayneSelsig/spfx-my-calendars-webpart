@@ -1,14 +1,15 @@
 import { MSGraphClientFactory, MSGraphClientV3 } from '@microsoft/sp-http';
-import { ICalendarSettings } from '../models/ICalendarSettings';
+import type { ILegacyCalendarSettings, IUserCalendarSettings } from '../models/ICalendarSettings';
+import { normalizeUserCalendarSettings } from './CalendarSettingsService';
 
 /**
- * Service to persist calendar settings to OneDrive's App Folder
- * Uses Files.ReadWrite.AppFolder permission scope
- * https://learn.microsoft.com/en-us/graph/onedrive-sharepoint-appfolder
+ * Stores user settings in the OneDrive App Folder.
+ * Uses Files.ReadWrite.AppFolder permission scope.
  */
 export class SettingsStorageService {
   private readonly APP_FOLDER_NAME = 'SPFx-My-Calendar-Webpart';
-  private readonly SETTINGS_FILE = 'calendar-settings.json';
+  private readonly USER_SETTINGS_FILE = 'user-calendar-settings.json';
+  private readonly LEGACY_SETTINGS_FILE = 'calendar-settings.json';
   private graphClientFactory: MSGraphClientFactory;
 
   constructor(graphClientFactory: MSGraphClientFactory) {
@@ -45,76 +46,73 @@ export class SettingsStorageService {
     }
   }
 
-  /**
-   * Save settings to App Folder
-   */
-  public async saveSettings(settings: ICalendarSettings): Promise<boolean> {
+  private async readJsonFile<T>(fileName: string): Promise<T | undefined> {
     try {
-      await this.ensureAppFolderExists();
-      const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${this.SETTINGS_FILE}:/content`;
+      const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${fileName}:/content`;
       const client = await this.getGraphClient();
-
-      console.log('Saving settings to App Folder:', appFolderPath);
-
-      await client
-        .api(appFolderPath)
-        .header('Content-Type', 'application/json')
-        .put(settings);
-
-      console.log('Settings saved successfully');
-      return true;
-    } catch (error) {
-      console.error('Error saving settings to App Folder:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Load settings from App Folder
-   */
-  public async loadSettings(): Promise<ICalendarSettings | undefined> {
-    try {
-      const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${this.SETTINGS_FILE}:/content`;
-      const client = await this.getGraphClient();
-
-      console.log('Loading settings from App Folder:', appFolderPath);
-
-      const data = await client
-        .api(appFolderPath)
-        .get();
-
-      console.log('Settings loaded successfully:', data);
-      return data as ICalendarSettings;
+      const data = await client.api(appFolderPath).get();
+      return data as T;
     } catch (error) {
       if (this.isNotFoundError(error)) {
-        console.log('Settings file not found, using defaults');
         return undefined;
       }
-      console.error('Error loading settings from App Folder:', error);
+      console.error(`Error loading ${fileName} from App Folder:`, error);
       return undefined;
     }
   }
 
-  /**
-   * Delete settings file from App Folder
-   */
-  public async deleteSettings(): Promise<boolean> {
+  private async writeJsonFile(fileName: string, data: unknown): Promise<boolean> {
     try {
-      const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${this.SETTINGS_FILE}:`;
+      await this.ensureAppFolderExists();
+      const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${fileName}:/content`;
       const client = await this.getGraphClient();
 
-      await client.api(appFolderPath).delete();
+      await client
+        .api(appFolderPath)
+        .header('Content-Type', 'application/json')
+        .put(data);
 
-      console.log('Settings deleted successfully');
       return true;
     } catch (error) {
-      if (this.isNotFoundError(error)) {
-        console.log('Settings already deleted or not found');
-        return true;
-      }
-      console.error('Error deleting settings:', error);
+      console.error(`Error saving ${fileName} to App Folder:`, error);
       return false;
     }
   }
-}
 
+  private async deleteJsonFile(fileName: string): Promise<boolean> {
+    try {
+      const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${fileName}:`;
+      const client = await this.getGraphClient();
+      await client.api(appFolderPath).delete();
+      return true;
+    } catch (error) {
+      if (this.isNotFoundError(error)) {
+        return true;
+      }
+      console.error(`Error deleting ${fileName} from App Folder:`, error);
+      return false;
+    }
+  }
+
+  public async saveUserSettings(settings: IUserCalendarSettings): Promise<boolean> {
+    return this.writeJsonFile(this.USER_SETTINGS_FILE, settings);
+  }
+
+  public async loadUserSettings(): Promise<IUserCalendarSettings | undefined> {
+    const data = await this.readJsonFile<unknown>(this.USER_SETTINGS_FILE);
+    return normalizeUserCalendarSettings(data);
+  }
+
+  public async loadLegacySettings(): Promise<ILegacyCalendarSettings | undefined> {
+    return this.readJsonFile<ILegacyCalendarSettings>(this.LEGACY_SETTINGS_FILE);
+  }
+
+  public async deleteUserSettings(): Promise<boolean> {
+    const [deletedCurrent, deletedLegacy] = await Promise.all([
+      this.deleteJsonFile(this.USER_SETTINGS_FILE),
+      this.deleteJsonFile(this.LEGACY_SETTINGS_FILE)
+    ]);
+
+    return deletedCurrent && deletedLegacy;
+  }
+}
