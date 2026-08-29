@@ -73,6 +73,8 @@ The application uses this flow:
 
 **Fact:** `MyCalendarsWebPart` creates the Graph client, loads settings, resolves audiences, applies the theme, and passes effective settings to `MyCalendars`.
 
+**Fact:** `onThemeChanged` updates theme-dependent state and CSS only. SPFx owns the subsequent render. The initial React mount occurs after `onInit` completes, and `onDispose` unmounts the React tree.
+
 **Fact:** `CalendarSettingsService` validates JSON shapes. It rejects duplicate administrator source identities and duplicate ICS catalog URLs. It also derives the smallest personal override set from effective settings.
 
 **Fact:** `MyCalendars` creates source service instances for each load. It starts independent asynchronous tasks and appends successful event groups to component state.

@@ -127,8 +127,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       matchedGroupIds: this._matchedGroupIds,
       organizationPrimaryColor: currentTheme.palette?.themePrimary
     });
-
-    this.render();
+    // SPFx renders after a theme change. Rendering here would also mount React
+    // during framework initialization, before onInit has completed.
   }
 
   protected onDispose(): void {
