@@ -147,6 +147,8 @@ The repository defines `ICalendarEvent` as its canonical local event model.
 
 ### Current source mapping
 
+**Fact:** Automatic source loading is enabled by default for Exchange calendars, Planner plans, Groups and Teams calendars, and Teams Shifts. Planner's default does not limit tasks to those assigned to the current user.
+
 **Fact:** Exchange and Group events can include attendee, organizer, online-meeting join-link, and web-link data.
 
 **Fact:** SharePoint list events use explicit or detected field mappings. Items without a title are skipped.
@@ -177,7 +179,9 @@ The repository defines `ICalendarEvent` as its canonical local event model.
 
 **Fact:** Month, Week, Day, Search, and event details use the same source-icon fallback. An explicit user setting can hide the icon.
 
-**Fact:** Timeline settings use schema version 3. Administrator settings supply a preferred start time, visible-hour count, slot duration, and weekend policy. Personal settings can override the preferred start time and visible-hour count.
+**Fact:** Timeline settings use schema version 4. Administrator settings supply a preferred start time, visible-hour count, slot duration, and weekend policy. Personal settings can override the weekend policy, preferred start time, and visible-hour count. An absent personal value uses the administrator default.
+
+**Fact:** Visible date and time labels use the current SharePoint page culture. The renderer does not force a 12- or 24-hour clock.
 
 **Fact:** Search uses `SearchResultsView`. It filters a prepared lower-case index of event titles and locations.
 

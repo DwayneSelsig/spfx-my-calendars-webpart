@@ -33,7 +33,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Use organization theme colors and light or dark themes.
 - Assign administrator sources and ICS catalog entries to Entra security groups.
 - Store personal settings in the OneDrive App Folder.
-- Load all accessible Planner, Group and Teams, or Teams Shifts sources automatically.
+- Load all accessible Planner, Group and Teams, or Teams Shifts sources automatically. These automatic sources are enabled by default; Planner includes all accessible plans, not only tasks assigned to the current user.
 - Open source systems through deep links when the source supports this function.
 
 ## Scope and non-goals
@@ -63,9 +63,11 @@ Personal settings include:
 
 - personal calendar sources;
 - source names, colors, and enabled states;
-- personal start-time and visible-hour overrides and a default view;
+- personal weekend, start-time, and visible-hour overrides and a default view;
 - Exchange calendar visibility;
 - automatic loading and source-logo overrides.
+
+Date and time labels follow the current SharePoint page culture. This includes the regional 12- or 24-hour time format.
 
 The current implementation treats all administrator sources as user-overridable defaults. The intended source policy also supports mandatory and partly restricted sources. That policy is not implemented. See [Decisions, deviations, and open questions](docs/decisions-deviations-and-open-questions.md).
 

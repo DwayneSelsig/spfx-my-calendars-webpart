@@ -73,6 +73,13 @@ Future contributors preserve these labels when they update this register. They d
 - **Decision:** A source adapter rejects an event with unusable required dates. It does not invent the current time.
 - **Consequence:** A later navigation or manual refresh can retry failed source/month combinations.
 
+### DEC-009 — Display preferences and regional formatting
+
+- **Status:** Decision
+- **Decision:** An administrator sets the default weekend visibility. A user can store an explicit personal weekend preference or return to the administrator default.
+- **Decision:** Date and time labels use the current SharePoint page culture. The application does not expose a separate 12- or 24-hour clock setting.
+- **Consequence:** Personal settings store a weekend value only when the user has selected an override.
+
 ## Intentions
 
 ### INT-002 — Mandatory-source failure records

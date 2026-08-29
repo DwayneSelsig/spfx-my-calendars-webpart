@@ -4,19 +4,20 @@ import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { getSourceIconName } from '../../utils/sourceIconHelper';
 import { EventDetailsDialog } from './EventDetailsDialog';
 import { addLocalDays, eventsForDay, getCalendarColor, isToday, startOfLocalDay } from './calendarUtils';
+import { formatCalendarDate, formatCalendarTime } from './calendarFormatting';
 
 export interface IMonthViewProps {
   appointments: ICalendarEvent[];
   currentDate: Date;
+  locale?: string;
 }
 
-export const MonthView: React.FC<IMonthViewProps> = ({ appointments, currentDate }) => {
+export const MonthView: React.FC<IMonthViewProps> = ({ appointments, currentDate, locale }) => {
   const restoreFocusRef = React.useRef<HTMLElement>();
   const [selectedEvent, setSelectedEvent] = React.useState<ICalendarEvent>();
   const firstOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const gridStart = addLocalDays(firstOfMonth, -firstOfMonth.getDay());
   const days = Array.from({ length: 42 }, (_, index) => addLocalDays(gridStart, index));
-  const weekdayFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
 
   const dismiss = (): void => {
     setSelectedEvent(undefined);
@@ -25,10 +26,10 @@ export const MonthView: React.FC<IMonthViewProps> = ({ appointments, currentDate
 
   return (
     <div style={{ width: '100%', overflowX: 'auto' }}>
-      <div role="grid" aria-label={currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(112px, 1fr))', minWidth: 784, borderTop: '1px solid var(--neutralLight, #edebe9)', borderLeft: '1px solid var(--neutralLight, #edebe9)' }}>
+      <div role="grid" aria-label={formatCalendarDate(currentDate, { month: 'long', year: 'numeric' }, locale)} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(112px, 1fr))', minWidth: 784, borderTop: '1px solid var(--neutralLight, #edebe9)', borderLeft: '1px solid var(--neutralLight, #edebe9)' }}>
         {Array.from({ length: 7 }, (_, index) => addLocalDays(gridStart, index)).map(day => (
           <div key={`header-${day.getDay()}`} role="columnheader" style={{ padding: '7px 8px', fontSize: 12, fontWeight: 600, textAlign: 'center', borderRight: '1px solid var(--neutralLight, #edebe9)', borderBottom: '1px solid var(--neutralLight, #edebe9)', background: 'var(--neutralLighterAlt, #faf9f8)' }}>
-            {weekdayFormatter.format(day)}
+            {formatCalendarDate(day, { weekday: 'short' }, locale)}
           </div>
         ))}
         {days.map(day => {
@@ -54,7 +55,7 @@ export const MonthView: React.FC<IMonthViewProps> = ({ appointments, currentDate
                       style={{ display: 'block', width: '100%', flex: '0 0 auto', border: 0, borderLeft: `3px solid ${color}`, borderRadius: 2, padding: '3px 5px', textAlign: 'left', background: `color-mix(in srgb, ${color} 16%, var(--white, #fff))`, color: 'var(--neutralPrimary, #323130)', cursor: 'pointer', fontSize: 11, lineHeight: '16px', fontStyle: event.isDraft ? 'italic' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     >
                       {event.showSourceLogo !== false && <Icon iconName={getSourceIconName(event.sourceType, event.sourceIconName)} style={{ marginRight: 4 }} />}
-                      {!event.isFullDay && `${new Date(event.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} `}
+                      {!event.isFullDay && `${formatCalendarTime(new Date(event.start), locale)} `}
                       {event.title}
                     </button>
                   );
@@ -64,7 +65,7 @@ export const MonthView: React.FC<IMonthViewProps> = ({ appointments, currentDate
           );
         })}
       </div>
-      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} />
+      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} locale={locale} />
     </div>
   );
 };

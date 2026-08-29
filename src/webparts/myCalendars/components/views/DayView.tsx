@@ -10,9 +10,10 @@ export interface IDayViewProps {
   preferredStartMinutes: number;
   visibleHourCount: number;
   slotDurationMinutes: 15 | 30 | 60;
+  locale?: string;
 }
 
-export const DayView: React.FC<IDayViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes }) => {
+export const DayView: React.FC<IDayViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes, locale }) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const restoreFocusRef = React.useRef<HTMLElement>();
   const [selectedEvent, setSelectedEvent] = React.useState<ICalendarEvent>();
@@ -33,10 +34,11 @@ export const DayView: React.FC<IDayViewProps> = ({ appointments, currentDate, pr
           day={currentDate}
           events={appointments}
           slotDurationMinutes={slotDurationMinutes}
+          locale={locale}
           onSelectEvent={(event, focusElement) => { restoreFocusRef.current = focusElement; setSelectedEvent(event); }}
         />
       </div>
-      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} />
+      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} locale={locale} />
     </div>
   );
 };

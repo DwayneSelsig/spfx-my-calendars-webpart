@@ -86,6 +86,7 @@ class AdminCalendarManagerControl extends React.Component<IPropertyPaneAdminCale
           httpClient={context.httpClient}
           graphClient={graphClient}
           loadNotice={adminLoadNotice}
+          locale={context.pageContext.cultureInfo.currentCultureName}
         />
       </div>
     );

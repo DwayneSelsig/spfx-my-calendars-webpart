@@ -3,11 +3,13 @@ import type { ICalendarEvent as IEvent } from '../../models/ICalendarEvent';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { getSourceIconName } from '../../utils/sourceIconHelper';
+import { formatCalendarTime, resolveCalendarLocale } from './calendarFormatting';
 
 export interface ISearchResultsViewProps {
   appointments: IEvent[];
   isLoading: boolean;
   searchQuery: string;
+  locale?: string;
 }
 
 interface IGroupedAppointments {
@@ -86,19 +88,15 @@ const styles = mergeStyleSets({
 });
 
 export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
-  const { appointments, isLoading, searchQuery } = props;
+  const { appointments, isLoading, searchQuery, locale } = props;
 
   const weekdayFormatter = React.useMemo(
-    () => new Intl.DateTimeFormat(undefined, { weekday: 'long' }),
-    []
+    () => new Intl.DateTimeFormat(resolveCalendarLocale(locale), { weekday: 'long' }),
+    [locale]
   );
   const dateFormatter = React.useMemo(
-    () => new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long' }),
-    []
-  );
-  const timeFormatter = React.useMemo(
-    () => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }),
-    []
+    () => new Intl.DateTimeFormat(resolveCalendarLocale(locale), { day: 'numeric', month: 'long' }),
+    [locale]
   );
 
   // Helper function to pad numbers
@@ -148,7 +146,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
         if (cachedStartTime) {
           startTimeLabel = cachedStartTime;
         } else {
-          startTimeLabel = timeFormatter.format(startDate);
+          startTimeLabel = formatCalendarTime(startDate, locale);
           timeLabelCache.set(startTimeKey, startTimeLabel);
         }
       }
@@ -171,7 +169,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
             new Date(a.appointment.start).getTime() - new Date(b.appointment.start).getTime()
         )
       }));
-  }, [appointments, dateFormatter, getAppointmentDuration, timeFormatter, weekdayFormatter]);
+  }, [appointments, dateFormatter, getAppointmentDuration, locale, weekdayFormatter]);
 
   if (groupedByDate.length === 0 && !isLoading) {
     return (

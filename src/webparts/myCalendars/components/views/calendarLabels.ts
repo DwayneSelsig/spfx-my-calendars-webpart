@@ -1,3 +1,5 @@
+import * as strings from 'MyCalendarsWebPartStrings';
+
 export interface ICalendarLabels {
   today: string;
   previous: string;
@@ -20,21 +22,26 @@ export interface ICalendarLabels {
   view: string;
 }
 
-const en: ICalendarLabels = {
-  today: 'Today', previous: 'Previous', next: 'Next', day: 'Day', week: 'Week', month: 'Month',
-  allDay: 'All day', open: 'Open', join: 'Join', close: 'Close', details: 'Appointment details',
-  location: 'Location', organizer: 'Organizer', attendees: 'Attendees', source: 'Source',
-  description: 'Description', noEvents: 'No appointments', navigation: 'Calendar navigation', view: 'Calendar view'
-};
-
-const nl: ICalendarLabels = {
-  today: 'Vandaag', previous: 'Vorige', next: 'Volgende', day: 'Dag', week: 'Week', month: 'Maand',
-  allDay: 'Hele dag', open: 'Openen', join: 'Deelnemen', close: 'Sluiten', details: 'Afspraakdetails',
-  location: 'Locatie', organizer: 'Organisator', attendees: 'Deelnemers', source: 'Bron',
-  description: 'Beschrijving', noEvents: 'Geen afspraken', navigation: 'Kalendernavigatie', view: 'Kalenderweergave'
-};
-
 export function getCalendarLabels(): ICalendarLabels {
-  const language = typeof navigator === 'undefined' ? 'en' : navigator.language.toLowerCase();
-  return language.indexOf('nl') === 0 ? nl : en;
+  return {
+    today: strings.TodayLabel,
+    previous: strings.PreviousLabel,
+    next: strings.NextLabel,
+    day: strings.DayLabel,
+    week: strings.WeekLabel,
+    month: strings.MonthLabel,
+    allDay: strings.AllDayLabel,
+    open: strings.OpenLabel,
+    join: strings.JoinLabel,
+    close: strings.CloseLabel,
+    details: strings.AppointmentDetailsLabel,
+    location: strings.LocationLabel,
+    organizer: strings.OrganizerLabel,
+    attendees: strings.AttendeesLabel,
+    source: strings.SourceLabel,
+    description: strings.DescriptionLabel,
+    noEvents: strings.NoAppointmentsLabel,
+    navigation: strings.CalendarNavigationLabel,
+    view: strings.CalendarViewLabel
+  };
 }

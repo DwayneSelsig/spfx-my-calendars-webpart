@@ -384,6 +384,7 @@ export function normalizeUserCalendarSettings(value: unknown): IUserCalendarSett
     ...defaultUserCalendarSettings,
     schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
     defaultView: value.defaultView === 'day' || value.defaultView === 'week' || value.defaultView === 'month' ? value.defaultView : undefined,
+    userShowWeekends: typeof value.userShowWeekends === 'boolean' ? value.userShowWeekends : undefined,
     userPreferredStartMinutes: typeof value.userPreferredStartMinutes === 'number'
       ? value.userPreferredStartMinutes
       : typeof value.userStartHour === 'number' ? value.userStartHour * 60 : undefined,
@@ -460,6 +461,7 @@ export function migrateLegacyUserSettings(value: unknown): IUserCalendarSettings
   return {
     ...defaultUserCalendarSettings,
     defaultView: value.defaultView,
+    userShowWeekends: undefined,
     userPreferredStartMinutes: typeof value.userStartHour === 'number' ? value.userStartHour * 60 : undefined,
     userVisibleHourCount: typeof value.userStartHour === 'number' && typeof value.userEndHour === 'number'
       ? normalizeVisibleHourCount(undefined, value.userStartHour, value.userEndHour)
@@ -602,7 +604,9 @@ export function resolveCalendarSettings(params: {
     defaultView: userSettings.defaultView || adminSettings.defaultView,
     sources: [...resolvedAdminSources, ...resolvedUserSources],
     availableAdminIcsCatalogItems,
-    showWeekends: adminSettings.showWeekends,
+    adminShowWeekends: adminSettings.showWeekends,
+    showWeekends: userSettings.userShowWeekends ?? adminSettings.showWeekends,
+    userShowWeekends: userSettings.userShowWeekends,
     preferredStartMinutes: adminSettings.preferredStartMinutes,
     visibleHourCount: adminSettings.visibleHourCount,
     slotDurationMinutes: adminSettings.slotDurationMinutes,
@@ -688,6 +692,9 @@ export function deriveUserCalendarSettings(params: {
     schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
     defaultView: existingUserSettings?.defaultView !== undefined || nextResolvedSettings.defaultView !== adminSettings.defaultView
       ? nextResolvedSettings.defaultView
+      : undefined,
+    userShowWeekends: nextResolvedSettings.userShowWeekends !== undefined || nextResolvedSettings.showWeekends !== adminSettings.showWeekends
+      ? nextResolvedSettings.showWeekends
       : undefined,
     userPreferredStartMinutes: nextResolvedSettings.userPreferredStartMinutes,
     userVisibleHourCount: nextResolvedSettings.userVisibleHourCount,

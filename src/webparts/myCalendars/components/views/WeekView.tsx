@@ -3,6 +3,7 @@ import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { EventDetailsDialog } from './EventDetailsDialog';
 import { ALL_DAY_SECTION_HEIGHT, TimelineDay } from './TimelineDay';
 import { addLocalDays, isToday, minutesToTimelinePixels } from './calendarUtils';
+import { formatCalendarDate } from './calendarFormatting';
 
 export interface IWeekViewProps {
   appointments: ICalendarEvent[];
@@ -11,6 +12,7 @@ export interface IWeekViewProps {
   visibleHourCount: number;
   slotDurationMinutes: 15 | 30 | 60;
   showWeekends: boolean;
+  locale?: string;
 }
 
 function getVisibleDays(start: Date, showWeekends: boolean): Date[] {
@@ -24,7 +26,7 @@ function getVisibleDays(start: Date, showWeekends: boolean): Date[] {
   return result;
 }
 
-export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes, showWeekends }) => {
+export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes, showWeekends, locale }) => {
   const days = React.useMemo(() => getVisibleDays(currentDate, showWeekends), [currentDate, showWeekends]);
   const scrollRefs = React.useRef<Array<HTMLDivElement | null>>([]);
   const syncingRef = React.useRef(false);
@@ -58,8 +60,8 @@ export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, 
         {days.map((day, index) => (
           <section key={day.getTime()} style={{ width: 300, border: '1px solid var(--neutralLight, #edebe9)', borderRadius: 5, overflow: 'hidden', background: 'var(--white, #fff)' }}>
             <header style={{ padding: '9px 10px', borderBottom: '1px solid var(--neutralLight, #edebe9)', background: isToday(day) ? 'var(--themeLighterAlt, #eff6fc)' : 'var(--white, #fff)' }}>
-              <div style={{ fontSize: 12, color: 'var(--neutralSecondary, #605e5c)', textTransform: 'capitalize' }}>{day.toLocaleDateString(undefined, { weekday: 'long' })}</div>
-              <div style={{ fontSize: 18, fontWeight: 600 }}>{day.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</div>
+              <div style={{ fontSize: 12, color: 'var(--neutralSecondary, #605e5c)', textTransform: 'capitalize' }}>{formatCalendarDate(day, { weekday: 'long' }, locale)}</div>
+              <div style={{ fontSize: 18, fontWeight: 600 }}>{formatCalendarDate(day, { day: 'numeric', month: 'short' }, locale)}</div>
             </header>
             <div
               ref={element => { scrollRefs.current[index] = element; }}
@@ -70,6 +72,7 @@ export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, 
                 day={day}
                 events={appointments}
                 slotDurationMinutes={slotDurationMinutes}
+                locale={locale}
                 compact
                 onSelectEvent={(event, focusElement) => { restoreFocusRef.current = focusElement; setSelectedEvent(event); }}
               />
@@ -77,7 +80,7 @@ export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, 
           </section>
         ))}
       </div>
-      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} />
+      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} locale={locale} />
     </div>
   );
 };

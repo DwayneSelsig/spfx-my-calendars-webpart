@@ -30,6 +30,7 @@ import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/Unif
 import { AudienceService, IEntraSecurityGroup } from '../services/AudienceService';
 import { createAdminAssignedSource, generateStableId } from '../services/CalendarSettingsService';
 import { getSourceTypeDisplayName } from '../utils/sourceIconHelper';
+import { formatCalendarTime } from './views/calendarFormatting';
 
 type AdminAddStep =
   | 'initial'
@@ -59,6 +60,7 @@ export interface IAdminSettingsPanelProps {
   loadNotice?: string;
   httpClient?: HttpClient;
   graphClient?: MSGraphClientV3;
+  locale?: string;
 }
 
 interface IAdminSettingsPanelState {
@@ -410,8 +412,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
     return (
       <Stack horizontal tokens={{ childrenGap: 8 }} style={{ marginBottom: 16 }}>
-        <IconButton iconProps={{ iconName: 'Back' }} title="Back" ariaLabel="Back" onClick={this.handleBackOneStep} styles={{ root: { height: 32 } }} />
-        <IconButton iconProps={{ iconName: 'Home' }} title="Home" ariaLabel="Home" onClick={this.handleBackToTypeSelection} styles={{ root: { height: 32 } }} />
+        <IconButton iconProps={{ iconName: 'Back' }} title={strings.BackLabel} ariaLabel={strings.BackLabel} onClick={this.handleBackOneStep} styles={{ root: { height: 32 } }} />
+        <IconButton iconProps={{ iconName: 'Home' }} title={strings.HomeLabel} ariaLabel={strings.HomeLabel} onClick={this.handleBackToTypeSelection} styles={{ root: { height: 32 } }} />
       </Stack>
     );
   };
@@ -929,25 +931,25 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     if (spSelectedList && addingCalendarStep === 'sharepoint-fields') {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Map SharePoint fields to calendar fields</Label>
-          <Dropdown label="Title/Subject field" options={spAvailableFields} selectedKey={spFieldMapping.titleField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, titleField: option?.key as string } })} />
-          <Dropdown label="Start Date field" options={spAvailableFields} selectedKey={spFieldMapping.startDateField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, startDateField: option?.key as string } })} />
-          <Dropdown label="End Date field" options={spAvailableFields} selectedKey={spFieldMapping.endDateField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, endDateField: option?.key as string } })} />
-          <Dropdown label="Location field (optional)" options={[{ key: '', text: '(none)' }, ...spAvailableFields]} selectedKey={spFieldMapping.locationField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, locationField: option?.key as string } })} />
-          <Dropdown label="Description field (optional)" options={[{ key: '', text: '(none)' }, ...spAvailableFields]} selectedKey={spFieldMapping.descriptionField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string } })} />
-          <TextField label="Calendar Name" value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} />
+          <Label>{strings.FieldMappingLabel}</Label>
+          <Dropdown label={strings.TitleSubjectFieldLabel} options={spAvailableFields} selectedKey={spFieldMapping.titleField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, titleField: option?.key as string } })} />
+          <Dropdown label={strings.StartDateFieldLabel} options={spAvailableFields} selectedKey={spFieldMapping.startDateField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, startDateField: option?.key as string } })} />
+          <Dropdown label={strings.EndDateFieldLabel} options={spAvailableFields} selectedKey={spFieldMapping.endDateField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, endDateField: option?.key as string } })} />
+          <Dropdown label={strings.LocationFieldOptionalLabel} options={[{ key: '', text: '(none)' }, ...spAvailableFields]} selectedKey={spFieldMapping.locationField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, locationField: option?.key as string } })} />
+          <Dropdown label={strings.DescriptionFieldOptionalLabel} options={[{ key: '', text: '(none)' }, ...spAvailableFields]} selectedKey={spFieldMapping.descriptionField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string } })} />
+          <TextField label={strings.CalendarNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} />
           <div>
             <Label>Color</Label>
             <ColorPicker color={this.state.newCalendarColor} onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })} alphaType="none" />
           </div>
-          <PrimaryButton text="Next: choose groups" onClick={() => this.handleConfirmSharePointCalendar().catch(err => console.error(err))} />
+          <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmSharePointCalendar().catch(err => console.error(err))} />
         </Stack>
       );
     }
 
     if (spSelectedSite) {
       if (spListsLoading) {
-        return <Spinner size={SpinnerSize.medium} label="Loading lists..." />;
+        return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
       }
 
       return (
@@ -963,7 +965,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     }
 
     if (spSitesLoading) {
-      return <Spinner size={SpinnerSize.medium} label="Loading sites..." />;
+      return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
     }
 
     const totalPages = Math.ceil(spSites.length / this.SITES_PER_PAGE);
@@ -973,8 +975,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>Search and select a SharePoint site:</Label>
-        <TextField placeholder="Type to filter sites..." value={spSiteFilter} onChange={(_, value) => this.handleSharePointFilterChange(value)} />
-        <PrimaryButton text="Search" onClick={() => this.handleSharePointSearch().catch(err => console.error(err))} />
+        <TextField placeholder={strings.FilterSitesPlaceholder} value={spSiteFilter} onChange={(_, value) => this.handleSharePointFilterChange(value)} />
+        <PrimaryButton text={strings.SearchLabel} onClick={() => this.handleSharePointSearch().catch(err => console.error(err))} />
         <Stack tokens={{ childrenGap: 8 }}>
           {sitesOnPage.map(site => (
             <Stack key={site.id} horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} onClick={() => this.handleSelectSharePointSite(site).catch(err => console.error(err))} style={{ border: '1px solid #edebe9', borderRadius: 4, padding: '8px 12px', backgroundColor: '#f3f2f1', cursor: 'pointer' }}>
@@ -988,9 +990,9 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
         </Stack>
         {totalPages > 1 && (
           <Stack horizontal tokens={{ childrenGap: 8 }} horizontalAlign="center">
-            <DefaultButton text="Previous" disabled={this.state.spCurrentPage === 0} onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage - 1 })} />
+            <DefaultButton text={strings.PreviousLabel} disabled={this.state.spCurrentPage === 0} onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage - 1 })} />
             <Label>Page {this.state.spCurrentPage + 1} of {totalPages}</Label>
-            <DefaultButton text="Next" disabled={this.state.spCurrentPage >= totalPages - 1} onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage + 1 })} />
+            <DefaultButton text={strings.NextLabel} disabled={this.state.spCurrentPage >= totalPages - 1} onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage + 1 })} />
           </Stack>
         )}
       </Stack>
@@ -1003,18 +1005,18 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     if (exchangeSelectedCalendarId) {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <TextField label="Calendar Name" value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} />
+          <TextField label={strings.CalendarNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} />
           <div>
             <Label>Color</Label>
             <ColorPicker color={this.state.newCalendarColor} onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })} alphaType="none" />
           </div>
-          <PrimaryButton text="Next: choose groups" onClick={() => this.handleConfirmExchangeCalendar().catch(err => console.error(err))} />
+          <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmExchangeCalendar().catch(err => console.error(err))} />
         </Stack>
       );
     }
 
     if (exchangeCalendarsLoading) {
-      return <Spinner size={SpinnerSize.medium} label="Loading calendars..." />;
+      return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
     }
 
     if (exchangeMailboxResolved && exchangeCalendars.length > 0) {
@@ -1039,8 +1041,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>Enter a mailbox email to load calendars:</Label>
-        <TextField placeholder="user@example.com" value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
-        <PrimaryButton text="Load Mailbox Calendars" onClick={() => this.handleExchangeLookupMailbox().catch(err => console.error(err))} />
+        <TextField placeholder={strings.MailboxPlaceholder} value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
+        <PrimaryButton text={strings.LoadCalendarsLabel} onClick={() => this.handleExchangeLookupMailbox().catch(err => console.error(err))} />
       </Stack>
     );
   }
@@ -1050,9 +1052,9 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
-        <TextField label="Display Name" value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} placeholder="e.g. Office Holidays" />
-        <TextField label="ICS URL" value={this.state.icsUrl} onChange={(_, value) => this.setState({ icsUrl: value || '' })} placeholder="https://example.com/calendar.ics" />
-        <PrimaryButton text="Next: choose groups" onClick={() => this.handleConfirmAdminIcsItem().catch(err => console.error(err))} disabled={!hasValidInput} />
+        <TextField label={strings.DisplayNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} placeholder="e.g. Office Holidays" />
+        <TextField label={strings.IcsUrlLabel} value={this.state.icsUrl} onChange={(_, value) => this.setState({ icsUrl: value || '' })} placeholder="https://example.com/calendar.ics" />
+        <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmAdminIcsItem().catch(err => console.error(err))} disabled={!hasValidInput} />
       </Stack>
     );
   }
@@ -1062,7 +1064,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
     if (addingCalendarStep === 'planner-plan') {
       if (plannerPlansLoading) {
-        return <Spinner size={SpinnerSize.large} label="Loading your Planner plans..." />;
+        return <Spinner size={SpinnerSize.large} label={strings.LoadingPlannerPlansLabel} />;
       }
 
       return (
@@ -1082,12 +1084,12 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
-        <TextField label="Calendar Name" value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} required />
-        <Toggle label="Alleen aan mij toegewezen taken" checked={this.state.plannerAssignedToMeOnly} onChange={(_, checked) => this.setState({ plannerAssignedToMeOnly: !!checked })} />
-        <Toggle label="Voltooide taken weergeven" checked={this.state.plannerShowCompleted} onChange={(_, checked) => this.setState({ plannerShowCompleted: !!checked })} />
-        <Toggle label="Bron logo tonen" checked={this.state.plannerShowLogo} onChange={(_, checked) => this.setState({ plannerShowLogo: !!checked })} />
+        <TextField label={strings.CalendarNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} required />
+        <Toggle label={strings.AssignedToMeOnlyLabel} checked={this.state.plannerAssignedToMeOnly} onChange={(_, checked) => this.setState({ plannerAssignedToMeOnly: !!checked })} />
+        <Toggle label={strings.ShowCompletedTasksLabel} checked={this.state.plannerShowCompleted} onChange={(_, checked) => this.setState({ plannerShowCompleted: !!checked })} />
+        <Toggle label={strings.SourceLogoLabel} checked={this.state.plannerShowLogo} onChange={(_, checked) => this.setState({ plannerShowLogo: !!checked })} />
         <ColorPicker color={this.state.newCalendarColor} onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })} alphaType="none" />
-        <PrimaryButton text="Next: choose groups" onClick={() => this.handleConfirmPlannerPlan().catch(err => console.error(err))} disabled={!this.state.newCalendarName.trim()} />
+        <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmPlannerPlan().catch(err => console.error(err))} disabled={!this.state.newCalendarName.trim()} />
       </Stack>
     );
   }
@@ -1097,7 +1099,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     const selectedCount = Object.keys(unifiedGroupsSelection).filter(id => unifiedGroupsSelection[id]).length;
 
     if (unifiedGroupsLoading) {
-      return <Spinner size={SpinnerSize.large} label="Loading groups and teams..." />;
+      return <Spinner size={SpinnerSize.large} label={strings.LoadingGroupsAndTeamsLabel} />;
     }
 
     return (
@@ -1123,10 +1125,10 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private renderTeamsShiftsFlow(): React.ReactElement {
     return (
       <Stack tokens={{ childrenGap: 12 }}>
-        <TextField label="Calendar Name" value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} placeholder="e.g. Teams Shifts" required />
-        <Toggle label="Bron logo tonen" checked={this.state.teamsShiftsShowLogo} onChange={(_, checked) => this.setState({ teamsShiftsShowLogo: !!checked })} />
+        <TextField label={strings.CalendarNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} placeholder="e.g. Teams Shifts" required />
+        <Toggle label={strings.SourceLogoLabel} checked={this.state.teamsShiftsShowLogo} onChange={(_, checked) => this.setState({ teamsShiftsShowLogo: !!checked })} />
         <ColorPicker color={this.state.newCalendarColor} onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })} alphaType="none" showPreview={true} />
-        <PrimaryButton text="Next: choose groups" onClick={() => this.handleConfirmTeamsShifts().catch(err => console.error(err))} disabled={!this.state.newCalendarName.trim()} />
+        <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmTeamsShifts().catch(err => console.error(err))} disabled={!this.state.newCalendarName.trim()} />
       </Stack>
     );
   }
@@ -1138,15 +1140,15 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>Select one or more Entra security groups:</Label>
-        <TextField placeholder="Search security groups..." value={this.state.securityGroupSearch} onChange={(_, value) => this.setState({ securityGroupSearch: value || '' })} />
-        <PrimaryButton text="Search" onClick={() => this.handleSecurityGroupSearch().catch(err => console.error(err))} />
+        <TextField placeholder={strings.SearchSecurityGroupsPlaceholder} value={this.state.securityGroupSearch} onChange={(_, value) => this.setState({ securityGroupSearch: value || '' })} />
+        <PrimaryButton text={strings.SearchLabel} onClick={() => this.handleSecurityGroupSearch().catch(err => console.error(err))} />
         {selectedCount > 0 && (
           <MessageBar messageBarType={MessageBarType.info}>
             Selected groups: {selectedGroupNames.join(', ')}
           </MessageBar>
         )}
         {this.state.securityGroupsLoading ? (
-          <Spinner size={SpinnerSize.medium} label="Loading security groups..." />
+          <Spinner size={SpinnerSize.medium} label={strings.LoadingSecurityGroupsLabel} />
         ) : (
           <Stack tokens={{ childrenGap: 8 }}>
             {this.state.securityGroups.map(group => (
@@ -1178,7 +1180,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               />
             ))}
           </Stack>
-          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
         </Stack>
       );
     }
@@ -1205,17 +1207,17 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       <div key={item.adminSourceId} style={{ borderRadius: 4, padding: isEditing ? 12 : '6px 8px', backgroundColor: isEditing ? '#f3f2f1' : (index % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent') }}>
         {isEditing ? (
           <Stack tokens={{ childrenGap: 8 }}>
-            <TextField label="Name" value={item.source.name} onChange={(_, value) => this.handleUpdateAssignedSource(item.adminSourceId, { name: value || '' })} />
+            <TextField label={strings.NameLabel} value={item.source.name} onChange={(_, value) => this.handleUpdateAssignedSource(item.adminSourceId, { name: value || '' })} />
             <div>
               <Label>Color</Label>
               <ColorPicker color={item.source.color} onChange={(_, color) => this.handleUpdateAssignedSource(item.adminSourceId, { color: `#${color.hex}` })} alphaType="none" />
             </div>
-            <Toggle label="Enabled" checked={item.source.isEnabled} onChange={(_, checked) => this.handleUpdateAssignedSource(item.adminSourceId, { isEnabled: !!checked })} />
+            <Toggle label={strings.EnabledLabel} checked={item.source.isEnabled} onChange={(_, checked) => this.handleUpdateAssignedSource(item.adminSourceId, { isEnabled: !!checked })} />
             <div style={{ fontSize: 12, color: '#605e5c' }}>Audiences: {audienceText || 'None'}</div>
             <Stack horizontal tokens={{ childrenGap: 8 }}>
-              <DefaultButton text="Groups" onClick={() => this.handleEditAssignedSourceAudiences(item.adminSourceId).catch(err => console.error(err))} />
-              <PrimaryButton text="Done" onClick={() => this.toggleEditSource(undefined)} />
-              <DefaultButton text="Delete" onClick={() => this.handleDeleteAssignedSource(item.adminSourceId)} />
+              <DefaultButton text={strings.GroupsLabel} onClick={() => this.handleEditAssignedSourceAudiences(item.adminSourceId).catch(err => console.error(err))} />
+              <PrimaryButton text={strings.DoneLabel} onClick={() => this.toggleEditSource(undefined)} />
+              <DefaultButton text={strings.DeleteLabel} onClick={() => this.handleDeleteAssignedSource(item.adminSourceId)} />
             </Stack>
           </Stack>
         ) : (
@@ -1225,7 +1227,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               <strong style={{ fontSize: 13 }}>{item.source.name}</strong>
               <div style={{ fontSize: 11, color: '#605e5c' }}>{getSourceTypeDisplayName(item.source.sourceType)} • {audienceText}</div>
             </div>
-            <IconButton iconProps={{ iconName: 'Edit' }} title="Edit" onClick={() => this.toggleEditSource(item.adminSourceId)} />
+            <IconButton iconProps={{ iconName: 'Edit' }} title={strings.EditLabel} onClick={() => this.toggleEditSource(item.adminSourceId)} />
           </Stack>
         )}
       </div>
@@ -1240,13 +1242,13 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       <div key={item.adminIcsId} style={{ borderRadius: 4, padding: isEditing ? 12 : '6px 8px', backgroundColor: isEditing ? '#f3f2f1' : (index % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent') }}>
         {isEditing ? (
           <Stack tokens={{ childrenGap: 8 }}>
-            <TextField label="Display Name" value={item.displayName} onChange={(_, value) => this.handleUpdateIcsCatalogItem(item.adminIcsId, { displayName: value || '' })} />
-            <TextField label="ICS URL" value={item.icsUrl} onChange={(_, value) => this.handleUpdateIcsCatalogItem(item.adminIcsId, { icsUrl: value || '' })} />
+            <TextField label={strings.DisplayNameLabel} value={item.displayName} onChange={(_, value) => this.handleUpdateIcsCatalogItem(item.adminIcsId, { displayName: value || '' })} />
+            <TextField label={strings.IcsUrlLabel} value={item.icsUrl} onChange={(_, value) => this.handleUpdateIcsCatalogItem(item.adminIcsId, { icsUrl: value || '' })} />
             <div style={{ fontSize: 12, color: '#605e5c' }}>Audiences: {audienceText || 'None'}</div>
             <Stack horizontal tokens={{ childrenGap: 8 }}>
-              <DefaultButton text="Groups" onClick={() => this.handleEditIcsAudiences(item.adminIcsId).catch(err => console.error(err))} />
-              <PrimaryButton text="Done" onClick={() => this.toggleEditIcs(undefined)} />
-              <DefaultButton text="Delete" onClick={() => this.handleDeleteIcsCatalogItem(item.adminIcsId)} />
+              <DefaultButton text={strings.GroupsLabel} onClick={() => this.handleEditIcsAudiences(item.adminIcsId).catch(err => console.error(err))} />
+              <PrimaryButton text={strings.DoneLabel} onClick={() => this.toggleEditIcs(undefined)} />
+              <DefaultButton text={strings.DeleteLabel} onClick={() => this.handleDeleteIcsCatalogItem(item.adminIcsId)} />
             </Stack>
           </Stack>
         ) : (
@@ -1257,7 +1259,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               <div style={{ fontSize: 11, color: '#605e5c' }}>{item.icsUrl}</div>
               <div style={{ fontSize: 11, color: '#605e5c' }}>{audienceText}</div>
             </div>
-            <IconButton iconProps={{ iconName: 'Edit' }} title="Edit" onClick={() => this.toggleEditIcs(item.adminIcsId)} />
+            <IconButton iconProps={{ iconName: 'Edit' }} title={strings.EditLabel} onClick={() => this.toggleEditIcs(item.adminIcsId)} />
           </Stack>
         )}
       </div>
@@ -1266,9 +1268,9 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
   private onRenderFooterContent = (): React.ReactElement => (
     <Stack horizontal tokens={{ childrenGap: 8 }}>
-      <PrimaryButton onClick={this.handleSave} text="Save" />
-      <DefaultButton onClick={this.props.onDismiss} text="Cancel" />
-      <DefaultButton onClick={this.handleResetDraft} text="Reset Draft to Defaults" />
+      <PrimaryButton onClick={this.handleSave} text={strings.SaveLabel} />
+      <DefaultButton onClick={this.props.onDismiss} text={strings.CancelLabel} />
+      <DefaultButton onClick={this.handleResetDraft} text={strings.ResetDraftToDefaultsLabel} />
     </Stack>
   );
 
@@ -1278,12 +1280,12 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     const startOptions: IDropdownOption[] = [];
     const latestStart = Math.max(0, 24 * 60 - settings.visibleHourCount * 60);
     for (let minutes = 0; minutes <= latestStart; minutes += settings.slotDurationMinutes) {
-      startOptions.push({ key: minutes, text: new Date(2000, 0, 1, 0, minutes).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) });
+      startOptions.push({ key: minutes, text: formatCalendarTime(new Date(2000, 0, 1, 0, minutes), this.props.locale) });
     }
     const visibleHourOptions = Array.from({ length: 24 }, (_, index) => ({ key: index + 1, text: String(index + 1) }));
 
     return (
-      <Panel isOpen={isOpen} onDismiss={onDismiss} type={PanelType.medium} headerText={showAddDialog ? 'Add Admin Calendar Default' : 'Admin Calendar Defaults'} onRenderFooterContent={!showAddDialog ? this.onRenderFooterContent : undefined} isFooterAtBottom={true}>
+    <Panel isOpen={isOpen} onDismiss={onDismiss} type={PanelType.medium} headerText={showAddDialog ? strings.AddAdminDefaultLabel : strings.AdminCalendarDefaultsTitle} onRenderFooterContent={!showAddDialog ? this.onRenderFooterContent : undefined} isFooterAtBottom={true}>
         {showAddDialog ? (
           this.renderAddFlow()
         ) : (
@@ -1295,7 +1297,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             )}
 
             <Dropdown
-              label="Default View"
+              label={strings.DefaultViewLabel}
               options={[
                 { key: 'day', text: 'Day' },
                 { key: 'week', text: 'Week' },
@@ -1310,14 +1312,14 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               }))}
             />
 
-            <Label>Timeline defaults</Label>
+            <Label>{strings.TimelineDefaultsLabel}</Label>
             <Toggle
-              label="Show weekends"
+              label={strings.ShowWeekendsLabel}
               checked={settings.showWeekends}
               onChange={(_, checked) => this.setState(prev => ({ settings: { ...prev.settings, showWeekends: checked !== false } }))}
             />
             <Dropdown
-              label="Slot duration"
+              label={strings.SlotDurationLabel}
               selectedKey={settings.slotDurationMinutes}
               options={[{ key: 15, text: '15 minutes' }, { key: 30, text: '30 minutes' }, { key: 60, text: '60 minutes' }]}
               onChange={(_, option) => {
@@ -1326,13 +1328,13 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               }}
             />
             <Dropdown
-              label="Preferred start time"
+              label={strings.PreferredStartTimeLabel}
               selectedKey={settings.preferredStartMinutes}
               options={startOptions}
               onChange={(_, option) => this.setState(prev => ({ settings: { ...prev.settings, preferredStartMinutes: Number(option?.key) } }))}
             />
             <Dropdown
-              label="Visible hours"
+              label={strings.VisibleHoursLabel}
               selectedKey={settings.visibleHourCount}
               options={visibleHourOptions}
               onChange={(_, option) => {
@@ -1342,7 +1344,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             />
 
             <div>
-              <PrimaryButton text="Add Admin Default" iconProps={{ iconName: 'Add' }} onClick={this.handleOpenAddDialog} />
+              <PrimaryButton text={strings.AddAdminDefaultLabel} iconProps={{ iconName: 'Add' }} onClick={this.handleOpenAddDialog} />
             </div>
 
             <div>

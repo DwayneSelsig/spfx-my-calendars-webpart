@@ -58,6 +58,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
+        locale: this.context.pageContext.cultureInfo.currentCultureName,
         settings: this._resolvedSettings,
         onSettingsChange: this.handleUserSettingsChange,
         onDefaultViewChange: this.handleDefaultViewChange,

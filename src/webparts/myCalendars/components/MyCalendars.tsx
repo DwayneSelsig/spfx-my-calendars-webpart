@@ -24,6 +24,8 @@ import { SettingsPanel } from './SettingsPanel';
 //import { CalendarToolbar } from './CalendarToolbar';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
+import { formatCalendarDate } from './views/calendarFormatting';
+import * as strings from 'MyCalendarsWebPartStrings';
 
 type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 type ServiceStatus = 'loading' | 'ready' | 'error';
@@ -835,7 +837,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       key: 'search',
       onRender: () => (
         <SearchBox
-          placeholder="Search appointments..."
+          placeholder={strings.SearchAppointmentsPlaceholder}
           onChange={(_event, newValue) => this.handleSearch(newValue || '')}
           styles={{
             root: {
@@ -975,7 +977,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       unifiedGroup: 'Groups/Teams'
     };
     const hasLoading = enabledServices.reduce((acc, service) => acc || loadingSources[service] === 'loading', false);
-    const buttonLabel = hasLoading ? 'Show loading status' : 'Show loading summary';
+    const buttonLabel = hasLoading ? strings.ShowLoadingStatusLabel : strings.ShowLoadingSummaryLabel;
 
     return (
       <div ref={this.loadingStatusWrapperRef} className={styles.loadingStatusWrapper}>
@@ -992,11 +994,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             setInitialFocus
             className={styles.loadingStatusCallout}
           >
-            <Text variant="medium" className={styles.loadingStatusTitle}>Loading status</Text>
+            <Text variant="medium" className={styles.loadingStatusTitle}>{strings.LoadingStatusLabel}</Text>
             <div className={styles.loadingStatusList}>
               {enabledServices.map(service => {
                 const status = loadingSources[service] ?? 'ready';
-                const statusLabel = status === 'loading' ? 'Loading' : status === 'error' ? 'Error' : 'Ready';
+                const statusLabel = status === 'loading' ? strings.LoadingLabel : status === 'error' ? strings.ErrorLabel : strings.ReadyLabel;
                 const errorMessage = loadErrors[service];
 
                 return (
@@ -1027,14 +1029,14 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const { currentDate, currentView, searchQuery } = this.state;
     
     if (currentView === 'search') {
-      return searchQuery ? `Search results for "${searchQuery}"` : 'Search';
+      return searchQuery ? `${strings.SearchResultsForLabel} "${searchQuery}"` : strings.SearchLabel;
     }
     
     const options: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
 
     switch (currentView) {
       case 'day':
-        return currentDate.toLocaleDateString(undefined, { ...options, day: 'numeric' });
+        return formatCalendarDate(currentDate, { ...options, day: 'numeric' }, this.props.locale);
       case 'week': {
         const weekStart = new Date(currentDate);
         if (!this.props.settings.showWeekends) {
@@ -1050,11 +1052,11 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             if (weekEnd.getDay() !== 0 && weekEnd.getDay() !== 6) remaining--;
           }
         }
-        return `${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        return `${formatCalendarDate(weekStart, { month: 'short', day: 'numeric' }, this.props.locale)} - ${formatCalendarDate(weekEnd, { month: 'short', day: 'numeric', year: 'numeric' }, this.props.locale)}`;
       }
       case 'month':
       default:
-        return currentDate.toLocaleDateString(undefined, options);
+        return formatCalendarDate(currentDate, options, this.props.locale);
     }
   };
 
@@ -1081,7 +1083,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       preferredStartMinutes,
       visibleHourCount,
       slotDurationMinutes: settings.slotDurationMinutes,
-      showWeekends: settings.showWeekends
+      showWeekends: settings.showWeekends,
+      locale: this.props.locale
     };
 
     switch (displayView) {
@@ -1091,7 +1094,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         return <WeekView {...calendarViewProps} />;
       case 'month':
       default:
-        return <MonthView appointments={appointments} currentDate={currentDate} />;
+        return <MonthView appointments={appointments} currentDate={currentDate} locale={this.props.locale} />;
     }
   }
 
@@ -1195,6 +1198,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               appointments={filteredAppointments}
               isLoading={isLoading}
               searchQuery={searchQuery}
+              locale={this.props.locale}
             />
           )}
         </div>
@@ -1213,6 +1217,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           }}
           httpClient={this.props.context.httpClient}
           graphClient={this.state.graphClient}
+          locale={this.props.locale}
         />
       </div>
     );

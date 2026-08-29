@@ -3,6 +3,7 @@ import { Icon } from '@fluentui/react/lib/Icon';
 import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { getSourceIconName } from '../../utils/sourceIconHelper';
 import { getCalendarLabels } from './calendarLabels';
+import { formatCalendarTime } from './calendarFormatting';
 import {
   buildTimedSegments,
   eventsForDay,
@@ -19,6 +20,7 @@ export interface ITimelineDayProps {
   onSelectEvent: (event: ICalendarEvent, focusElement?: HTMLElement) => void;
   showCurrentTime?: boolean;
   compact?: boolean;
+  locale?: string;
 }
 
 const gutterWidth = 50;
@@ -30,7 +32,8 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
   slotDurationMinutes,
   onSelectEvent,
   showCurrentTime = true,
-  compact = false
+  compact = false,
+  locale
 }) => {
   const labels = getCalendarLabels();
   const [now, setNow] = React.useState(() => new Date());
@@ -123,7 +126,7 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
               color: 'var(--neutralSecondary, #605e5c)'
             }}
           >
-            {new Date(2000, 0, 1, hour).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+            {formatCalendarTime(new Date(2000, 0, 1, hour), locale)}
           </div>
         ))}
         {segments.map(segment => {
@@ -136,7 +139,7 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
               key={`${segment.event.sourceId}:${segment.event.id}:${segment.startMinutes}`}
               type="button"
               onClick={click => onSelectEvent(segment.event, click.currentTarget)}
-              aria-label={`${segment.event.title}, ${new Date(segment.event.start).toLocaleTimeString()}`}
+              aria-label={`${segment.event.title}, ${formatCalendarTime(new Date(segment.event.start), locale)}`}
               style={{
                 position: 'absolute',
                 top: segment.startMinutes + 1,
@@ -173,7 +176,7 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
           );
         })}
         {showCurrentTime && isToday(day) && (
-          <div aria-label={now.toLocaleTimeString()} style={{ position: 'absolute', top: nowMinutes, left: gutterWidth - 4, right: 0, zIndex: 4, borderTop: '2px solid #d13438', pointerEvents: 'none' }}>
+          <div aria-label={formatCalendarTime(now, locale)} style={{ position: 'absolute', top: nowMinutes, left: gutterWidth - 4, right: 0, zIndex: 4, borderTop: '2px solid #d13438', pointerEvents: 'none' }}>
             <span style={{ position: 'absolute', width: 9, height: 9, borderRadius: '50%', background: '#d13438', left: -4, top: -5 }} />
           </div>
         )}

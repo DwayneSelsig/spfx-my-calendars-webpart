@@ -5,21 +5,23 @@ import { Icon } from '@fluentui/react/lib/Icon';
 import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { getSourceIconName, getSourceTypeDisplayName } from '../../utils/sourceIconHelper';
 import { getCalendarLabels } from './calendarLabels';
+import { formatCalendarDate, formatCalendarDateTime } from './calendarFormatting';
 import { getCalendarColor, safeOpen } from './calendarUtils';
 
 export interface IEventDetailsDialogProps {
   event?: ICalendarEvent;
   onDismiss: () => void;
+  locale?: string;
 }
 
-export const EventDetailsDialog: React.FC<IEventDetailsDialogProps> = ({ event, onDismiss }) => {
+export const EventDetailsDialog: React.FC<IEventDetailsDialogProps> = ({ event, onDismiss, locale }) => {
   const labels = getCalendarLabels();
   if (!event) return null;
   const start = new Date(event.start);
   const end = new Date(event.end);
   const dateTime = event.isFullDay
-    ? `${start.toLocaleDateString()} · ${labels.allDay}`
-    : `${start.toLocaleString()} – ${end.toLocaleString()}`;
+    ? `${formatCalendarDate(start, { year: 'numeric', month: 'numeric', day: 'numeric' }, locale)} · ${labels.allDay}`
+    : `${formatCalendarDateTime(start, locale)} – ${formatCalendarDateTime(end, locale)}`;
   const organizer = event.organizer?.name || event.organizer?.email;
   const attendees = (event.attendees || []).map(attendee => attendee.name || attendee.email).filter(Boolean).join(', ');
   const sourceTypeDisplayName = getSourceTypeDisplayName(event.sourceType, event.sourceIconName);

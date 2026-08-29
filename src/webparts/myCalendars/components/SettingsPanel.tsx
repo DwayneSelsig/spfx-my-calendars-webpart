@@ -18,6 +18,7 @@ import { ExchangeCalendarService, IExchangeCalendar } from '../services/Exchange
 import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
+import { formatCalendarTime } from './views/calendarFormatting';
 
 export interface ISettingsPanelProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export interface ISettingsPanelProps {
   onReset?: () => void;
   httpClient?: HttpClient;
   graphClient?: MSGraphClientV3;
+  locale?: string;
 }
 
 interface ISettingsPanelState {
@@ -309,16 +311,16 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         {showBackButton && (
           <IconButton
             iconProps={{ iconName: 'Back' }}
-            title="Back"
-            ariaLabel="Back"
+            title={strings.BackLabel}
+            ariaLabel={strings.BackLabel}
             onClick={this.handleBackOneStep}
             styles={{ root: { height: 32 } }}
           />
         )}
         <IconButton
           iconProps={{ iconName: 'Home' }}
-          title="Home"
-          ariaLabel="Home"
+          title={strings.HomeLabel}
+          ariaLabel={strings.HomeLabel}
           onClick={this.handleBackToTypeSelection}
           styles={{ root: { height: 32 } }}
         />
@@ -642,12 +644,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private onRenderFooterContent = (): React.ReactElement => {
     return (
       <Stack horizontal tokens={{ childrenGap: 8 }}>
-        <PrimaryButton onClick={this.handleSave} text="Save" />
-        <DefaultButton onClick={this.props.onDismiss} text="Cancel" />
+        <PrimaryButton onClick={this.handleSave} text={strings.SaveLabel} />
+        <DefaultButton onClick={this.props.onDismiss} text={strings.CancelLabel} />
         <DefaultButton
           onClick={this.handleReset}
-          text="Reset to Defaults"
-          title="Reset your calendar settings to administrator defaults"
+          text={strings.ResetToDefaultsLabel}
+          title={strings.ResetCalendarSettingsTitle}
         />
       </Stack>
     );
@@ -660,9 +662,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (spSelectedList && addingCalendarStep === 'sharepoint-fields') {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Map SharePoint fields to calendar fields</Label>
+          <Label>{strings.FieldMappingLabel}</Label>
           <Dropdown
-            label="Title/Subject field"
+            label={strings.TitleSubjectFieldLabel}
             options={spAvailableFields}
             selectedKey={spFieldMapping.titleField || ''}
             onChange={(_, option) => this.setState({
@@ -670,7 +672,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             })}
           />
           <Dropdown
-            label="Start Date field"
+            label={strings.StartDateFieldLabel}
             options={spAvailableFields}
             selectedKey={spFieldMapping.startDateField || ''}
             onChange={(_, option) => this.setState({
@@ -678,7 +680,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             })}
           />
           <Dropdown
-            label="End Date field"
+            label={strings.EndDateFieldLabel}
             options={spAvailableFields}
             selectedKey={spFieldMapping.endDateField || ''}
             onChange={(_, option) => this.setState({
@@ -686,7 +688,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             })}
           />
           <Dropdown
-            label="Location field (optional)"
+            label={strings.LocationFieldOptionalLabel}
             options={[{ key: '', text: '(none)' }, ...spAvailableFields]}
             selectedKey={spFieldMapping.locationField || ''}
             onChange={(_, option) => this.setState({
@@ -694,7 +696,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             })}
           />
           <Dropdown
-            label="Description field (optional)"
+            label={strings.DescriptionFieldOptionalLabel}
             options={[{ key: '', text: '(none)' }, ...spAvailableFields]}
             selectedKey={spFieldMapping.descriptionField || ''}
             onChange={(_, option) => this.setState({
@@ -702,7 +704,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             })}
           />
           <TextField
-            label="Calendar Name"
+            label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
             onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
           />
@@ -715,7 +717,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             />
           </div>
           <Stack horizontal tokens={{ childrenGap: 8 }}>
-            <PrimaryButton text="Add Calendar" onClick={this.handleConfirmSharePointCalendar} />
+            <PrimaryButton text={strings.AddCalendarLabel} onClick={this.handleConfirmSharePointCalendar} />
           </Stack>
         </Stack>
       );
@@ -732,7 +734,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     if (spSelectedSite) {
       if (spListsLoading) {
-        return <Spinner size={SpinnerSize.medium} label="Loading lists..." />;
+        return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
       }
 
       if (spLists.length === 0) {
@@ -761,7 +763,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     }
 
     if (spSitesLoading) {
-      return <Spinner size={SpinnerSize.medium} label="Loading sites..." />;
+      return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
     }
 
     // Pagination logic
@@ -775,11 +777,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>Search and select a SharePoint site:</Label>
         <TextField
-          placeholder="Type to filter sites..."
+          placeholder={strings.FilterSitesPlaceholder}
           value={spSiteFilter}
           onChange={(_, value) => this.handleSharePointFilterChange(value)}
         />
-        <PrimaryButton text="Search" onClick={this.handleSharePointSearch} />
+        <PrimaryButton text={strings.SearchLabel} onClick={this.handleSharePointSearch} />
 
         {spSites.length === 0 && !spSiteFilter && (
           <Label style={{ color: '#605e5c', fontStyle: 'italic' }}>
@@ -814,7 +816,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   </div>
                   <IconButton
                     iconProps={{ iconName: 'ChevronRight' }}
-                    title="Select this site"
+                    title={strings.SelectThisSiteLabel}
                     styles={{ root: { pointerEvents: 'none' } }}
                   />
                 </Stack>
@@ -825,7 +827,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             {totalPages > 1 && (
               <Stack horizontal tokens={{ childrenGap: 8 }} horizontalAlign="center">
                 <DefaultButton
-                  text="Previous"
+                  text={strings.PreviousLabel}
                   disabled={this.state.spCurrentPage === 0}
                   onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage - 1 })}
                 />
@@ -833,7 +835,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   Page {this.state.spCurrentPage + 1} of {totalPages}
                 </Label>
                 <DefaultButton
-                  text="Next"
+                  text={strings.NextLabel}
                   disabled={this.state.spCurrentPage >= totalPages - 1}
                   onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage + 1 })}
                 />
@@ -856,7 +858,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       return (
         <Stack tokens={{ childrenGap: 12 }}>
           <TextField
-            label="Calendar Name"
+            label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
             onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
           />
@@ -869,14 +871,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             />
           </div>
           <Stack horizontal tokens={{ childrenGap: 8 }}>
-            <PrimaryButton text="Add Calendar" onClick={this.handleConfirmExchangeCalendar} />
+            <PrimaryButton text={strings.AddCalendarLabel} onClick={this.handleConfirmExchangeCalendar} />
           </Stack>
         </Stack>
       );
     }
 
     if (exchangeCalendarsLoading) {
-      return <Spinner size={SpinnerSize.medium} label="Loading calendars..." />;
+      return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
     }
 
     if (exchangeMailboxResolved && exchangeCalendars.length > 0) {
@@ -920,12 +922,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <div style={{ borderTop: '1px solid #edebe9', paddingTop: 12, marginTop: 8 }}>
             <Label>Or enter another mailbox email:</Label>
             <TextField
-              placeholder="user@example.com"
+              placeholder={strings.MailboxPlaceholder}
               value={exchangeMailbox}
               onChange={(_, value) => this.handleExchangeMailboxChange(value)}
             />
             <div style={{ marginTop: 8 }}>
-              <PrimaryButton text="Load Other Mailbox" onClick={this.handleExchangeLookupMailbox} />
+              <PrimaryButton text={strings.LoadOtherMailboxLabel} onClick={this.handleExchangeLookupMailbox} />
             </div>
           </div>
         </Stack>
@@ -969,7 +971,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           </ol>
         </div>
         <PrimaryButton
-          text="Open Outlook (web)"
+          text={strings.OpenOutlookLabel}
           iconProps={{ iconName: 'OpenInNewWindow' }}
           onClick={() => {
             window.open('https://outlook.cloud.microsoft/calendar/addcalendar', '_blank', 'noopener,noreferrer');
@@ -1003,13 +1005,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           </Stack>
         )}
         <TextField
-          label="Calendar Name"
+          label={strings.CalendarNameLabel}
           value={this.state.newCalendarName}
           onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
           placeholder="e.g. Office Holidays"
         />
         <TextField
-          label="ICS URL"
+          label={strings.IcsUrlLabel}
           value={icsUrl}
           onChange={(_, value) => this.setState({ icsUrl: value || '' })}
           placeholder="https://www.officeholidays.com/ics-all/netherlands"
@@ -1017,12 +1019,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
         <Stack horizontal tokens={{ childrenGap: 8 }}>
           <PrimaryButton
-            text="Open in Outlook"
+            text={strings.OpenInOutlookLabel}
             onClick={this.handleOpenOutlookCalendar}
             disabled={!hasValidInput}
             iconProps={{ iconName: 'OpenInNewWindow' }}
           />
-          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
         </Stack>
       </Stack>
     );
@@ -1151,7 +1153,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         <Stack tokens={{ childrenGap: 12 }}>
           <Label>No M365 groups found</Label>
           <div>You don&apos;t have access to any Microsoft 365 groups.</div>
-          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
         </Stack>
       );
     }
@@ -1196,7 +1198,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             onClick={this.handleConfirmUnifiedGroups}
             disabled={selectedCount === 0}
           />
-          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
         </Stack>
       </Stack>
     );
@@ -1209,7 +1211,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>Teams Shifts</Label>
         <TextField
-          label="Calendar Name"
+          label={strings.CalendarNameLabel}
           value={this.state.newCalendarName}
           onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
           placeholder="e.g. Teams Shifts"
@@ -1217,7 +1219,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         />
 
         <Toggle
-          label="Bron logo tonen"
+          label={strings.SourceLogoLabel}
           checked={this.state.teamsShiftsShowLogo}
           onChange={(_, checked) => this.setState({ teamsShiftsShowLogo: checked || false })}
           onText="Ja"
@@ -1233,11 +1235,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
         <Stack horizontal tokens={{ childrenGap: 8 }}>
           <PrimaryButton
-            text="Add Calendar"
+            text={strings.AddCalendarLabel}
             onClick={this.handleConfirmTeamsShifts}
             disabled={!hasValidInput}
           />
-          <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+          <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
         </Stack>
       </Stack>
     );
@@ -1262,7 +1264,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Stack tokens={{ childrenGap: 12 }}>
             <Label>No Planner plans found</Label>
             <div>You don&apos;t have access to any Planner plans, or there are no plans in your organization.</div>
-            <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+            <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
           </Stack>
         );
       }
@@ -1309,7 +1311,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           )}
 
           <TextField
-            label="Calendar Name"
+            label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
             onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
             placeholder="e.g. Project Tasks"
@@ -1317,7 +1319,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           />
 
           <Toggle
-            label="Alleen aan mij toegewezen taken"
+            label={strings.AssignedToMeOnlyLabel}
             checked={this.state.plannerAssignedToMeOnly}
             onChange={(_, checked) => this.setState({ plannerAssignedToMeOnly: checked || false })}
             onText="Ja"
@@ -1325,7 +1327,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           />
 
           <Toggle
-            label="Voltooide taken weergeven"
+            label={strings.ShowCompletedTasksLabel}
             checked={this.state.plannerShowCompleted}
             onChange={(_, checked) => this.setState({ plannerShowCompleted: checked || false })}
             onText="Ja"
@@ -1333,7 +1335,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           />
 
           <Toggle
-            label="Bron logo tonen"
+            label={strings.SourceLogoLabel}
             checked={this.state.plannerShowLogo}
             onChange={(_, checked) => this.setState({ plannerShowLogo: checked || false })}
             onText="Ja"
@@ -1349,11 +1351,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
           <Stack horizontal tokens={{ childrenGap: 8 }}>
             <PrimaryButton
-              text="Add Calendar"
+              text={strings.AddCalendarLabel}
               onClick={this.handleConfirmPlannerPlan}
               disabled={!hasValidInput}
             />
-            <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+            <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
           </Stack>
         </Stack>
       );
@@ -1372,57 +1374,57 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Label>Select the type of calendar to add:</Label>
           <Stack tokens={{ childrenGap: 12 }}>
             <PrimaryButton
-              text="SharePoint Calendar"
-              secondaryText="Select a calendar from a SharePoint site"
+              text={strings.AddCalendarSharePointLabel}
+              secondaryText={strings.AddCalendarSharePointDescription}
               iconProps={{ iconName: 'SharepointLogo' }}
               onClick={() => this.handleSelectAddType('sharepoint')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
-              text="Outlook Calendar"
-              secondaryText="Manage Outlook calendars (opens in new window)"
+              text={strings.AddCalendarExchangeLabel}
+              secondaryText={strings.OpenOutlookLabel}
               iconProps={{ iconName: 'OutlookLogo' }}
               onClick={() => this.handleSelectAddType('exchange')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
-              text="Microsoft Planner"
-              secondaryText="Voeg taken toe vanuit een Planner plan"
+              text={strings.MicrosoftPlannerLabel}
+              secondaryText={strings.AddFromPlannerLabel}
               iconProps={{ iconName: 'PlannerLogo' }}
               onClick={() => this.handleSelectAddType('planner')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
-              text="M365 Group"
-              secondaryText="Add a calendar from a Microsoft 365 group"
+              text={strings.Microsoft365GroupLabel}
+              secondaryText={strings.AddGroupCalendarDescription}
               iconProps={{ iconName: 'Group' }}
               onClick={() => this.handleSelectAddType('unifiedGroup')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
-              text="Teams"
-              secondaryText="Add a calendar from a Team"
+              text={strings.TeamsLabel}
+              secondaryText={strings.AddTeamCalendarDescription}
               iconProps={{ iconName: 'TeamsLogo' }}
               onClick={() => this.handleSelectAddType('unifiedGroup')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
-              text="Teams Shifts"
-              secondaryText="Toon diensten uit Teams shifts"
+              text={strings.TeamsShiftsLabel}
+              secondaryText={strings.TeamsShiftsLabel}
               iconProps={{ iconName: 'Clock' }}
               onClick={() => this.handleSelectAddType('teamsShifts')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
             <PrimaryButton
-              text="Internet Calendar"
-              secondaryText="Add calendar from URL or paste ICS content"
+              text={strings.InternetCalendarLabel}
+              secondaryText={strings.AddIcsCalendarDescription}
               iconProps={{ iconName: 'World' }}
               onClick={() => this.handleSelectAddType('ics')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
             />
           </Stack>
           <Stack horizontal tokens={{ childrenGap: 8 }}>
-            <DefaultButton text="Cancel" onClick={this.handleCloseAddDialog} />
+            <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
           </Stack>
         </Stack>
       );
@@ -1557,7 +1559,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           </div>
           <IconButton
             iconProps={{ iconName: 'Edit' }}
-            title="Edit"
+            title={strings.EditLabel}
             onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
             styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
           />
@@ -1590,11 +1592,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         {isEditing ? (
           <Stack tokens={{ childrenGap: 8 }}>
             <TextField
-              label="Name"
+              label={strings.NameLabel}
               value={source.name}
               onChange={(_, value) => this.handleUpdateSource(source.id, { name: value || '' })}
             />
-            <div>
+            <div style={{ order: 3 }}>
               <Label>Color</Label>
               <ColorPicker
                 color={source.color}
@@ -1603,12 +1605,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               />
             </div>
             <Toggle
-              label="Enabled"
+              label={strings.EnabledLabel}
               checked={source.isEnabled}
               onChange={(_, checked) => this.handleUpdateSource(source.id, { isEnabled: !!checked })}
             />
             <Stack horizontal tokens={{ childrenGap: 8 }}>
-              <PrimaryButton text="Done" onClick={() => this.toggleEdit(undefined)} />
+              <PrimaryButton text={strings.DoneLabel} onClick={() => this.toggleEdit(undefined)} />
               <DefaultButton text={isAdminSource ? 'Remove for me' : 'Delete'} onClick={() => this.handleDeleteSource(source.id)} />
             </Stack>
           </Stack>
@@ -1634,7 +1636,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             </div>
             <IconButton
               iconProps={{ iconName: 'Edit' }}
-              title="Edit"
+              title={strings.EditLabel}
               onClick={() => this.toggleEdit(source.id)}
               styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
             />
@@ -1658,7 +1660,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     const startOptions: IDropdownOption[] = [];
     const latestStart = Math.max(0, 24 * 60 - effectiveVisibleHours * 60);
     for (let minutes = 0; minutes <= latestStart; minutes += settings.slotDurationMinutes) {
-      startOptions.push({ key: minutes, text: new Date(2000, 0, 1, 0, minutes).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) });
+      startOptions.push({ key: minutes, text: formatCalendarTime(new Date(2000, 0, 1, 0, minutes), this.props.locale) });
     }
     const visibleHourOptions = Array.from({ length: 24 }, (_, index) => ({ key: index + 1, text: String(index + 1) }));
 
@@ -1667,7 +1669,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         isOpen={isOpen}
         onDismiss={onDismiss}
         type={PanelType.medium}
-        headerText={showAddDialog ? "Add Calendar" : "Calendar Settings"}
+        headerText={showAddDialog ? strings.AddCalendarLabel : strings.CalendarSettingsTitle}
         onRenderFooterContent={!showAddDialog ? this.onRenderFooterContent : undefined}
         isFooterAtBottom={true}
       >
@@ -1675,27 +1677,27 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           this.renderAddCalendarFlow()
         ) : (
           <Stack tokens={{ childrenGap: 16 }}>
-            <div>
-              <Label>Timeline preferences</Label>
+            <div style={{ order: 3 }}>
+              <Label>{strings.TimelinePreferencesLabel}</Label>
               <Toggle
-                label="Use a personal start time"
+                label={strings.UsePersonalStartTimeLabel}
                 checked={settings.userPreferredStartMinutes !== undefined}
                 onChange={(_, checked) => this.setState({ settings: { ...settings, userPreferredStartMinutes: checked ? settings.preferredStartMinutes : undefined } })}
               />
               <Dropdown
-                label="Preferred start time"
+                label={strings.PreferredStartTimeLabel}
                 disabled={settings.userPreferredStartMinutes === undefined}
                 selectedKey={effectiveStartMinutes}
                 options={startOptions}
                 onChange={(_, option) => this.setState({ settings: { ...settings, userPreferredStartMinutes: Number(option?.key) } })}
               />
               <Toggle
-                label="Use a personal number of visible hours"
+                label={strings.UsePersonalVisibleHoursLabel}
                 checked={settings.userVisibleHourCount !== undefined}
                 onChange={(_, checked) => this.setState({ settings: { ...settings, userVisibleHourCount: checked ? settings.visibleHourCount : undefined } })}
               />
               <Dropdown
-                label="Visible hours"
+                label={strings.VisibleHoursLabel}
                 disabled={settings.userVisibleHourCount === undefined}
                 selectedKey={effectiveVisibleHours}
                 options={visibleHourOptions}
@@ -1705,22 +1707,37 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   this.setState({ settings: { ...settings, userVisibleHourCount, userPreferredStartMinutes: settings.userPreferredStartMinutes === undefined ? undefined : userPreferredStartMinutes } });
                 }}
               />
+              <Toggle
+                label={strings.UsePersonalWeekendPreferenceLabel}
+                checked={settings.userShowWeekends !== undefined}
+                onChange={(_, checked) => this.setState({ settings: {
+                  ...settings,
+                  showWeekends: checked ? settings.showWeekends : settings.adminShowWeekends,
+                  userShowWeekends: checked ? settings.showWeekends : undefined
+                } })}
+              />
+              <Toggle
+                label={strings.ShowWeekendsLabel}
+                disabled={settings.userShowWeekends === undefined}
+                checked={settings.showWeekends}
+                onChange={(_, checked) => this.setState({ settings: { ...settings, showWeekends: !!checked, userShowWeekends: !!checked } })}
+              />
               <div style={{ marginTop: 6, fontSize: 12, color: '#605e5c' }}>
                 Grid: {settings.slotDurationMinutes} minutes · Weekends: {settings.showWeekends ? 'shown' : 'hidden'}
               </div>
             </div>
 
             {/* Add Calendar Button at Top */}
-            <div>
+            <div style={{ order: 1 }}>
               <PrimaryButton
-                text="Add Calendar"
+                text={strings.AddCalendarLabel}
                 iconProps={{ iconName: 'Add' }}
                 onClick={this.handleOpenAddDialog}
               />
             </div>
 
             {/* Calendar Sources Section */}
-            <div>
+            <div style={{ order: 2 }}>
               <Stack tokens={{ childrenGap: 12 }}>
 
                 {/* Outlook */}
@@ -1735,14 +1752,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, exchangeShowSourceLogo: checked } }),
                   headerActions: (
                     <DefaultButton
-                      text="Manage"
+                      text={strings.ManageLabel}
                       iconProps={{ iconName: 'OpenInNewWindow' }}
                       onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
                       styles={{ root: { height: 28, minWidth: 0, padding: '0 8px', fontSize: 12 } }}
                     />
                   ),
                   children: userExchangeCalendarsLoading
-                    ? <Spinner size={SpinnerSize.small} label="Loading your calendars..." />
+                    ? <Spinner size={SpinnerSize.small} label={strings.LoadingLabel} />
                     : userExchangeCalendars.map((calendar, i) => this.renderExchangeCalendarItem(calendar, i))
                 })}
 
@@ -1776,13 +1793,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     return (
                       <Stack tokens={{ childrenGap: 8 }}>
                         <Toggle
-                          label="Show all my Planner plans"
+                          label={strings.ShowAllPlannerPlansLabel}
                           checked={showAllPlanner}
                           onChange={(_, checked) => this.handleTogglePlannerShowAll(!!checked)}
                         />
                         {showAllPlanner && (
                           <Toggle
-                            label="Assigned to me only"
+                            label={strings.AssignedToMeOnlyLabel}
                             checked={settings.plannerShowAllAssignedToMeOnly ?? false}
                             onChange={(_, checked) => this.handleTogglePlannerAssignedToMeOnly(!!checked)}
                           />
@@ -1819,7 +1836,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     return (
                       <Stack tokens={{ childrenGap: 8 }}>
                         <Toggle
-                          label="Show all my group & team calendars"
+                          label={strings.ShowAllGroupsAndTeamsLabel}
                           checked={showAllUnifiedGroups}
                           onChange={(_, checked) => this.handleToggleUnifiedGroupShowAll(!!checked)}
                         />
@@ -1855,7 +1872,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     return (
                       <Stack tokens={{ childrenGap: 8 }}>
                         <Toggle
-                          label="Show all my Teams Shifts"
+                          label={strings.ShowAllTeamsShiftsLabel}
                           checked={showAllTeamsShifts}
                           onChange={(_, checked) => this.handleToggleTeamsShiftsShowAll(!!checked)}
                         />

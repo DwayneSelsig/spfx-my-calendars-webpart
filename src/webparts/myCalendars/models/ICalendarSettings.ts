@@ -3,7 +3,7 @@ export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' |
 export type CalendarSourceOrigin = 'admin' | 'user';
 export type CalendarSlotDuration = 15 | 30 | 60;
 
-export const CALENDAR_SETTINGS_SCHEMA_VERSION = 3;
+export const CALENDAR_SETTINGS_SCHEMA_VERSION = 4;
 
 export interface ISharePointFieldMapping {
   titleField?: string;
@@ -86,6 +86,7 @@ export interface IAdminWebPartSettings {
 export interface IUserCalendarSettings {
   schemaVersion: number;
   defaultView?: CalendarViewType;
+  userShowWeekends?: boolean;
   userPreferredStartMinutes?: number;
   userVisibleHourCount?: number;
   exchangeCalendarStates: { [calendarId: string]: boolean };
@@ -115,7 +116,9 @@ export interface ICalendarSettings {
   defaultView: CalendarViewType;
   sources: ICalendarSource[];
   availableAdminIcsCatalogItems: IAdminIcsCatalogItem[];
+  adminShowWeekends: boolean;
   showWeekends: boolean;
+  userShowWeekends?: boolean;
   preferredStartMinutes: number;
   visibleHourCount: number;
   slotDurationMinutes: CalendarSlotDuration;
@@ -174,10 +177,10 @@ export const defaultAdminWebPartSettings: IAdminWebPartSettings = {
   plannerShowSourceLogo: true,
   unifiedGroupShowSourceLogo: true,
   teamsShiftsShowSourceLogo: true,
-  plannerShowAllCalendars: false,
+  plannerShowAllCalendars: true,
   plannerShowAllAssignedToMeOnly: false,
-  unifiedGroupShowAllCalendars: false,
-  teamsShiftsShowAllCalendars: false,
+  unifiedGroupShowAllCalendars: true,
+  teamsShiftsShowAllCalendars: true,
   assignedSources: [],
   icsCatalog: []
 };
@@ -194,6 +197,7 @@ export const defaultCalendarSettings: ICalendarSettings = {
   defaultView: 'month',
   sources: [],
   availableAdminIcsCatalogItems: [],
+  adminShowWeekends: true,
   showWeekends: true,
   preferredStartMinutes: 8 * 60,
   visibleHourCount: 10,
@@ -205,8 +209,8 @@ export const defaultCalendarSettings: ICalendarSettings = {
   plannerShowSourceLogo: true,
   unifiedGroupShowSourceLogo: true,
   teamsShiftsShowSourceLogo: true,
-  plannerShowAllCalendars: false,
+  plannerShowAllCalendars: true,
   plannerShowAllAssignedToMeOnly: false,
-  unifiedGroupShowAllCalendars: false,
-  teamsShiftsShowAllCalendars: false
+  unifiedGroupShowAllCalendars: true,
+  teamsShiftsShowAllCalendars: true
 };

@@ -7,6 +7,7 @@ export interface IMyCalendarsProps {
   environmentMessage: string;
   hasTeamsContext: boolean;
   userDisplayName: string;
+  locale?: string;
   settings: ICalendarSettings;
   onSettingsChange: (settings: ICalendarSettings) => void;
   onDefaultViewChange: (view: CalendarViewType) => void;
