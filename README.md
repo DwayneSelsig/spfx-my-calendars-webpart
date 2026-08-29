@@ -83,7 +83,7 @@ The architecture contract contains the normative product boundaries and invarian
 - A SharePoint or Microsoft 365 tenant that supports the configured host.
 - The required Microsoft Graph permissions.
 - Access to each configured calendar source.
-- Node.js `>=18.17.1 <19.0.0` or `>=22.14.0 <23.0.0` for local development.
+- Node.js `>=22.14.0 <23.0.0` for local development.
 
 SharePoint is the primary product context. The manifest also lists Teams personal app, Teams tab, and SharePoint full-page hosts.
 
