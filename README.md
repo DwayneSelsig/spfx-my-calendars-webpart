@@ -31,7 +31,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Search event titles and locations.
 - Show source logos by service type.
 - Use organization theme colors and light or dark themes.
-- Assign administrator sources and ICS catalog entries to Entra security groups.
+- Assign administrator sources and ICS catalog entries to Entra groups. The current implementation only discovers non-mail-enabled security groups; the confirmed target model is broader.
 - Store personal settings in the OneDrive App Folder.
 - Load all accessible Planner, Group and Teams, or Teams Shifts sources automatically. These automatic sources are enabled by default; Planner includes all accessible plans, not only tasks assigned to the current user.
 - Open source systems through deep links when the source supports this function.
@@ -51,13 +51,15 @@ The web part does not:
 
 Web part editors can set administrator defaults in the property pane. Users can set personal preferences in the settings panel.
 
-Administrator settings include:
+The administrator settings model includes:
 
 - default calendar view and display values;
 - organization color and source-logo defaults;
 - audience-assigned calendar sources;
 - audience-assigned ICS catalog entries;
 - automatic loading defaults for Planner, Groups and Teams, and Teams Shifts;
+
+The current administrator panel does not expose every modeled field. Organization color, service-level source-logo defaults, automatic source-loading defaults, and the Planner assigned-to-me default are registered implementation gaps.
 
 Personal settings include:
 
@@ -69,16 +71,17 @@ Personal settings include:
 
 Date and time labels follow the current SharePoint page culture. This includes the regional 12- or 24-hour time format.
 
-The current implementation treats all administrator sources as user-overridable defaults. The intended source policy also supports mandatory and partly restricted sources. That policy is not implemented. See [Decisions, deviations, and open questions](docs/decisions-deviations-and-open-questions.md).
+The confirmed source policy separates membership (`optional` or `mandatory`) from the set of user overrides an administrator allows. Mandatory sources cannot be disabled or removed. The current implementation has no persisted policy schema and treats every administrator source as user-overridable. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
 
 ## Documentation
 
-Read these documents before you change behavior:
+The repository uses progressive reading so a change only loads relevant instructions:
 
-1. [Architecture and behavior contract](docs/architecture-and-behavior.md)
-2. [Decisions, deviations, and open questions](docs/decisions-deviations-and-open-questions.md)
+1. [Architecture and behavior](docs/architecture-and-behavior.md) is the small cross-cutting contract.
+2. [AGENTS.md](AGENTS.md) routes a task directly to the relevant section in the calendar, source, or settings document.
+3. [Decisions, deviations, and open questions](docs/decisions-deviations-and-open-questions.md) is searched by the related record IDs; it is not mandatory cover-to-cover reading.
 
-The architecture contract contains the normative product boundaries and invariants. The register separates confirmed decisions from intentions, technical debt, and unresolved questions.
+Use [Calendar](docs/calendar.md) for loading and rendering behavior, [Sources and permissions](docs/sources-and-permissions.md) for adapters, APIs, mappings, pagination, and permissions, and [Settings and policy](docs/settings-and-policy.md) for precedence, policy, audiences, storage, migration, and settings interfaces.
 
 ## Requirements
 
@@ -87,7 +90,7 @@ The architecture contract contains the normative product boundaries and invarian
 - Access to each configured calendar source.
 - Node.js `>=22.14.0 <23.0.0` for local development.
 
-SharePoint is the primary product context. The manifest also lists Teams personal app, Teams tab, and SharePoint full-page hosts.
+The supported host contract covers SharePoint web-part pages, SharePoint full-page apps, Microsoft Teams personal apps and tabs, Microsoft 365, and Outlook. Some host identities are recognized through the Teams SDK rather than listed as distinct manifest values. Host-sensitive behavior still requires validation in each host.
 
 ## Microsoft Graph permissions
 
@@ -97,7 +100,7 @@ The solution requests these delegated Microsoft Graph permissions:
 | --- | --- |
 | `Calendars.Read` | Read the current user's calendars and events. |
 | `Calendars.Read.Shared` | Read calendars that other users shared with the current user. |
-| `MailboxSettings.Read` | Resolve mailbox time-zone and working-hours data. |
+| `MailboxSettings.Read` | Requested in both manifests, but no current runtime path reads mailbox settings; this scope is registered as redundant pending removal or a confirmed consumer. |
 | `Files.ReadWrite.AppFolder` | Store and load personal settings in the OneDrive App Folder. |
 | `Sites.Read.All` | Discover SharePoint sites and read compatible lists. |
 | `Tasks.Read` | Read Planner plans and tasks. |
@@ -106,6 +109,8 @@ The solution requests these delegated Microsoft Graph permissions:
 | `Schedule.Read.All` | Read Teams Shifts data. |
 
 A tenant administrator must approve permissions that require administrator consent in the SharePoint API access page.
+
+See [Sources and permissions](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) for endpoint use, least-privilege notes, pagination limits, and authoritative Microsoft documentation links.
 
 ## Build and local development
 
