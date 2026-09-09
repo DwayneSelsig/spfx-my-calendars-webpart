@@ -53,6 +53,16 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - All declared or runtime-recognized hosts are supported: SharePoint Web Part, SharePoint full-page, Teams personal app, Teams tab, Office, and Outlook.
 - A change to host-sensitive behavior must verify the relevant host rather than infer parity from the manifest.
 
+### DEC-017 — Administrator-controlled appointment cache
+
+- **Status:** Decision
+- Browser appointment caching is an administrator-only setting, enabled by default with a ten-minute duration normalized to 1–60 whole minutes.
+- The versioned `localStorage` entry is isolated by tenant, user, web-part instance, and result-affecting configuration signature and contains canonical events per source/month for only the initial seven-month range.
+- Compatible cached events render immediately and are reprocessed locally. Fresh segments suppress retrieval; stale segments remain visible while retrieval runs in the background.
+- Cache expiry by itself does not schedule retrieval while the component remains mounted. A later load that finds stale segments uses the existing loading and toolbar-status workflow.
+- Successful source/month retrieval atomically replaces that segment, including with an empty result. Failure preserves stale data and the source failure remains visible.
+- Manual refresh preserves visible appointments, bypasses freshness, and forces the initial and visible ranges. Invalid, disabled, unavailable, or quota-constrained cache state falls back safely to normal retrieval.
+
 ### DEBT-001 — Inactive Schedule view
 
 - **Status:** Technical debt
@@ -257,11 +267,12 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ## Project and delivery
 
-### DEC-006 — Test strategy timing
+### DEC-006 — Test strategy baseline
 
 - **Status:** Decision
-- Automated tests will be introduced as one repository-wide initiative.
-- Documentation work does not invent a partial future test architecture.
+- The existing SPFx Heft/Jest runner is the repository test framework; no second framework is introduced.
+- Regression coverage grows incrementally, starting with pure settings, property-persistence, and browser-cache behavior.
+- SPFx host integration remains manually verified until a dedicated host-test harness is confirmed.
 
 ### DEC-010 — Documentation authority and progressive reading
 
@@ -279,24 +290,18 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - The release workflow derives npm and SharePoint versions from the release tag.
 - The release tag is treated as the version source only under ASM-001.
 
-### DEBT-004 — No automated project tests
+### DEBT-004 — Partial automated project coverage
 
 - **Status:** Technical debt
-- The repository contains no project test files.
-- `npm run build` is the current production verification.
-- Settings, migration, policy, mapping, caching, and failure contracts have no regression protection.
+- Focused pure tests cover administrator settings normalization, property-persistence hand-off, and core browser-cache behavior.
+- React panel interaction, SPFx host integration, personal settings, migration breadth, policy, source mapping, orchestration, and failure contracts still lack automated regression protection.
+- `npm run build` remains the production test, build, and package verification command.
 
 ### ASM-001 — Release version source
 
 - **Status:** Assumption
 - A semantic release tag is the release version source.
 - The release workflow derives package versions from the tag.
-
-### OQ-006 — Test architecture
-
-- **Status:** Open question
-- Which framework and test layers will the repository-wide initiative use?
-- Which pure settings functions and source mappings form the first test set?
 
 ## Change discipline
 

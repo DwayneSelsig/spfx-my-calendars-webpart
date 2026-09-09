@@ -14,7 +14,7 @@ Read only the section selected by [AGENTS.md](../AGENTS.md). Requirements are no
 | Audience result | `Set<string>` of matched group IDs | Runtime plus five-minute session cache | Select applicable administrator entries |
 | Effective runtime settings | `ICalendarSettings` | Not persisted as one object | Input to `MyCalendars` and personal draft editing |
 | Theme-derived value | Current `palette.themePrimary` | Runtime only | Highest-precedence organization/source fallback color |
-| Event/source caches | Coordinator maps, promises, event state | Runtime only | Avoid duplicate discovery and month loads |
+| Event/source caches | Coordinator maps, promises, event state, optional browser entry | Runtime plus optional initial-range `localStorage` cache | Avoid duplicate discovery and month loads |
 
 `CalendarSettingsService` owns validation, normalization, migration, precedence, and persisted/effective conversion. `SettingsStorageService` owns OneDrive access only. `AudienceService` owns group discovery and membership evaluation only.
 
@@ -56,6 +56,8 @@ Precedence is not uniform for every field:
 | `preferredStartMinutes` | Admin `480` | Yes | Optional personal override | Renderer: personal → admin | Day/Week | Clamped and snapped to admin slot duration |
 | `visibleHourCount` | Admin `10` | Yes | Optional personal override | Renderer: personal → admin | Day/Week | Normalized to 1–24 |
 | `slotDurationMinutes` | Admin `30`; 15/30/60 | Yes | No | Admin → default | Day/Week | Administrator-only |
+| `enableCache` | Admin `true` | Yes | No | Admin → default | Coordinator | Administrator-only browser appointment cache |
+| `cacheDurationMinutes` | Admin `10`; 1–60 | Yes | No | Admin → default | Coordinator | Whole-minute stale threshold |
 | `organizationPrimaryColor` | `#0078d4` | **No, deviation** | No | Theme → admin → default | Automatic colors | Confirmed administrator setting |
 | `exchangeCalendarStates` | Absent IDs enabled | No | Per discovered calendar | Personal map only | Exchange | User-owned |
 | Source-type `showSourceLogo` fields | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Event decoration | Five source types |
@@ -195,7 +197,7 @@ Administrator normalization drops malformed list entries. It rejects the complet
 
 1. `AdminSettingsPanel` edits a deep-cloned draft.
 2. Saving calls `MyCalendarsWebPart.handleAdminSettingsSave`.
-3. The web part serializes the same accepted value to `adminSettings` and `adminSettingsBackup`.
+3. The web part serializes the accepted value into both properties, after which the custom property-field adapter reports that same JSON to SPFx through its change callback for `adminSettings` and `adminSettingsBackup`.
 4. It reevaluates audiences, rebuilds effective settings, refreshes the property pane, and renders React.
 
 **Fact:** backup is a same-save mirror, not a rotated previous revision. The save callback does not re-run normalization before assigning the in-memory draft.
@@ -233,9 +235,10 @@ When the current file is absent or unreadable, the web part reads legacy `calend
 | `sessionStorage.myCalendarsAudienceMembershipCache` | Group membership/expiry | Five minutes per entry | Errors logged; evaluation continues |
 | `localStorage.currentUserEmailCache` | Email/timestamp | Twelve hours | Errors logged; Graph retried |
 | `localStorage.currentUserMailboxSettingsCache` | Working hours/time zone | Twelve hours | Errors logged; Graph retried |
+| `localStorage.myCalendars:<tenant>:<user>:<instance>` | Versioned canonical event segments for the initial seven-month range | Until disabled, incompatible, replaced, or browser-evicted | Stale data remains visible; invalid/unavailable/full storage falls back to GET |
 | React/coordinator fields | Events, ranges, discovery promises | Component lifetime/reset | Not persisted |
 
-Personal settings are the only current product data written to OneDrive. Loaded events are not persisted. Mandatory-source error records are an intention with no confirmed schema, retention, or implementation.
+Personal settings are the only current product data written to OneDrive. When enabled by an administrator, initial-range event segments are additionally persisted in browser `localStorage`; no event data is written to OneDrive. Mandatory-source error records are an intention with no confirmed schema, retention, or implementation.
 
 ## Settings interfaces
 
@@ -250,13 +253,14 @@ The current administrator panel exposes:
 - slot duration;
 - preferred start time;
 - visible-hour count;
+- appointment-cache enablement and duration from 1–60 minutes;
 - assigned Exchange, SharePoint, Planner, Unified Group/Team, and Teams Shifts sources;
 - source name, color, enabled state, source-specific creation options, and audiences; and
 - audience-targeted ICS catalog entries.
 
 Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
 
-`PropertyPaneAdminCalendarManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, and forwards the accepted draft to the web part.
+`PropertyPaneAdminCalendarManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and reports the serialized current and backup values through the SPFx change callback.
 
 ### Personal interface
 
@@ -285,4 +289,4 @@ Day/Week/Month selection in the toolbar is also a personal setting and is persis
 - Confirmed administrator fields listed above are absent from the panel.
 - Per-source logo behavior is implemented only for manual Exchange sources.
 - Personal storage failure is not visible and does not roll back in-memory changes.
-- No settings or policy behavior has automated test coverage.
+- Administrator settings normalization and property-persistence hand-off have focused automated coverage; panel rendering, personal settings, policy, and host integration remain uncovered.

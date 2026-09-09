@@ -11,6 +11,7 @@ import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Checkbox } from '@fluentui/react/lib/Checkbox';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
+import { Slider } from '@fluentui/react/lib/Slider';
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
 import {
   type IAdminAssignedSource,
@@ -1310,6 +1311,23 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
                   defaultView: option?.key as IAdminWebPartSettings['defaultView']
                 }
               }))}
+            />
+
+            <Label>{strings.CacheDefaultsLabel}</Label>
+            <Toggle
+              label={strings.EnableCacheLabel}
+              checked={settings.enableCache}
+              onChange={(_, checked) => this.setState(prev => ({ settings: { ...prev.settings, enableCache: checked !== false } }))}
+            />
+            <Slider
+              label={strings.CacheDurationMinutesLabel}
+              min={1}
+              max={60}
+              step={1}
+              value={settings.cacheDurationMinutes}
+              disabled={!settings.enableCache}
+              showValue={true}
+              onChange={value => this.setState(prev => ({ settings: { ...prev.settings, cacheDurationMinutes: value } }))}
             />
 
             <Label>{strings.TimelineDefaultsLabel}</Label>

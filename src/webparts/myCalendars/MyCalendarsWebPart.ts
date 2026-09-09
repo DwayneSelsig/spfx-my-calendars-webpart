@@ -28,6 +28,10 @@ import {
   resolveCalendarSettings
 } from './services/CalendarSettingsService';
 import { SettingsStorageService } from './services/SettingsStorageService';
+import {
+  persistAdminWebPartSettings,
+  type AdminSettingsPropertyChangeNotifier
+} from './services/AdminSettingsPropertyPersistence';
 import * as strings from 'MyCalendarsWebPartStrings';
 
 export interface IMyCalendarsWebPartProps {
@@ -63,7 +67,10 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         onSettingsChange: this.handleUserSettingsChange,
         onDefaultViewChange: this.handleDefaultViewChange,
         onResetSettings: this.handleResetUserSettings,
-        context: this.context
+        context: this.context,
+        tenantId: this.getAadContextId(this.context.pageContext.aadInfo?.tenantId),
+        userId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
+        webPartInstanceId: this.instanceId
       }
     );
 
@@ -151,9 +158,10 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
             {
               groupName: 'Administrator Defaults',
               groupFields: [
-                PropertyPaneAdminCalendarManager('adminSettingsManager', {
+                PropertyPaneAdminCalendarManager('adminSettings', {
                   label: 'Default calendars and ICS catalog',
                   adminSettings: this._adminSettings,
+                  backupTargetProperty: 'adminSettingsBackup',
                   adminLoadNotice: this._adminLoadNotice,
                   context: this.context,
                   onSave: this.handleAdminSettingsSave
@@ -174,6 +182,19 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       matchedGroupIds: this._matchedGroupIds,
       organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
     });
+  }
+
+  private getAadContextId(value: unknown): string | undefined {
+    try {
+      if (typeof value === 'string') return value.trim() || undefined;
+      if (value && typeof value === 'object' && typeof (value as { toString?: unknown }).toString === 'function') {
+        const stringValue = (value as { toString: () => string }).toString().trim();
+        return stringValue && stringValue !== '[object Object]' ? stringValue : undefined;
+      }
+    } catch (error) {
+      console.warn('Could not read an Azure Active Directory context identifier; appointment caching is disabled.', error);
+    }
+    return undefined;
   }
 
   private async resolveMatchedGroupIds(): Promise<Set<string>> {
@@ -258,11 +279,12 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     }
   };
 
-  private handleAdminSettingsSave = async (settings: IAdminWebPartSettings): Promise<void> => {
+  private handleAdminSettingsSave = async (
+    settings: IAdminWebPartSettings,
+    notifyPropertyChange: AdminSettingsPropertyChangeNotifier
+  ): Promise<void> => {
     this._adminSettings = settings;
-    const serialized = JSON.stringify(settings);
-    this.properties.adminSettings = serialized;
-    this.properties.adminSettingsBackup = serialized;
+    persistAdminWebPartSettings(this.properties, settings, notifyPropertyChange);
     this._adminLoadNotice = undefined;
 
     await this.rebuildResolvedSettings();

@@ -48,7 +48,7 @@ An intention, deviation, technical-debt item, assumption, open question, or inac
 - `SettingsStorageService` **MUST** own OneDrive App Folder access and **MUST NOT** own policy resolution.
 - `AudienceService` **MUST** own audience discovery and membership evaluation and **MUST NOT** decide source-policy effects.
 - A source service **MUST** own external access and conversion to `ICalendarEvent`. It **MUST NOT** decide policy, persistence, or rendering.
-- `MyCalendars` **MUST** coordinate loading, range state, deduplication, service status, search state, and renderer selection.
+- `MyCalendars` **MUST** coordinate loading, range state, deduplication, service status, search state, renderer selection, and the optional administrator-controlled appointment cache.
 - A renderer **MUST** display prepared local events and **MUST NOT** access storage or source APIs.
 - Administrator and personal settings panels **MAY** edit isolated drafts. The web part **MUST** own accepted persistence.
 - Source display metadata **SHOULD** come from the shared registry unless a source supplies an explicit runtime override.
@@ -77,9 +77,9 @@ See [Components and data flow](components-and-data-flow.md) for the component ma
 
 ## Verification contract
 
-**Fact:** the repository contains no project test files. `npm run build` is the current production build and package verification command.
+**Fact:** the repository uses the SPFx rig's existing Heft/Jest runner for focused pure regression tests. `npm run build` runs those tests before production packaging.
 
-The future test framework and layers are unresolved. A change **MUST NOT** invent a partial test architecture unless the task includes a confirmed test decision.
+Pure settings, persistence-helper, and cache behavior **SHOULD** be covered without SPFx host mocks. Host integration remains a manual verification layer until a dedicated host-test harness is confirmed.
 
 ## Focused documentation
 

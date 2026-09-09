@@ -7,6 +7,12 @@ import { SharePointCalendarService } from '../services/SharePointCalendarService
 import { PlannerTaskService, type IPlannerPlan } from '../services/PlannerTaskService';
 import { TeamsShiftsService } from '../services/TeamsShiftsService';
 import { UnifiedGroupCalendarService, type IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
+import {
+  CalendarEventCache,
+  type CalendarCacheServiceKey,
+  type ICalendarEventCacheConfiguration,
+  type ICalendarEventCacheSegment
+} from '../services/CalendarEventCache';
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
@@ -27,7 +33,7 @@ import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIcon
 import { formatCalendarDate } from './views/calendarFormatting';
 import * as strings from 'MyCalendarsWebPartStrings';
 
-type ServiceKey = 'exchange' | 'ics' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
+type ServiceKey = CalendarCacheServiceKey;
 type ServiceStatus = 'loading' | 'ready' | 'error';
 type IndexedEvent = IEvent & { searchIndexText?: string };
 
@@ -139,6 +145,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   private unifiedGroupsPromise?: Promise<IUnifiedGroupItem[]>;
   private joinedTeamIdsPromise?: Promise<Set<string>>;
   private teamsShiftsService?: TeamsShiftsService;
+  private readonly eventCache = new CalendarEventCache();
+  private initialCacheMonthKeys = new Set<string>();
 
   constructor(props: IMyCalendarsProps) {
     super(props);
@@ -171,6 +179,25 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const loadingSettings = { ...settings } as unknown as Record<string, unknown>;
     ['defaultView', 'preferredStartMinutes', 'visibleHourCount', 'slotDurationMinutes', 'showWeekends', 'userPreferredStartMinutes', 'userVisibleHourCount']
       .forEach(key => delete loadingSettings[key]);
+    return JSON.stringify(loadingSettings);
+  }
+
+  private getCacheConfiguration(): ICalendarEventCacheConfiguration {
+    return {
+      tenantId: this.props.tenantId,
+      userId: this.props.userId,
+      webPartInstanceId: this.props.webPartInstanceId,
+      configSignature: this.getCacheSignature()
+    };
+  }
+
+  private getCacheSignature(): string {
+    const loadingSettings = { ...this.props.settings } as unknown as Record<string, unknown>;
+    [
+      'defaultView', 'preferredStartMinutes', 'visibleHourCount', 'slotDurationMinutes', 'showWeekends',
+      'adminShowWeekends', 'userShowWeekends', 'userPreferredStartMinutes', 'userVisibleHourCount',
+      'enableCache', 'cacheDurationMinutes', 'availableAdminIcsCatalogItems'
+    ].forEach(key => delete loadingSettings[key]);
     return JSON.stringify(loadingSettings);
   }
 
@@ -253,6 +280,83 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     this.loadedMonthsBySource.set(sourceId, loaded);
   }
 
+  private getMonthRange(monthKey: string): { start: Date; end: Date } | undefined {
+    const match = /^(\d{4})-(\d{1,2})$/.exec(monthKey);
+    if (!match) return undefined;
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    if (month < 0 || month > 11) return undefined;
+    return { start: new Date(year, month, 1), end: new Date(year, month + 1, 1) };
+  }
+
+  private eventIntersectsMonth(event: IEvent, monthKey: string): boolean {
+    const range = this.getMonthRange(monthKey);
+    if (!range) return false;
+    const start = Date.parse(event.start);
+    const end = Date.parse(event.end);
+    const effectiveEnd = end > start ? end : start + 1;
+    return Number.isFinite(start) && Number.isFinite(end) && start < range.end.getTime() && effectiveEnd > range.start.getTime();
+  }
+
+  private prepareAppointments(appointments: IEvent[]): IndexedEvent[] {
+    return appointments.map(apt => ({
+      ...apt,
+      colorHex: apt.colorHex || '#0078d4',
+      sourceIconName: getSourceIconName(apt.sourceType, apt.sourceIconName),
+      sourceDisplayName: apt.sourceDisplayName || getSourceTypeDisplayName(apt.sourceType, apt.sourceIconName),
+      searchIndexText: this.buildSearchIndexText(apt)
+    }));
+  }
+
+  private hydratePersistentCache(requestedMonthKeys: string[], now: number = Date.now()): IEvent[] {
+    const allowedMonthKeys = new Set(requestedMonthKeys);
+    if (!this.props.settings.enableCache) {
+      this.eventCache.remove(this.getCacheConfiguration());
+      return [];
+    }
+    const cached = this.eventCache.read(
+      this.getCacheConfiguration(),
+      this.props.settings.cacheDurationMinutes,
+      allowedMonthKeys,
+      now
+    );
+    if (!cached) return [];
+
+    const appointments = new Map<string, IEvent>();
+    cached.segments.forEach(segment => {
+      this.registerSource(segment.service, segment.sourceId);
+      if (!segment.isStale) this.markMonthsLoaded(segment.sourceId, [segment.monthKey]);
+      segment.events.forEach(event => appointments.set(`${event.sourceId}:${event.id}`, event));
+    });
+    return Array.from(appointments.values());
+  }
+
+  private replaceAppointmentsForSourceMonths(sourceId: string, monthKeys: string[], appointments: IEvent[]): void {
+    const prepared = this.prepareAppointments(appointments);
+    this.setState(prev => {
+      const retained = prev.appointments.filter(event => event.sourceId !== sourceId ||
+        !monthKeys.some(monthKey => this.eventIntersectsMonth(event, monthKey)));
+      const byIdentity = new Map<string, IndexedEvent>();
+      retained.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event as IndexedEvent));
+      prepared.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event));
+      return { appointments: Array.from(byIdentity.values()) };
+    });
+  }
+
+  private cacheSuccessfulResult(service: ServiceKey, sourceId: string, monthKeys: string[], appointments: IEvent[], cachedAt: number = Date.now()): void {
+    if (!this.props.settings.enableCache) return;
+    const cacheableMonthKeys = monthKeys.filter(monthKey => this.initialCacheMonthKeys.has(monthKey));
+    if (cacheableMonthKeys.length === 0) return;
+    const segments: ICalendarEventCacheSegment[] = cacheableMonthKeys.map(monthKey => ({
+      service,
+      sourceId,
+      monthKey,
+      cachedAt,
+      events: appointments.filter(event => this.eventIntersectsMonth(event, monthKey))
+    }));
+    this.eventCache.replaceSegments(this.getCacheConfiguration(), segments, this.initialCacheMonthKeys);
+  }
+
   private getVisibleRange(date: Date = this.state.currentDate, view: CalendarViewType = this.state.previousView): { start: Date; end: Date } {
     if (view === 'month') {
       const first = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -302,7 +406,14 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     return this.rangeLoadPromise;
   }
 
-  private async loadAppointments(requestStart?: Date, requestEnd?: Date, reset: boolean = true, requestedServices?: Set<ServiceKey>): Promise<void> {
+  private async loadAppointments(
+    requestStart?: Date,
+    requestEnd?: Date,
+    reset: boolean = true,
+    requestedServices?: Set<ServiceKey>,
+    preserveAppointments: boolean = false,
+    forceRefresh: boolean = false
+  ): Promise<void> {
     if (reset) this.loadGeneration++;
     const currentGeneration = this.loadGeneration;
     const loadId = ++this.activeLoadId;
@@ -311,8 +422,18 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
+    const today = new Date();
+    const startDate = requestStart || new Date(today.getFullYear(), today.getMonth() - 3, 1);
+    const endDate = requestEnd || new Date(today.getFullYear(), today.getMonth() + 4, 1);
+    const requestedMonthKeys = this.getMonthKeys(startDate, endDate);
+    if (reset) this.initialCacheMonthKeys = new Set(requestedMonthKeys);
+    const cachedAppointments = reset && !forceRefresh ? this.hydratePersistentCache(requestedMonthKeys) : [];
     const enabledServices = this.getEnabledServiceKeys();
-    const servicesToLoad = requestedServices || new Set(enabledServices);
+    const servicesToLoad = requestedServices || new Set(enabledServices.filter(service => {
+      const knownSources = Array.from(this.knownSourceIdsByService[service]);
+      return forceRefresh || knownSources.length === 0 ||
+        knownSources.some(sourceId => !this.areMonthsLoaded(sourceId, requestedMonthKeys));
+    }));
     const initialLoadingSources = Array.from(servicesToLoad).reduce((acc, key) => {
       acc[key] = 'loading';
       return acc;
@@ -320,12 +441,16 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     this.setState({
       isLoading: true,
-      appointments: reset ? [] : this.state.appointments,
+      appointments: reset && !preserveAppointments ? this.prepareAppointments(cachedAppointments) : this.state.appointments,
       loadingSources: initialLoadingSources,
       loadErrors: reset ? { ...defaultLoadErrors } : this.state.loadErrors,
       isLoadingStatusOpen: false,
       showRefreshButton: false
     });
+    if (servicesToLoad.size === 0) {
+      this.setState({ isLoading: false, showRefreshButton: true });
+      return;
+    }
     const httpClient = this.props.context.httpClient;
     const graphClientPromise = this.props.context.msGraphClientFactory.getClient('3');
     const graphClient = await graphClientPromise;
@@ -341,27 +466,35 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const unifiedGroupService = new UnifiedGroupCalendarService(httpClient, graphClient);
     unifiedGroupService.setGraphClient(graphClient);
     
-    // Calculate date range for filtering (current month ± 3 months)
-    const today = new Date();
-    const startDate = requestStart || new Date(today.getFullYear(), today.getMonth() - 3, 1);
-    const endDate = requestEnd || new Date(today.getFullYear(), today.getMonth() + 4, 1);
-    const requestedMonthKeys = this.getMonthKeys(startDate, endDate);
-    const markLoaded = (sourceId: string): void => {
+    const markLoaded = (service: ServiceKey, sourceId: string, events: IEvent[] = []): void => {
       if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) {
         this.markMonthsLoaded(sourceId, requestedMonthKeys);
+        this.replaceAppointmentsForSourceMonths(sourceId, requestedMonthKeys, events);
+        this.cacheSuccessfulResult(service, sourceId, requestedMonthKeys, events);
       }
     };
     const registerLoadedSource = (service: ServiceKey, sourceId: string): void => {
       if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) this.registerSource(service, sourceId);
     };
-    Array.from(servicesToLoad).forEach(service => this.registerSource(service, `$service:${service}`));
+    Array.from(servicesToLoad).forEach(service => {
+      this.registerSource(service, `$service:${service}`);
+      if (this.props.settings.enableCache) {
+        this.eventCache.removeSegments(
+          this.getCacheConfiguration(),
+          service,
+          `$service:${service}`,
+          new Set(requestedMonthKeys),
+          this.initialCacheMonthKeys
+        );
+      }
+    });
     
     const updateStatus = (service: ServiceKey, status: ServiceStatus, errorMessage?: string): void => {
       if (loadId !== this.activeLoadId) {
         return;
       }
 
-      if (status === 'ready') markLoaded(`$service:${service}`);
+      if (status === 'ready') markLoaded(service, `$service:${service}`);
 
       this.setState(prev => ({
         loadingSources: {
@@ -380,14 +513,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         return;
       }
 
-      const normalizedAppointments: IndexedEvent[] = appointments.map(apt => ({
-        ...apt,
-        colorHex: apt.colorHex || '#0078d4',
-        sourceIconName: getSourceIconName(apt.sourceType, apt.sourceIconName),
-        sourceDisplayName: apt.sourceDisplayName || getSourceTypeDisplayName(apt.sourceType, apt.sourceIconName),
-        // Build a reusable lowercase search index per event to avoid repeated string work while typing.
-        searchIndexText: this.buildSearchIndexText(apt)
-      }));
+      const normalizedAppointments = this.prepareAppointments(appointments);
 
       this.setState(prev => {
         const byIdentity = new Map<string, IndexedEvent>();
@@ -422,6 +548,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           this.exchangeCalendarsPromise = this.exchangeCalendarsPromise || exchangeService.getCalendars();
           const userCalendars = await this.exchangeCalendarsPromise;
           const exchangeCalendarStates = this.props.settings.exchangeCalendarStates || {};
+          const discoveredExchangeSourceIds = new Set(userCalendars
+            .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
+            .map(calendar => `exchange_${calendar.id}`));
+          Array.from(this.knownSourceIdsByService.exchange)
+            .filter(sourceId => sourceId.indexOf('exchange_') === 0 && !discoveredExchangeSourceIds.has(sourceId))
+            .forEach(sourceId => markLoaded('exchange', sourceId));
           userCalendars.filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .forEach(calendar => registerLoadedSource('exchange', `exchange_${calendar.id}`));
           const calendarPromises = userCalendars
@@ -435,8 +567,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                   endDate,
                   undefined // current user
                 );
-                markLoaded(`exchange_${calendar.id}`);
-                return events.map(event => ({
+                const normalizedEvents = events.map(event => ({
                   ...event,
                   sourceId: `exchange_${calendar.id}`,
                   sourceDisplayName: calendar.name,
@@ -444,6 +575,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                   sourceType: 'exchange' as const,
                   showSourceLogo: this.props.settings.exchangeShowSourceLogo ?? true
                 } as IEvent));
+                markLoaded('exchange', `exchange_${calendar.id}`, normalizedEvents);
+                return normalizedEvents;
               } catch (error) {
                 hadError = true;
                 console.error(`Failed to load Exchange calendar ${calendar.name}:`, error);
@@ -468,9 +601,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                   endDate,
                   source.exchangeMailbox
                 );
-                markLoaded(source.id);
-
-                return events.map(event => ({
+                const normalizedEvents = events.map(event => ({
                   ...event,
                   sourceId: source.id,
                   sourceDisplayName: source.name,
@@ -478,6 +609,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                   sourceType: 'exchange' as const,
                   showSourceLogo: source.showSourceLogo ?? this.props.settings.exchangeShowSourceLogo ?? true
                 } as IEvent));
+                markLoaded('exchange', source.id, normalizedEvents);
+                return normalizedEvents;
               } catch (error) {
                 hadError = true;
                 console.error(`Failed to load Exchange source ${source.name}:`, error);
@@ -511,8 +644,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 endDate,
                 source.sharePointFieldMapping
               );
-              markLoaded(source.id);
-              return items.map(item => ({
+              const normalizedEvents = items.map(item => ({
                 ...item,
                 sourceId: source.id,
                 sourceDisplayName: source.name,
@@ -520,6 +652,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 sourceType: 'sharepoint' as const,
                 showSourceLogo: this.props.settings.sharePointShowSourceLogo ?? true
               } as IEvent));
+              markLoaded('sharepoint', source.id, normalizedEvents);
+              return normalizedEvents;
             }
           } catch (error) {
             hadError = true;
@@ -555,6 +689,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             showCompletedTasks: true,
             showSourceLogo: this.props.settings.plannerShowSourceLogo ?? true
           }));
+          const discoveredPlannerSourceIds = new Set(autoPlannerSources.map(source => source.id));
+          Array.from(this.knownSourceIdsByService.planner)
+            .filter(sourceId => sourceId.indexOf('auto_planner_') === 0 && !discoveredPlannerSourceIds.has(sourceId))
+            .forEach(sourceId => markLoaded('planner', sourceId));
           autoPlannerSources.forEach(source => registerLoadedSource('planner', source.id));
 
           const appointmentsBySource = await Promise.all(autoPlannerSources.map(async source => {
@@ -572,7 +710,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source,
                 this.props.settings.plannerShowSourceLogo ?? true
               );
-              markLoaded(source.id);
+              markLoaded('planner', source.id, events);
               return events;
             } catch (error) {
               hadError = true;
@@ -606,7 +744,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source,
                 this.props.settings.plannerShowSourceLogo ?? true
               );
-              markLoaded(source.id);
+              markLoaded('planner', source.id, events);
               return events;
             }
           } catch (error) {
@@ -645,7 +783,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               autoSource,
               this.props.settings.teamsShiftsShowSourceLogo ?? true
             );
-            markLoaded(autoSource.id);
+            markLoaded('teamsShifts', autoSource.id, events);
             appendAppointments(events);
           }
         } catch (error) {
@@ -667,7 +805,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               source,
               this.props.settings.teamsShiftsShowSourceLogo ?? true
             );
-            markLoaded(source.id);
+            markLoaded('teamsShifts', source.id, events);
             return events;
           } catch (error) {
             hadError = true;
@@ -690,6 +828,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           this.unifiedGroupsPromise = this.unifiedGroupsPromise || unifiedGroupService.getUnifiedGroups();
           this.joinedTeamIdsPromise = this.joinedTeamIdsPromise || unifiedGroupService.getJoinedTeamIds();
           const [groups, joinedTeamIds] = await Promise.all([this.unifiedGroupsPromise, this.joinedTeamIdsPromise]);
+          const discoveredGroupSourceIds = new Set(groups.map(group => `auto_unifiedGroup_${group.id}`));
+          Array.from(this.knownSourceIdsByService.unifiedGroup)
+            .filter(sourceId => sourceId.indexOf('auto_unifiedGroup_') === 0 && !discoveredGroupSourceIds.has(sourceId))
+            .forEach(sourceId => markLoaded('unifiedGroup', sourceId));
           groups.forEach(group => registerLoadedSource('unifiedGroup', `auto_unifiedGroup_${group.id}`));
 
           const appointmentsByGroup = await Promise.all(groups.map(async group => {
@@ -698,8 +840,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               if (this.areMonthsLoaded(sourceId, requestedMonthKeys)) return [] as IEvent[];
               const iconName = joinedTeamIds.has(group.id) ? 'TeamsLogo' : 'Group';
               const events = await unifiedGroupService.getGroupEvents(group.id, startDate, endDate);
-              markLoaded(sourceId);
-              return events.map(event => ({
+              const normalizedEvents = events.map(event => ({
                 ...event,
                 sourceId: `auto_unifiedGroup_${group.id}`,
                 sourceDisplayName: group.displayName,
@@ -708,6 +849,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
                 sourceIconName: iconName
               } as IEvent));
+              markLoaded('unifiedGroup', sourceId, normalizedEvents);
+              return normalizedEvents;
             } catch (error) {
               hadError = true;
               console.error(`Failed to load group calendar ${group.displayName}:`, error);
@@ -750,8 +893,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
             const iconName = joinedTeamIds.has(source.groupId) ? 'TeamsLogo' : 'Group';
             const events = await unifiedGroupService.getGroupEvents(source.groupId, startDate, endDate);
-            markLoaded(source.id);
-            return events.map(event => ({
+            const normalizedEvents = events.map(event => ({
               ...event,
               sourceId: source.id,
               sourceDisplayName: source.name,
@@ -760,6 +902,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
               sourceIconName: iconName
             } as IEvent));
+            markLoaded('unifiedGroup', source.id, normalizedEvents);
+            return normalizedEvents;
           } catch (error) {
             hadError = true;
             console.error(`Failed to load group calendar ${source.name}:`, error);
@@ -774,7 +918,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     }
 
     if (servicesToLoad.has('ics')) {
-      sourceGroups.ics.forEach(source => markLoaded(source.id));
+      sourceGroups.ics.forEach(source => markLoaded('ics', source.id));
       updateStatus('ics', 'ready');
     }
     await Promise.all(tasks.map(task => task.catch(() => undefined)));
@@ -801,6 +945,16 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         this.ensureVisibleRange(this.state.currentDate, view).catch(err => console.error('Failed to load visible range:', err));
       });
       this.props.onDefaultViewChange(view);
+    }
+  };
+
+  private handleManualRefresh = async (): Promise<void> => {
+    const visibleRange = this.getVisibleRange();
+    const preserveAppointments = this.props.settings.enableCache;
+    await this.loadAppointments(undefined, undefined, true, undefined, preserveAppointments, true);
+    const visibleMonthKeys = this.getMonthKeys(visibleRange.start, visibleRange.end);
+    if (visibleMonthKeys.some(monthKey => !this.initialCacheMonthKeys.has(monthKey))) {
+      await this.loadAppointments(visibleRange.start, visibleRange.end, false, undefined, preserveAppointments, true);
     }
   };
 
@@ -861,7 +1015,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       key: 'refresh',
       iconProps: { iconName: 'Refresh' },
       onClick: () => {
-        this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
+        this.handleManualRefresh().catch(err => console.error('Failed to refresh appointments:', err));
       }
     };
 

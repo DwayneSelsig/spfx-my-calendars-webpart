@@ -3,7 +3,7 @@ export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' |
 export type CalendarSourceOrigin = 'admin' | 'user';
 export type CalendarSlotDuration = 15 | 30 | 60;
 
-export const CALENDAR_SETTINGS_SCHEMA_VERSION = 4;
+export const CALENDAR_SETTINGS_SCHEMA_VERSION = 5;
 
 export interface ISharePointFieldMapping {
   titleField?: string;
@@ -69,6 +69,8 @@ export interface IAdminWebPartSettings {
   preferredStartMinutes: number;
   visibleHourCount: number;
   slotDurationMinutes: CalendarSlotDuration;
+  enableCache: boolean;
+  cacheDurationMinutes: number;
   organizationPrimaryColor?: string;
   exchangeShowSourceLogo: boolean;
   sharePointShowSourceLogo: boolean;
@@ -122,6 +124,8 @@ export interface ICalendarSettings {
   preferredStartMinutes: number;
   visibleHourCount: number;
   slotDurationMinutes: CalendarSlotDuration;
+  enableCache: boolean;
+  cacheDurationMinutes: number;
   userPreferredStartMinutes?: number;
   userVisibleHourCount?: number;
   organizationPrimaryColor?: string;
@@ -171,6 +175,8 @@ export const defaultAdminWebPartSettings: IAdminWebPartSettings = {
   preferredStartMinutes: 8 * 60,
   visibleHourCount: 10,
   slotDurationMinutes: 30,
+  enableCache: true,
+  cacheDurationMinutes: 10,
   organizationPrimaryColor: '#0078d4',
   exchangeShowSourceLogo: true,
   sharePointShowSourceLogo: true,
@@ -202,6 +208,8 @@ export const defaultCalendarSettings: ICalendarSettings = {
   preferredStartMinutes: 8 * 60,
   visibleHourCount: 10,
   slotDurationMinutes: 30,
+  enableCache: true,
+  cacheDurationMinutes: 10,
   organizationPrimaryColor: '#0078d4',
   exchangeCalendarStates: {},
   exchangeShowSourceLogo: true,

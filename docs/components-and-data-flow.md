@@ -13,7 +13,7 @@ This document describes verified current responsibilities. Normative cross-cutti
 | `CalendarSettingsService` | Validation, normalization, migration, resolution, minimal personal overrides | Pure except identifier generation |
 | `SettingsStorageService` | Current/legacy personal JSON in OneDrive App Folder | Graph I/O; no policy resolution |
 | `AudienceService` | Group discovery and current-user membership | Five-minute session cache; no policy effects |
-| `MyCalendars` | Source coordination, visible range, event merge, status, search, renderer selection | Memory-only events and caches |
+| `MyCalendars` | Source coordination, visible range, event merge, status, search, renderer selection | Runtime state plus optional administrator-controlled browser cache |
 | `SettingsPanel` | Personal draft and source discovery | `onSave`, `onReset`, deep links; no persistence writes |
 | `AdminSettingsPanel` | Administrator draft, discovery, audiences, ICS catalog | `onSave`; no property writes |
 | `PropertyPaneAdminCalendarManager` | Property-pane adapter for administrator panel | Separate Graph client and React mount lifecycle |

@@ -12,14 +12,25 @@ import { Stack } from '@fluentui/react/lib/Stack';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { WebPartContext } from '@microsoft/sp-webpart-base';
 import type { IAdminWebPartSettings } from '../models/ICalendarSettings';
+import {
+  notifyAdminSettingsPropertyChanges,
+  type AdminSettingsPropertyChangeNotifier,
+  type PropertyPaneChangeCallback
+} from '../services/AdminSettingsPropertyPersistence';
 import { AdminSettingsPanel } from '../components/AdminSettingsPanel';
 
 export interface IPropertyPaneAdminCalendarManagerProps {
   label: string;
   adminSettings: IAdminWebPartSettings;
+  backupTargetProperty: string;
   adminLoadNotice?: string;
   context: WebPartContext;
-  onSave: (settings: IAdminWebPartSettings) => Promise<void> | void;
+  onSave: (settings: IAdminWebPartSettings, notifyPropertyChange: AdminSettingsPropertyChangeNotifier) => Promise<void> | void;
+}
+
+interface IAdminCalendarManagerControlProps extends IPropertyPaneAdminCalendarManagerProps {
+  targetProperty: string;
+  changeCallback?: PropertyPaneChangeCallback;
 }
 
 interface IAdminCalendarManagerControlState {
@@ -28,8 +39,8 @@ interface IAdminCalendarManagerControlState {
   graphClient: MSGraphClientV3 | undefined;
 }
 
-class AdminCalendarManagerControl extends React.Component<IPropertyPaneAdminCalendarManagerProps, IAdminCalendarManagerControlState> {
-  constructor(props: IPropertyPaneAdminCalendarManagerProps) {
+class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerControlProps, IAdminCalendarManagerControlState> {
+  constructor(props: IAdminCalendarManagerControlProps) {
     super(props);
     this.state = {
       isPanelOpen: false,
@@ -47,7 +58,19 @@ class AdminCalendarManagerControl extends React.Component<IPropertyPaneAdminCale
   private handleSave = async (settings: IAdminWebPartSettings): Promise<void> => {
     this.setState({ isSaving: true });
     try {
-      await this.props.onSave(settings);
+      if (!this.props.changeCallback) {
+        throw new Error('The SPFx property pane change callback is unavailable.');
+      }
+
+      const changeCallback = this.props.changeCallback;
+      await this.props.onSave(settings, serialized => {
+        notifyAdminSettingsPropertyChanges(
+          changeCallback,
+          this.props.targetProperty,
+          this.props.backupTargetProperty,
+          serialized
+        );
+      });
       this.setState({ isPanelOpen: false, isSaving: false });
     } catch (error) {
       console.error('Failed to persist admin settings:', error);
@@ -102,8 +125,15 @@ export function PropertyPaneAdminCalendarManager(
     targetProperty,
     properties: {
       key: targetProperty,
-      onRender: (elem: HTMLElement): void => {
-        ReactDOM.render(<AdminCalendarManagerControl {...properties} />, elem);
+      onRender: (elem: HTMLElement, _context?: unknown, changeCallback?: PropertyPaneChangeCallback): void => {
+        ReactDOM.render(
+          <AdminCalendarManagerControl
+            {...properties}
+            targetProperty={targetProperty}
+            changeCallback={changeCallback}
+          />,
+          elem
+        );
       },
       onDispose: (elem: HTMLElement): void => {
         ReactDOM.unmountComponentAtNode(elem);

@@ -28,6 +28,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Set a color for each configured source.
 - Set a preferred timeline start, visible hours, weekends, and a 15, 30, or 60 minute grid.
 - Navigate beyond the initial seven-month window with source- and month-aware loading.
+- Optionally cache the initial seven-month range in the browser with an administrator-defined lifetime.
 - Search event titles and locations.
 - Show source logos by service type.
 - Use organization theme colors and light or dark themes.
@@ -47,6 +48,17 @@ The web part does not:
 - parse or display ICS feeds directly;
 - provide a Schedule view.
 
+## Installation
+Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions when prompted.
+
+### Upgrades
+Upload the new `.sppkg` file and overwrite the existing one when prompted.
+
+> **Note:** SharePoint add-ins are being retired, but SharePoint Framework (SPFx) solutions like this one are not affected and remain fully supported.
+
+For more information, see the SharePoint App Catalog documentation:
+https://learn.microsoft.com/sharepoint/use-app-catalog
+
 ## Configuration
 
 Web part editors can set administrator defaults in the property pane. Users can set personal preferences in the settings panel.
@@ -54,6 +66,7 @@ Web part editors can set administrator defaults in the property pane. Users can 
 The administrator settings model includes:
 
 - default calendar view and display values;
+- browser-cache enablement and a cache duration from 1 to 60 minutes;
 - organization color and source-logo defaults;
 - audience-assigned calendar sources;
 - audience-assigned ICS catalog entries;
@@ -129,7 +142,7 @@ npm run build
 
 The package is written to `sharepoint/solution/`.
 
-The repository does not contain automated project tests. `npm run build` is the current production verification command. A repository-wide test strategy is planned for a later change.
+`npm run build` runs the focused Jest regression tests before creating the production package.
 
 ## Installation and upgrade
 
@@ -161,6 +174,7 @@ The version history below is descriptive. It is not an architecture or behavior 
 | 0.0.10 | 2026-04-06 | Improved responsive layout. |
 | 0.1.0 | 2026-08-23 | Replaced PnP Calendar with own calendar |
 | 0.2.0 | 2026-08-29 | Improved locale-aware calendar formatting, updated development dependencies, and clarified rendering documentation. |
+| 0.2.1 | 2026-09-10 | Added administrator-controlled browser caching and regression tests for cache and admin-settings persistence. |
 
 ## Contributing
 

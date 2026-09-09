@@ -16,6 +16,7 @@ import {
   defaultCalendarSettings,
   defaultUserCalendarSettings
 } from '../models/ICalendarSettings';
+import { normalizeCacheDuration } from './CalendarEventCache';
 
 export type AdminSettingsLoadSource = 'current' | 'backup' | 'defaults' | 'legacy';
 
@@ -306,6 +307,8 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
     preferredStartMinutes: normalizePreferredStartMinutes(value.preferredStartMinutes, value.startHour, visibleHourCount, slotDurationMinutes),
     visibleHourCount,
     slotDurationMinutes,
+    enableCache: typeof value.enableCache === 'boolean' ? value.enableCache : defaultAdminWebPartSettings.enableCache,
+    cacheDurationMinutes: normalizeCacheDuration(value.cacheDurationMinutes),
     organizationPrimaryColor: typeof value.organizationPrimaryColor === 'string' && value.organizationPrimaryColor.trim()
       ? value.organizationPrimaryColor.trim()
       : defaultAdminWebPartSettings.organizationPrimaryColor,
@@ -610,6 +613,8 @@ export function resolveCalendarSettings(params: {
     preferredStartMinutes: adminSettings.preferredStartMinutes,
     visibleHourCount: adminSettings.visibleHourCount,
     slotDurationMinutes: adminSettings.slotDurationMinutes,
+    enableCache: adminSettings.enableCache,
+    cacheDurationMinutes: adminSettings.cacheDurationMinutes,
     userPreferredStartMinutes,
     userVisibleHourCount,
     organizationPrimaryColor: organizationPrimaryColor || adminSettings.organizationPrimaryColor || defaultCalendarSettings.organizationPrimaryColor,

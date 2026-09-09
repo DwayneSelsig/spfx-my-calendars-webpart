@@ -82,6 +82,9 @@ declare interface IMyCalendarsWebPartStrings {
   DefaultViewLabel: string;
   TimelineDefaultsLabel: string;
   SlotDurationLabel: string;
+  CacheDefaultsLabel: string;
+  EnableCacheLabel: string;
+  CacheDurationMinutesLabel: string;
   HomeLabel: string;
   EditLabel: string;
   FieldMappingLabel: string;

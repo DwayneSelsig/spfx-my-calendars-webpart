@@ -4,7 +4,7 @@ Read only the section selected by [AGENTS.md](../AGENTS.md). The requirements in
 
 ## Loading, range, and cache
 
-**Read when:** changing `MyCalendars`, source coordination, visible ranges, refresh, deduplication, loading status, partial failures, or runtime caches. Related records: DEC-004, DEC-007, and DEC-008.
+**Read when:** changing `MyCalendars`, source coordination, visible ranges, refresh, deduplication, loading status, partial failures, or runtime caches. Related records: DEC-004, DEC-007, DEC-008, and DEC-017.
 
 Read the common and applicable source section in [Sources and permissions](sources-and-permissions.md) as well only when an adapter, endpoint, mapping, permission, or source-specific failure boundary changes.
 
@@ -13,8 +13,8 @@ Read the common and applicable source section in [Sources and permissions](sourc
 - `MyCalendars` **MUST** coordinate source loading, range state, deduplication, source status, search state, and renderer selection.
 - Source families **MUST** load independently so a failure in one family does not remove valid results from another.
 - A failed source/month combination **MUST** remain eligible for retry.
-- A manual refresh **MUST** clear event and range state.
-- Loaded event, discovery, and range-cache data **MUST NOT** be persisted.
+- A manual refresh **MUST** invalidate range state and force source retrieval. With administrator caching enabled, existing appointments **MUST** remain visible until successful replacements are available; without it, reset behavior clears them.
+- Loaded discovery and navigation-range data **MUST NOT** be persisted. When the administrator enables appointment caching, normalized events and successful source/month state for the initial seven-month range **MAY** be persisted in browser `localStorage` under DEC-017.
 - Results from an obsolete load generation **MUST NOT** be merged into current state.
 
 ### Initialization and settings hand-off
@@ -33,13 +33,14 @@ The detailed persistence and resolution flow is in [Settings and policy](setting
 For a reset load, the coordinator:
 
 1. increments the load generation and load ID;
-2. clears appointments, month/source caches, discovery promises, and the retained Teams Shifts service;
-3. creates source-service instances and calculates the initial seven-month request;
-4. starts one asynchronous task per enabled service family;
-5. loads independent configured sources in parallel where implemented;
-6. normalizes presentation metadata and merges results by `sourceId:eventId`;
-7. marks a source/month set only after that request succeeds; and
-8. ignores append or mark operations from an obsolete load ID or generation.
+2. clears runtime month/source caches, discovery promises, and the retained Teams Shifts service;
+3. hydrates compatible cached appointments before retrieval when administrator caching is enabled;
+4. creates source-service instances and calculates the initial seven-month request;
+5. starts one asynchronous task per enabled service family needing retrieval;
+6. loads independent configured sources in parallel where implemented;
+7. normalizes presentation metadata and merges results by `sourceId:eventId`;
+8. marks and optionally persists a source/month set only after that request succeeds; and
+9. ignores append or mark operations from an obsolete load ID or generation.
 
 **Fact:** Exchange is always considered enabled because current-user calendars are automatic. Other service families are enabled by configured enabled sources or their source-type automatic-loading flag.
 
@@ -55,7 +56,7 @@ Only successful source/month combinations enter the runtime range cache. Failed 
 
 | Cache/state | Owner | Lifetime/invalidation | Failure behavior |
 | --- | --- | --- | --- |
-| Appointments | `MyCalendars.state` | Component lifetime; cleared on reset/refresh | Successful partial results remain |
+| Appointments | `MyCalendars.state` | Component lifetime; replaced on settings reset and retained during manual refresh | Successful partial results remain |
 | Loaded months by source | `MyCalendars` | Component cache generation; cleared on reset/settings reload | Only successes are marked |
 | Known source IDs by service | `MyCalendars` | Component cache generation | Includes service sentinels for empty families |
 | Exchange calendar discovery promise | `MyCalendars` | Until reset; cleared after discovery failure | Later request can retry |
@@ -64,6 +65,16 @@ Only successful source/month combinations enter the runtime range cache. Failed 
 | Joined Teams in `TeamsShiftsService` | Retained service instance | Until reset; rejected promise is cleared | Later request can retry |
 | Planner current user ID | One `PlannerTaskService` instance | One load invocation because the service is recreated | Failure returns `null`; assigned-only filtering is then not applied |
 | Search index text | Each in-memory event | Appointment lifetime | Recomputed on demand if absent |
+
+### Optional persistent appointment cache
+
+- Administrator settings `enableCache` and `cacheDurationMinutes` exclusively control the feature. Defaults are enabled and ten minutes; duration is normalized to 1–60 whole minutes.
+- The cache key includes normalized tenant, user, and web-part instance identity. The entry also carries a schema version and a stable signature of result-affecting effective settings.
+- Cached canonical events are always reprocessed for presentation, search indexing, and deduplication. Fresh source/month segments suppress GET requests; stale segments remain visible while they refresh in the background.
+- Cache expiry by itself **MUST NOT** schedule retrieval while the component remains mounted. When a later load finds stale segments, that retrieval **MUST** use the existing loading and toolbar-status workflow.
+- A successful source GET replaces that source/month segment, including with an empty result. A failed GET retains the prior segment and remains visibly failed.
+- Persistent segments are restricted to the moving initial seven-month range. Visible months outside that range remain runtime-only.
+- Manual refresh keeps appointments visible, bypasses freshness, and refreshes the initial and currently visible ranges. Disabling cache removes the current identity's entry; invalid data and unavailable or full storage degrade to uncached loading.
 
 ### Identity and partial failures
 
@@ -81,6 +92,8 @@ Independent successes are retained, but isolation inside a family varies:
 - ICS performs no runtime retrieval and is marked ready.
 
 ### Loading verification focus
+
+Focused unit tests cover cache-duration normalization, fresh/stale boundaries, and successful empty segment replacement. Source orchestration and host storage behavior still require manual verification.
 
 There are no automated tests for successful-month caching, obsolete-load rejection, deduplication, partial failures, automatic versus explicit source selection, or retry eligibility. Until a test architecture is confirmed, `npm run build` is the production verification command.
 

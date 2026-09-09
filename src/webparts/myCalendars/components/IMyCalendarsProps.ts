@@ -13,4 +13,7 @@ export interface IMyCalendarsProps {
   onDefaultViewChange: (view: CalendarViewType) => void;
   onResetSettings?: () => void;
   context: WebPartContext;
+  tenantId?: string;
+  userId?: string;
+  webPartInstanceId: string;
 }
