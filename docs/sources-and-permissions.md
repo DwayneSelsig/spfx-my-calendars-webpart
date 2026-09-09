@@ -20,7 +20,7 @@ All active adapters are read-only. They return normalized local events or discov
 
 ## Common contract, permissions, and resilience
 
-**Read when:** changing the shared event model, source coordination boundaries, Graph permission manifests, authentication context, pagination, retry, throttling, or cross-source verification. Related records: DEC-001, DEC-004, DEC-008, DEV-005, DEV-008, DEBT-003, and OQ-006.
+**Read when:** changing the shared event model, source coordination boundaries, Graph permission manifests, authentication context, pagination, retry, throttling, or cross-source verification. Related records: DEC-001, DEC-004, DEC-008, DEC-018, DEV-005, DEV-008, DEBT-003, and OQ-006.
 
 ### Shared adapter contract
 
@@ -77,7 +77,7 @@ There are no automated tests for endpoint construction, pagination, source mappi
 
 ## Exchange calendars
 
-**Read when:** changing current-user calendars, shared/configured mailboxes, Outlook calendar discovery, `calendarView`, Exchange mapping, or Exchange links. Related records: DEC-004, DEC-008, DEV-007, and DEV-008.
+**Read when:** changing current-user calendars, shared/configured mailboxes, Outlook calendar discovery, `calendarView`, Exchange mapping, or Exchange links. Related records: DEC-004, DEC-008, DEC-018, DEV-007, and DEV-008.
 
 ### Discovery and retrieval
 
@@ -90,7 +90,7 @@ Events use `GET /me/calendars/{calendarId}/calendarView` or `GET /users/{mailbox
 
 ### Mapping contract
 
-The adapter maps ID, subject, preview, start/end, all-day state, location, organizer, attendees, online meeting, join URL, and web link. The coordinator supplies source display name, source ID, Outlook color, source type, and logo setting.
+The adapter maps ID, subject, plain-text preview, start/end, all-day state, location, attendees, online meeting, join URL, and web link. It maps organizer metadata and `isOrganizer` only when at least one normalized attendee makes the event a meeting. The coordinator supplies source display name, source ID, Outlook color, source type, and logo setting.
 
 Missing or invalid required timed dates fail that calendar request. Date-only/all-day values are converted through local midnight before ISO serialization. The current user email determines `isOrganizer`; failure to obtain it produces `false` without failing retrieval.
 
@@ -107,7 +107,7 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 
 ## SharePoint list calendars
 
-**Read when:** changing SharePoint site/list discovery, column inspection, field mapping, list-item retrieval, or SharePoint event conversion. Related records: DEC-004, DEC-008, DEV-004, and DEV-008.
+**Read when:** changing SharePoint site/list discovery, column inspection, field mapping, list-item retrieval, or SharePoint event conversion. Related records: DEC-004, DEC-008, DEC-018, DEV-004, and DEV-008.
 
 ### Discovery
 
@@ -120,6 +120,8 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 Runtime retrieval calls `GET /sites/{siteId}/lists/{listId}/items?expand=fields`, then filters the requested range on the client.
 
 Configured or detected columns map title, start, end, description, location, and all-day state. Default names are `Title`, `EventDate`, `EndDate`, `Description`, `Location`, and `fAllDayEvent`.
+
+For all-day items, `EventDate` is interpreted as a calendar date at local midnight and SharePoint's inclusive `EndDate` is converted to the exclusive local midnight after that date. Timed values retain their source instants. SharePoint descriptions are marked as HTML for sanitized rendering.
 
 Items without a title or start date, items with invalid dates, and items outside the range are skipped. A missing end uses the start value.
 
@@ -184,7 +186,7 @@ Configured plan access can be checked with `GET /planner/plans/{planId}`. Runtim
 
 `GET /groups/{groupId}/calendarView` uses the requested range, UTC preference, selected event fields, and `$top=500`.
 
-Mapping matches Exchange: title, preview, dates, all-day state, location, organizer, attendees, online meeting, join URL, and web link. Missing or invalid required dates fail that group request. The coordinator supplies group/source identity, display name, color, logo, and a Team-versus-Group icon.
+Mapping matches Exchange: title, plain-text preview, dates, all-day state, location, attendees, online meeting, join URL, and web link, with organizer metadata only for events having at least one normalized attendee. Missing or invalid required dates fail that group request. The coordinator supplies group/source identity, display name, color, logo, and a Team-versus-Group icon.
 
 ### Automatic mode, cache, and failures
 

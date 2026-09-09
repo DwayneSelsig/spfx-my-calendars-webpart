@@ -40,6 +40,46 @@ interface IGraphListItemWithFields {
 // Alias for backwards compatibility
 type IGraphListItem = IGraphListItemWithFields;
 
+interface INormalizedSharePointDates {
+  start: Date;
+  end: Date;
+}
+
+function parseSharePointCalendarDate(value: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day
+    ? parsed
+    : undefined;
+}
+
+/**
+ * SharePoint stores all-day calendar boundaries as calendar dates. EndDate is
+ * inclusive, while the local event contract uses an exclusive end boundary.
+ */
+export function normalizeSharePointEventDates(
+  startValue: string,
+  endValue: string | undefined,
+  isAllDay: boolean
+): INormalizedSharePointDates | undefined {
+  if (!isAllDay) {
+    const start = new Date(startValue);
+    const end = endValue ? new Date(endValue) : new Date(start);
+    return Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? undefined : { start, end };
+  }
+
+  const start = parseSharePointCalendarDate(startValue);
+  const inclusiveEnd = parseSharePointCalendarDate(endValue || startValue);
+  if (!start || !inclusiveEnd) return undefined;
+  const end = new Date(inclusiveEnd);
+  end.setDate(end.getDate() + 1);
+  return end > start ? { start, end } : undefined;
+}
+
 /**
  * Service to interact with SharePoint calendars via Microsoft Graph API
  * Requires Sites.Read.All permission
@@ -280,10 +320,10 @@ export class SharePointCalendarService {
     const startDateValue = fields[startDateFieldName] as string | undefined;
     const endDateValue = fields[endDateFieldName] as string | undefined;
     if (!startDateValue) return null;
-    const eventStart = new Date(startDateValue);
-    const eventEnd = endDateValue ? new Date(endDateValue) : new Date(eventStart);
-    if (Number.isNaN(eventStart.getTime()) || Number.isNaN(eventEnd.getTime())) return null;
     const isAllDay = (fields[allDayFieldName] as boolean | undefined) === true;
+    const eventDates = normalizeSharePointEventDates(startDateValue, endDateValue, isAllDay);
+    if (!eventDates) return null;
+    const { start: eventStart, end: eventEnd } = eventDates;
 
     // Client-side date range filtering
     if (startDate && endDate) {
@@ -296,6 +336,7 @@ export class SharePointCalendarService {
       id: item.id,
       title,
       description: (fields[descriptionFieldName] as string | undefined) || '',
+      descriptionFormat: 'html',
       location: (fields[locationFieldName] as string | undefined) || undefined,
       start: eventStart.toISOString(),
       end: eventEnd.toISOString(),

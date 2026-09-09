@@ -13,6 +13,8 @@ export interface ICalendarOrganizer {
   email?: string;
 }
 
+export type CalendarEventDescriptionFormat = 'plainText' | 'html';
+
 /** Canonical, read-only event model used by source adapters and renderers. */
 export interface ICalendarEvent {
   id: string;
@@ -27,6 +29,8 @@ export interface ICalendarEvent {
   organizer?: ICalendarOrganizer;
   category?: string;
   description?: string;
+  /** Omitted values are treated as plain text. */
+  descriptionFormat?: CalendarEventDescriptionFormat;
   location?: string;
   importance?: string;
   isOrganizer?: boolean;

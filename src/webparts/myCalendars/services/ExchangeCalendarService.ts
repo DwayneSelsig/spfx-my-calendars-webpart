@@ -219,6 +219,8 @@ export class ExchangeCalendarService {
         email: att.emailAddress?.address || ''
       }))
       .filter(att => att.id);
+    const isMeeting = mappedAttendees.length > 0;
+    const organizerName = graphEvent.organizer?.emailAddress?.name;
 
     return {
       id: graphEvent.id,
@@ -228,11 +230,13 @@ export class ExchangeCalendarService {
       isFullDay: graphEvent.isAllDay || false,
       description: graphEvent.bodyPreview || '',
       location: graphEvent.location?.displayName || undefined,
-      isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail),
-      organizer: {
-        name: graphEvent.organizer?.emailAddress?.name,
-        email: organizerEmail
-      },
+      ...(isMeeting ? { isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail) } : {}),
+      ...(isMeeting && (organizerName || organizerEmail) ? {
+        organizer: {
+          name: organizerName,
+          email: organizerEmail
+        }
+      } : {}),
       attendees: mappedAttendees,
       sourceId: '', // Will be set by caller
       color: undefined, // Will be set by caller

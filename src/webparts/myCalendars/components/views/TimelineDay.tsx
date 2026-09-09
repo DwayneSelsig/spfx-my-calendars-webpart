@@ -169,7 +169,7 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
                   {segment.event.location || (segment.event.isOnlineMeeting ? 'Microsoft Teams' : '')}
                 </div>
               )}
-              {!compact && segment.event.organizer?.name && (segment.endMinutes - segment.startMinutes >= 52) && (
+              {!compact && (segment.event.attendees || []).length > 0 && segment.event.organizer?.name && (segment.endMinutes - segment.startMinutes >= 52) && (
                 <div style={{ fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{segment.event.organizer.name}</div>
               )}
             </button>

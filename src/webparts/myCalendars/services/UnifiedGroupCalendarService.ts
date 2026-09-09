@@ -180,6 +180,8 @@ export class UnifiedGroupCalendarService {
         email: att.emailAddress?.address || ''
       }))
       .filter(att => att.id);
+    const isMeeting = mappedAttendees.length > 0;
+    const organizerName = graphEvent.organizer?.emailAddress?.name;
 
     return {
       id: graphEvent.id,
@@ -191,11 +193,13 @@ export class UnifiedGroupCalendarService {
       isFullDay: graphEvent.isAllDay || false,
       sourceId: '',
       color: undefined,
-      isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail),
-      organizer: {
-        name: graphEvent.organizer?.emailAddress?.name,
-        email: organizerEmail
-      },
+      ...(isMeeting ? { isOrganizer: UserHelper.isEventOrganizer(organizerEmail, currentUserEmail) } : {}),
+      ...(isMeeting && (organizerName || organizerEmail) ? {
+        organizer: {
+          name: organizerName,
+          email: organizerEmail
+        }
+      } : {}),
       attendees: mappedAttendees,
       isOnlineMeeting: graphEvent.isOnlineMeeting || false,
       joinUrl: graphEvent.onlineMeeting?.joinUrl || undefined,

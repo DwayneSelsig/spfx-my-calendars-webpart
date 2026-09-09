@@ -99,7 +99,7 @@ There are no automated tests for successful-month caching, obsolete-load rejecti
 
 ## Rendering and interaction
 
-**Read when:** changing Day, Week, Month, Search, toolbar navigation, date/time formatting, event layout, event details, or renderer styling. Related records: DEC-003, DEC-009, DEC-011, and DEBT-001.
+**Read when:** changing Day, Week, Month, Search, toolbar navigation, date/time formatting, event layout, event details, or renderer styling. Related records: DEC-003, DEC-009, DEC-011, DEC-018, and DEBT-001.
 
 Also read [Loading, range, and cache](#loading-range-and-cache) only when a view change alters visible-range loading, refresh, status, or cached state.
 
@@ -144,6 +144,8 @@ Weekend visibility can be an administrator default or explicit personal override
 ### Event details and links
 
 `EventDetailsDialog` displays one normalized event. It can open Graph-supplied `joinUrl` or `webLink` through `safeOpen` in a new tab.
+
+Organizer details are displayed only for meetings with at least one normalized attendee. Descriptions without a format are rendered as escaped plain text. Descriptions explicitly marked as HTML are sanitized before rendering; active content, inline handlers, inline styles, embeds, and unsafe URLs are removed, and retained links open in a protected new tab.
 
 Exchange and Microsoft 365 Group mappings can currently supply those links. Planner, SharePoint, and Teams Shifts mappings do not currently produce event deep links.
 

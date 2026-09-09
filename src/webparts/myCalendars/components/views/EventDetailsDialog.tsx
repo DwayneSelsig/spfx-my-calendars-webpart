@@ -7,6 +7,7 @@ import { getSourceIconName, getSourceTypeDisplayName } from '../../utils/sourceI
 import { getCalendarLabels } from './calendarLabels';
 import { formatCalendarDate, formatCalendarDateTime } from './calendarFormatting';
 import { getCalendarColor, safeOpen } from './calendarUtils';
+import { sanitizeCalendarEventHtml } from './descriptionRendering';
 
 export interface IEventDetailsDialogProps {
   event?: ICalendarEvent;
@@ -22,8 +23,12 @@ export const EventDetailsDialog: React.FC<IEventDetailsDialogProps> = ({ event, 
   const dateTime = event.isFullDay
     ? `${formatCalendarDate(start, { year: 'numeric', month: 'numeric', day: 'numeric' }, locale)} · ${labels.allDay}`
     : `${formatCalendarDateTime(start, locale)} – ${formatCalendarDateTime(end, locale)}`;
-  const organizer = event.organizer?.name || event.organizer?.email;
-  const attendees = (event.attendees || []).map(attendee => attendee.name || attendee.email).filter(Boolean).join(', ');
+  const meetingAttendees = event.attendees || [];
+  const organizer = meetingAttendees.length > 0 ? event.organizer?.name || event.organizer?.email : undefined;
+  const attendees = meetingAttendees.map(attendee => attendee.name || attendee.email).filter(Boolean).join(', ');
+  const descriptionHtml = event.description && event.descriptionFormat === 'html'
+    ? sanitizeCalendarEventHtml(event.description)
+    : undefined;
   const sourceTypeDisplayName = getSourceTypeDisplayName(event.sourceType, event.sourceIconName);
   const sourceDisplayName = event.sourceDisplayName && event.sourceDisplayName !== sourceTypeDisplayName
     ? `${event.sourceDisplayName} · ${sourceTypeDisplayName}`
@@ -42,7 +47,14 @@ export const EventDetailsDialog: React.FC<IEventDetailsDialogProps> = ({ event, 
         {event.location && <div><Icon iconName="POI" /> <strong>{labels.location}:</strong> {event.location}</div>}
         {organizer && <div><Icon iconName="Contact" /> <strong>{labels.organizer}:</strong> {organizer}</div>}
         {attendees && <div><Icon iconName="People" /> <strong>{labels.attendees}:</strong> {attendees}</div>}
-        {event.description && <div><strong>{labels.description}</strong><div style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{event.description}</div></div>}
+        {event.description && (
+          <div>
+            <strong>{labels.description}</strong>
+            {descriptionHtml !== undefined
+              ? <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: descriptionHtml }} />
+              : <div style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{event.description}</div>}
+          </div>
+        )}
         {event.sourceType && (
           <div>
             {event.showSourceLogo !== false && <Icon iconName={getSourceIconName(event.sourceType, event.sourceIconName)} style={{ marginRight: 4 }} />}

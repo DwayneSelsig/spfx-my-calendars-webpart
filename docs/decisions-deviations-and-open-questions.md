@@ -63,6 +63,13 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Successful source/month retrieval atomically replaces that segment, including with an empty result. Failure preserves stale data and the source failure remains visible.
 - Manual refresh preserves visible appointments, bypasses freshness, and forces the initial and visible ranges. Invalid, disabled, unavailable, or quota-constrained cache state falls back safely to normal retrieval.
 
+### DEC-018 — Event detail semantics
+
+- **Status:** Decision
+- Organizer metadata and `isOrganizer` exist only for meetings with at least one normalized attendee; an attendee-less appointment has no organizer semantics.
+- SharePoint all-day values use local calendar boundaries, converting the source's inclusive end date to an exclusive end boundary.
+- Description formatting is explicit. An absent format means escaped plain text, while declared HTML is sanitized before rendering and retained links open in a protected new tab.
+
 ### DEBT-001 — Inactive Schedule view
 
 - **Status:** Technical debt
