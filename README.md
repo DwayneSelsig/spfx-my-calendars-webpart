@@ -175,6 +175,7 @@ The version history below is descriptive. It is not an architecture or behavior 
 | 0.1.0 | 2026-08-23 | Replaced PnP Calendar with own calendar |
 | 0.2.0 | 2026-08-29 | Improved locale-aware calendar formatting, updated development dependencies, and clarified rendering documentation. |
 | 0.2.1 | 2026-09-10 | Added administrator-controlled browser caching and regression tests for cache and admin-settings persistence. |
+| 0.2.2 | 2026-09-11 | Fixed organizer display for attendee-less appointments, corrected SharePoint all-day date boundaries, and safely rendered HTML descriptions. |
 
 ## Contributing
 
