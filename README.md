@@ -23,18 +23,24 @@ The web part does not create, change, or delete events or tasks in a source syst
 
 ## Main features
 
-- Combine supported calendar sources in one view.
-- Enable or disable individual sources.
-- Set a color for each configured source.
+- Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
+- Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
+- Use optimized search and settings flows. Search covers event titles and locations while the active calendar remains mounted.
+- Navigate beyond the initial seven-month window with source- and month-aware loading, and optionally cache the initial range in the browser for an administrator-defined lifetime.
+- Handle source-specific date and time behavior defensively, including mailbox time zones, Graph all-day values, and SharePoint's inclusive all-day end dates.
+- Show sanitized HTML descriptions and meeting organizer information without presenting an attendee-less appointment as a meeting.
+- Enable or disable individual sources. Outlook and SharePoint sections also provide a tri-state bulk visibility control that changes those same individual visibility settings.
+- Keep automatic Planner, Group and Teams, and Teams Shifts discovery separate from visibility controls. Automatically discovered sources are enabled by default; Planner includes all accessible plans, not only tasks assigned to the current user.
+- Show the SharePoint site name separately from the editable calendar name in personal settings, administrator settings, and event details. Older saved sources are enriched when their site can be resolved.
+- Display Graph calendar availability in Day, Week, Month, Search, and Event Details while preserving the calendar color as source identity. Availability uses icons, outlines, and theme-aware patterns; the signed-in user's response is shown only for events loaded from their own mailbox.
+- Keep declined personal events visible with a response icon, muted presentation, and struck-through title.
+- Set a color for each configured source and optionally show source logos by service type.
 - Set a preferred timeline start, visible hours, weekends, and a 15, 30, or 60 minute grid.
-- Navigate beyond the initial seven-month window with source- and month-aware loading.
-- Optionally cache the initial seven-month range in the browser with an administrator-defined lifetime.
-- Search event titles and locations.
-- Show source logos by service type.
-- Use organization theme colors and light or dark themes.
+- Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
+- Use organization theme colors and support light and dark themes.
 - Assign administrator sources and ICS catalog entries to Entra groups. The current implementation only discovers non-mail-enabled security groups; the confirmed target model is broader.
-- Store personal settings in the OneDrive App Folder.
-- Load all accessible Planner, Group and Teams, or Teams Shifts sources automatically. These automatic sources are enabled by default; Planner includes all accessible plans, not only tasks assigned to the current user.
+- Store personal settings and per-source visibility choices in the OneDrive App Folder.
+- Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
 - Open source systems through deep links when the source supports this function.
 
 ## Scope and non-goals
@@ -142,7 +148,7 @@ npm run build
 
 The package is written to `sharepoint/solution/`.
 
-`npm run build` runs the focused Jest regression tests before creating the production package.
+`npm run build` runs the focused Jest regression tests, including browser-cache and administrator-settings persistence coverage, before creating the production package.
 
 ## Installation and upgrade
 
@@ -153,29 +159,6 @@ The package is written to `sharepoint/solution/`.
 5. Add the web part to a supported page or host.
 
 For an upgrade, upload the new package and replace the existing package.
-
-## Release versions
-
-Release tags use semantic versioning, for example `v1.2.3`. The release workflow derives the npm version and the four-part SharePoint package version from the tag. Repository files can contain different development-time version values before the workflow runs.
-
-The version history below is descriptive. It is not an architecture or behavior contract.
-
-| Version | Date | Summary |
-| --- | --- | --- |
-| 0.0.1 | 2026-02-21 | Initial release. |
-| 0.0.2 | 2026-02-21 | Added Planner calendars. |
-| 0.0.3 | 2026-02-25 | Added Teams Shifts calendars. |
-| 0.0.4 | 2026-03-08 | Added Teams and Microsoft 365 Group calendars. |
-| 0.0.5 | 2026-03-15 | Added PnP calendar rendering, the common event contract, mailbox time-zone handling, and user caches. |
-| 0.0.6 | 2026-03-24 | Improved search and settings performance. |
-| 0.0.7 | 2026-03-25 | Added defensive handling for Graph all-day dates. |
-| 0.0.8 | 2026-03-28 | Adjusted PnP Calendar menu styles. |
-| 0.0.9 | 2026-03-29 | Added automatic source loading options. |
-| 0.0.10 | 2026-04-06 | Improved responsive layout. |
-| 0.1.0 | 2026-08-23 | Replaced PnP Calendar with own calendar |
-| 0.2.0 | 2026-08-29 | Improved locale-aware calendar formatting, updated development dependencies, and clarified rendering documentation. |
-| 0.2.1 | 2026-09-10 | Added administrator-controlled browser caching and regression tests for cache and admin-settings persistence. |
-| 0.2.2 | 2026-09-11 | Fixed organizer display for attendee-less appointments, corrected SharePoint all-day date boundaries, and safely rendered HTML descriptions. |
 
 ## Contributing
 

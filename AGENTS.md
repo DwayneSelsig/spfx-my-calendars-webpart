@@ -60,6 +60,8 @@ Documentation-only changes still require a targeted check of relevant source. Co
 - Treat `ScheduleView` and `AddCalendarDialog` as inactive.
 - Treat ICS as a subscription deep-link feature, not an event adapter.
 - Update the applicable normative document and decision/deviation records when behavior or intent changes.
+- When implementing a feature, update `README.md` so its current feature overview includes the resulting user-visible capability. Describe the current product without adding version numbers, dates, or release-history entries unless the task explicitly concerns release work.
+- The final response for a completed feature implementation **MUST** end with `Commit message: <short imperative summary>`.
 - Do not remove legacy or inactive code unless the task explicitly requires it.
 
 ## Graphify
