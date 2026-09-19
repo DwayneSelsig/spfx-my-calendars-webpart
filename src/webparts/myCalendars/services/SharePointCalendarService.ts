@@ -88,6 +88,7 @@ export class SharePointCalendarService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
   private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
+  private readonly sitePromises = new Map<string, Promise<ISharePointSite | undefined>>();
 
   constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
     this.httpClient = httpClient;
@@ -99,6 +100,41 @@ export class SharePointCalendarService {
    */
   public setGraphClient(client: MSGraphClientV3): void {
     this.graphClient = client;
+    this.sitePromises.clear();
+  }
+
+  public getSite(siteId: string): Promise<ISharePointSite | undefined> {
+    const existing = this.sitePromises.get(siteId);
+    if (existing) return existing;
+
+    const request = this.loadSite(siteId);
+    this.sitePromises.set(siteId, request);
+    request.then(site => {
+      if (!site && this.sitePromises.get(siteId) === request) this.sitePromises.delete(siteId);
+    }).catch(() => {
+      if (this.sitePromises.get(siteId) === request) this.sitePromises.delete(siteId);
+    });
+    return request;
+  }
+
+  private async loadSite(siteId: string): Promise<ISharePointSite | undefined> {
+    if (!this.graphClient) return undefined;
+    try {
+      const site = await this.graphClient
+        .api(`/sites/${siteId}`)
+        .query({ $select: 'id,displayName,name,webUrl' })
+        .get() as IGraphSite;
+      const resolvedName = (site.displayName || site.name || '').trim();
+      if (!resolvedName) return undefined;
+      return {
+        id: site.id || siteId,
+        name: resolvedName,
+        url: site.webUrl || ''
+      };
+    } catch (error) {
+      console.warn(`Could not resolve SharePoint site ${siteId}; continuing without its display name.`, error);
+      return undefined;
+    }
   }
 
   /**
@@ -230,13 +266,17 @@ export class SharePointCalendarService {
     listId: string,
     startDate: Date,
     endDate: Date,
-    fieldMapping?: ISharePointFieldMapping
+    fieldMapping?: ISharePointFieldMapping,
+    siteName?: string
   ): Promise<IEvent[]> {
     if (!this.graphClient) {
       throw new Error('GraphClient not initialized');
     }
 
     try {
+      const resolvedSiteNamePromise = siteName?.trim()
+        ? Promise.resolve(siteName.trim())
+        : this.getSite(siteId).then(site => site?.name || undefined);
       // Fetch all items - need to expand fields to get the actual field values
       const data = await this.graphClient
         .api(`/sites/${siteId}/lists/${listId}/items`)
@@ -246,9 +286,11 @@ export class SharePointCalendarService {
       // Auto-detect field mapping from first item if not provided
       const effectiveMapping = fieldMapping || (data.value?.[0] ? this.detectFieldMapping(data.value[0]) : {});
 
+      const resolvedSiteName = await resolvedSiteNamePromise;
       return (data.value || [])
         .map((item: IGraphListItem) => this.mapListItemToAppointment(item, startDate, endDate, effectiveMapping))
-        .filter((apt: IEvent | null): apt is IEvent => apt !== null);
+        .filter((apt: IEvent | null): apt is IEvent => apt !== null)
+        .map((event: IEvent) => ({ ...event, sharePointSiteName: resolvedSiteName }));
     } catch (error) {
       console.error('Error fetching list events:', error);
       throw error;

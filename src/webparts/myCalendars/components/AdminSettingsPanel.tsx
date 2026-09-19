@@ -146,6 +146,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   public componentDidMount(): void {
     if (this.props.graphClient) {
       this.initializeGraphClient(this.props.graphClient);
+      this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
     }
   }
 
@@ -155,7 +156,9 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     }
 
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
-      this.setState(this.createStateFromProps(this.props));
+      this.setState(this.createStateFromProps(this.props), () => {
+        this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
+      });
     }
   }
 
@@ -212,6 +215,26 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     if (this.unifiedGroupService) this.unifiedGroupService.setGraphClient(client);
     this.audienceService = new AudienceService(client);
   }
+
+  private enrichSharePointSiteNames = async (): Promise<void> => {
+    if (!this.sharePointService) return;
+    const missingSiteIds = Array.from(new Set(this.state.settings.assignedSources
+      .map(item => item.source)
+      .filter(source => source.sourceType === 'sharepoint' && source.sharePointSiteId && !source.sharePointSiteName)
+      .map(source => source.sharePointSiteId as string)));
+    if (missingSiteIds.length === 0) return;
+    const resolved = await Promise.all(missingSiteIds.map(async siteId => ({ siteId, site: await this.sharePointService?.getSite(siteId) })));
+    const names = new Map(resolved.filter(item => item.site?.name).map(item => [item.siteId, item.site?.name as string]));
+    if (names.size === 0) return;
+    this.setState(prev => ({
+      settings: {
+        ...prev.settings,
+        assignedSources: prev.settings.assignedSources.map(item => item.source.sourceType === 'sharepoint' && item.source.sharePointSiteId && !item.source.sharePointSiteName && names.has(item.source.sharePointSiteId)
+          ? { ...item, source: { ...item.source, sharePointSiteName: names.get(item.source.sharePointSiteId) } }
+          : item)
+      }
+    }));
+  };
 
   private handleOpenAddDialog = (): void => {
     this.setState({
@@ -683,6 +706,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       color: this.state.newCalendarColor,
       isEnabled: true,
       sharePointSiteId: this.state.spSelectedSite.id,
+      sharePointSiteName: this.state.spSelectedSite.name,
       sharePointListId: this.state.spSelectedList.id,
       sharePointFieldMapping: this.state.spFieldMapping
     };
@@ -1209,6 +1233,11 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
         {isEditing ? (
           <Stack tokens={{ childrenGap: 8 }}>
             <TextField label={strings.NameLabel} value={item.source.name} onChange={(_, value) => this.handleUpdateAssignedSource(item.adminSourceId, { name: value || '' })} />
+            {item.source.sourceType === 'sharepoint' && (
+              <div style={{ fontSize: 12, color: '#605e5c' }}>
+                {strings.SiteLabel}: {item.source.sharePointSiteName || strings.SiteNameUnavailableLabel}
+              </div>
+            )}
             <div>
               <Label>Color</Label>
               <ColorPicker color={item.source.color} onChange={(_, color) => this.handleUpdateAssignedSource(item.adminSourceId, { color: `#${color.hex}` })} alphaType="none" />
@@ -1226,6 +1255,11 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             <div style={{ width: 16, height: 16, backgroundColor: item.source.color, borderRadius: 2, flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 13 }}>{item.source.name}</strong>
+              {item.source.sourceType === 'sharepoint' && (
+                <div style={{ fontSize: 11, color: '#605e5c' }}>
+                  {strings.SiteLabel}: {item.source.sharePointSiteName || strings.SiteNameUnavailableLabel}
+                </div>
+              )}
               <div style={{ fontSize: 11, color: '#605e5c' }}>{getSourceTypeDisplayName(item.source.sourceType)} • {audienceText}</div>
             </div>
             <IconButton iconProps={{ iconName: 'Edit' }} title={strings.EditLabel} onClick={() => this.toggleEditSource(item.adminSourceId)} />

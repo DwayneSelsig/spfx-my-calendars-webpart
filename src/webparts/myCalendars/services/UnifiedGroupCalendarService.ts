@@ -1,6 +1,7 @@
 import { HttpClient } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
+import { normalizeAvailabilityStatus } from './GraphEventStatus';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +33,7 @@ interface IGraphEvent {
   location?: { displayName: string };
   organizer?: { emailAddress: { name?: string; address?: string } };
   attendees: IGraphEventAttendee[];
+  showAs?: string;
 }
 
 interface IGraphEventAttendee {
@@ -151,7 +153,7 @@ export class UnifiedGroupCalendarService {
         .query({
           startDateTime: startISO,
           endDateTime: endISO,
-          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees',
+          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees,showAs',
           $top: 500
         })
         .get();
@@ -201,6 +203,7 @@ export class UnifiedGroupCalendarService {
         }
       } : {}),
       attendees: mappedAttendees,
+      showAs: normalizeAvailabilityStatus(graphEvent.showAs),
       isOnlineMeeting: graphEvent.isOnlineMeeting || false,
       joinUrl: graphEvent.onlineMeeting?.joinUrl || undefined,
       webLink: graphEvent.webLink || undefined

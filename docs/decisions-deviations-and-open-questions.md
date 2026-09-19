@@ -70,6 +70,22 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - SharePoint all-day values use local calendar boundaries, converting the source's inclusive end date to an exclusive end boundary.
 - Description formatting is explicit. An absent format means escaped plain text, while declared HTML is sanitized before rendering and retained links open in a protected new tab.
 
+### DEC-019 — Source context and Graph event status
+
+- **Status:** Decision
+- SharePoint calendar name and site name are separate fields. Legacy site names are resolved lazily, and renderers consume local event metadata rather than calling Graph.
+- `showAs` is normalized for Exchange and Microsoft 365 Group events and is presented uniformly as calendar availability, not necessarily the signed-in user's availability.
+- `responseStatus` is personal UI only for events retrieved through `/me`; mailbox and group responses are ignored.
+- Calendar color remains a solid identity edge. Availability uses an additional icon and secondary surface treatment; declined personal events remain visible, muted, and struck through.
+
+### DEC-020 — Settings group visibility controls
+
+- **Status:** Decision
+- Outlook and SharePoint have tri-state bulk visibility controls derived from individual calendar states; no separate group visibility state is stored.
+- A fully visible group becomes hidden. A hidden or mixed group becomes fully visible.
+- Outlook bulk visibility updates current-user `exchangeCalendarStates` and configured/effective Exchange `isEnabled`; SharePoint updates configured/effective `isEnabled`.
+- Planner, Microsoft 365 Group/Team, and Teams Shifts discovery-mode settings are not visibility controls and receive no group visibility control in this scope.
+
 ### DEBT-001 — Inactive Schedule view
 
 - **Status:** Technical debt

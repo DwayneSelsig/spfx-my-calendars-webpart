@@ -3,7 +3,7 @@ export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' |
 export type CalendarSourceOrigin = 'admin' | 'user';
 export type CalendarSlotDuration = 15 | 30 | 60;
 
-export const CALENDAR_SETTINGS_SCHEMA_VERSION = 5;
+export const CALENDAR_SETTINGS_SCHEMA_VERSION = 6;
 
 export interface ISharePointFieldMapping {
   titleField?: string;
@@ -22,6 +22,7 @@ export interface ICalendarSourceBase {
   exchangeMailbox?: string;
   exchangeCalendarId?: string;
   sharePointSiteId?: string;
+  sharePointSiteName?: string;
   sharePointListId?: string;
   sharePointFieldMapping?: ISharePointFieldMapping;
   plannerPlanId?: string;

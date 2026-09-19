@@ -1,6 +1,7 @@
 import { HttpClient } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
+import { normalizeAvailabilityStatus, normalizeResponseStatus } from './GraphEventStatus';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +39,8 @@ interface IGraphEvent {
   location?: { displayName: string };
   organizer?: { emailAddress: { name?: string; address?: string } };
   attendees: IGraphEventAttendee[];
+  showAs?: string;
+  responseStatus?: { response?: string };
 }
 
 interface IGraphEventAttendee {
@@ -187,7 +190,7 @@ export class ExchangeCalendarService {
         .query({
           startDateTime: startISO,
           endDateTime: endISO,
-          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees',
+          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees,showAs,responseStatus',
           $top: 500
         })
         .get();
@@ -195,7 +198,7 @@ export class ExchangeCalendarService {
       // Get current user email for isOrganizer determination
       const currentUserEmail = await UserHelper.getCurrentUserEmail(this.graphClient);
 
-      return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail));
+      return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail, !mailbox));
     } catch (error) {
       console.error('Error fetching Exchange calendar events:', error);
       throw error;
@@ -205,7 +208,7 @@ export class ExchangeCalendarService {
   /**
    * Map Microsoft Graph event to IEvent
    */
-  private mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string): IEvent {
+  private mapGraphEventToAppointment(graphEvent: IGraphEvent, currentUserEmail: string, includeCurrentUserResponse: boolean): IEvent {
     const startISO = ExchangeCalendarService.toSafeISOString(graphEvent.start.dateTime, graphEvent.start.date, graphEvent.isAllDay);
     const endISO = ExchangeCalendarService.toSafeISOString(graphEvent.end.dateTime, graphEvent.end.date, graphEvent.isAllDay);
     const organizerEmail = graphEvent.organizer?.emailAddress?.address;
@@ -238,6 +241,8 @@ export class ExchangeCalendarService {
         }
       } : {}),
       attendees: mappedAttendees,
+      showAs: normalizeAvailabilityStatus(graphEvent.showAs),
+      ...(includeCurrentUserResponse ? { responseStatus: normalizeResponseStatus(graphEvent.responseStatus?.response) } : {}),
       sourceId: '', // Will be set by caller
       color: undefined, // Will be set by caller
       // Extended properties

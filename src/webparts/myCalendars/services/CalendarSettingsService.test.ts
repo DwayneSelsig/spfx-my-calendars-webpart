@@ -1,7 +1,9 @@
-import { defaultAdminWebPartSettings } from '../models/ICalendarSettings';
+import { CALENDAR_SETTINGS_SCHEMA_VERSION, defaultAdminWebPartSettings, defaultUserCalendarSettings } from '../models/ICalendarSettings';
 import {
   loadAdminWebPartSettings,
-  normalizeAdminWebPartSettings
+  normalizeAdminWebPartSettings,
+  normalizeUserCalendarSettings,
+  resolveCalendarSettings
 } from './CalendarSettingsService';
 
 describe('administrator settings normalization and loading', () => {
@@ -64,5 +66,27 @@ describe('administrator settings normalization and loading', () => {
 
     expect(normalized?.enableCache).toBe(true);
     expect(normalized?.cacheDurationMinutes).toBe(10);
+  });
+
+  it('migrates schema 5 SharePoint site metadata into schema 6 and keeps missing names valid', () => {
+    const admin = normalizeAdminWebPartSettings({
+      ...defaultAdminWebPartSettings,
+      schemaVersion: 5,
+      assignedSources: [{
+        adminSourceId: 'admin-sp', audienceGroups: [{ groupId: 'group', displayName: 'Group' }],
+        source: { sourceType: 'sharepoint', name: 'Events', color: '#0078d4', isEnabled: true, sharePointSiteId: 'site', sharePointSiteName: '  Contoso  ', sharePointListId: 'list' }
+      }]
+    });
+    const user = normalizeUserCalendarSettings({
+      ...defaultUserCalendarSettings,
+      schemaVersion: 5,
+      personalSources: [{ userSourceId: 'user-sp', sourceType: 'sharepoint', name: 'Personal', color: '#0078d4', isEnabled: true, sharePointSiteId: 'site-2', sharePointListId: 'list-2' }]
+    });
+    if (!admin || !user) throw new Error('Expected settings to normalize.');
+    expect(admin.schemaVersion).toBe(CALENDAR_SETTINGS_SCHEMA_VERSION);
+    expect(admin.assignedSources[0].source.sharePointSiteName).toBe('Contoso');
+    expect(user?.personalSources[0].sharePointSiteName).toBeUndefined();
+    const resolved = resolveCalendarSettings({ adminSettings: admin, userSettings: user, matchedGroupIds: new Set(['group']) });
+    expect(resolved.sources.map(source => source.sharePointSiteName)).toEqual(['Contoso', undefined]);
   });
 });

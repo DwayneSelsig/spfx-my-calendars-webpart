@@ -124,6 +124,23 @@ declare interface IMyCalendarsWebPartStrings {
   TeamsLabel: string;
   TeamsShiftsLabel: string;
   InternetCalendarLabel: string;
+  SiteLabel: string;
+  SiteNameUnavailableLabel: string;
+  GroupVisibilityLabel: string;
+  CalendarAvailabilityLabel: string;
+  YourResponseLabel: string;
+  AvailabilityFreeLabel: string;
+  AvailabilityTentativeLabel: string;
+  AvailabilityBusyLabel: string;
+  AvailabilityOofLabel: string;
+  AvailabilityWorkingElsewhereLabel: string;
+  AvailabilityUnknownLabel: string;
+  ResponseNoneLabel: string;
+  ResponseOrganizerLabel: string;
+  ResponseTentativelyAcceptedLabel: string;
+  ResponseAcceptedLabel: string;
+  ResponseDeclinedLabel: string;
+  ResponseNotRespondedLabel: string;
 }
 
 declare module 'MyCalendarsWebPartStrings' {

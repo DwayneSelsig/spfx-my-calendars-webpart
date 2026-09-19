@@ -1,4 +1,5 @@
 import * as strings from 'MyCalendarsWebPartStrings';
+import type { CalendarAvailabilityStatus, CalendarResponseStatus } from '../../models/ICalendarEvent';
 
 export interface ICalendarLabels {
   today: string;
@@ -20,6 +21,10 @@ export interface ICalendarLabels {
   noEvents: string;
   navigation: string;
   view: string;
+  site: string;
+  siteNameUnavailable: string;
+  calendarAvailability: string;
+  yourResponse: string;
 }
 
 export function getCalendarLabels(): ICalendarLabels {
@@ -42,6 +47,32 @@ export function getCalendarLabels(): ICalendarLabels {
     description: strings.DescriptionLabel,
     noEvents: strings.NoAppointmentsLabel,
     navigation: strings.CalendarNavigationLabel,
-    view: strings.CalendarViewLabel
+    view: strings.CalendarViewLabel,
+    site: strings.SiteLabel,
+    siteNameUnavailable: strings.SiteNameUnavailableLabel,
+    calendarAvailability: strings.CalendarAvailabilityLabel,
+    yourResponse: strings.YourResponseLabel
   };
+}
+
+export function getAvailabilityLabel(status: CalendarAvailabilityStatus): string {
+  return {
+    free: strings.AvailabilityFreeLabel,
+    tentative: strings.AvailabilityTentativeLabel,
+    busy: strings.AvailabilityBusyLabel,
+    oof: strings.AvailabilityOofLabel,
+    workingElsewhere: strings.AvailabilityWorkingElsewhereLabel,
+    unknown: strings.AvailabilityUnknownLabel
+  }[status];
+}
+
+export function getResponseLabel(status: CalendarResponseStatus): string {
+  return {
+    none: strings.ResponseNoneLabel,
+    organizer: strings.ResponseOrganizerLabel,
+    tentativelyAccepted: strings.ResponseTentativelyAcceptedLabel,
+    accepted: strings.ResponseAcceptedLabel,
+    declined: strings.ResponseDeclinedLabel,
+    notResponded: strings.ResponseNotRespondedLabel
+  }[status];
 }

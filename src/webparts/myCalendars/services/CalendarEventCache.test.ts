@@ -66,4 +66,15 @@ describe('CalendarEventCache', () => {
     expect(cache.read(configuration, 10, allowedMonthKeys, cachedAt + 2000)?.segments[0].events).toEqual([]);
     expect(window.localStorage.getItem(getCalendarEventCacheKey(configuration) as string)).toContain('"events":[]');
   });
+
+  it('rejects entries from the previous event cache schema', () => {
+    const key = getCalendarEventCacheKey(configuration) as string;
+    window.localStorage.setItem(key, JSON.stringify({
+      schemaVersion: 1,
+      tenantId: 'tenant', userId: 'user', webPartInstanceId: 'webpart',
+      configSignature: 'signature', segments: [createSegment(Date.now())]
+    }));
+    expect(new CalendarEventCache().read(configuration, 10, allowedMonthKeys)).toBeUndefined();
+    expect(window.localStorage.getItem(key)).toBeNull();
+  });
 });

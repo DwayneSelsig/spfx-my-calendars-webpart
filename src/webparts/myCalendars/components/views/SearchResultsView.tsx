@@ -1,6 +1,8 @@
 import * as React from 'react';
 import type { ICalendarEvent as IEvent } from '../../models/ICalendarEvent';
 import { Icon } from '@fluentui/react/lib/Icon';
+import { EventStatusGlyphs, getEventStatusAriaText } from './EventStatusGlyphs';
+import { getEventStatusPresentation } from './eventStatusPresentation';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { getSourceIconName } from '../../utils/sourceIconHelper';
 import { formatCalendarTime, resolveCalendarLocale } from './calendarFormatting';
@@ -194,13 +196,16 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
             <div className={styles.scheduleAppointments}>
               {group.appointments.map((result: ISearchResultAppointment) => {
                 const apt = result.appointment;
+                const color = apt.colorHex ?? '#0078d4';
+                const statusPresentation = getEventStatusPresentation(apt, color, 12);
                 return (
                 <div
                   key={apt.id}
                   className={styles.scheduleAppointment}
+                  aria-label={[apt.title, getEventStatusAriaText(apt)].filter(Boolean).join(', ')}
                   style={{
-                    backgroundColor: `color-mix(in srgb, ${apt.colorHex ?? '#0078d4'} 12%, transparent)`,
-                    borderLeftColor: apt.colorHex ?? '#0078d4'
+                    borderLeftColor: color,
+                    ...statusPresentation.cardStyle
                   }}
                 >
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -218,7 +223,8 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                         {apt.showSourceLogo !== false && (
                           <Icon iconName={getSourceIconName(apt.sourceType, apt.sourceIconName)} style={{ marginRight: 4, fontSize: 12 }} />
                         )}
-                        <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal' }}>{apt.title}</span>
+                        <EventStatusGlyphs event={apt} color={color} />
+                        <span style={{ fontStyle: apt.isDraft ? 'italic' : 'normal', ...statusPresentation.titleStyle }}>{apt.title}</span>
                       </div>
                       <div className={styles.appointmentTime}>
                         {result.durationLabel}

@@ -19,6 +19,7 @@ import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 import { formatCalendarTime } from './views/calendarFormatting';
+import { getBulkVisibilityTarget, getGroupVisibilityState, type GroupVisibilityState, setOutlookVisibility, setSharePointVisibility } from './calendarVisibility';
 
 export interface ISettingsPanelProps {
   isOpen: boolean;
@@ -174,6 +175,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.setState({
         settings: JSON.parse(JSON.stringify(this.props.settings)), editingSourceId: undefined, showAddDialog: false,
         addingCalendarType: undefined, addingCalendarStep: 'initial', spCurrentPage: 0
+      }, () => {
+        this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
       });
       this.loadUserExchangeCalendars().catch(err => console.error('Failed to reload Exchange calendars:', err));
     }
@@ -185,7 +188,27 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (this.plannerService) this.plannerService.setGraphClient(client);
     if (this.unifiedGroupService) this.unifiedGroupService.setGraphClient(client);
     this.loadUserExchangeCalendars().catch(err => console.error('Failed to load Exchange calendars:', err));
+    this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
   }
+
+  private enrichSharePointSiteNames = async (): Promise<void> => {
+    if (!this.sharePointService) return;
+    const missingSiteIds = Array.from(new Set(this.state.settings.sources
+      .filter(source => source.sourceType === 'sharepoint' && source.sharePointSiteId && !source.sharePointSiteName)
+      .map(source => source.sharePointSiteId as string)));
+    if (missingSiteIds.length === 0) return;
+    const resolved = await Promise.all(missingSiteIds.map(async siteId => ({ siteId, site: await this.sharePointService?.getSite(siteId) })));
+    const names = new Map(resolved.filter(item => item.site?.name).map(item => [item.siteId, item.site?.name as string]));
+    if (names.size === 0) return;
+    this.setState(prev => ({
+      settings: {
+        ...prev.settings,
+        sources: prev.settings.sources.map(source => source.sourceType === 'sharepoint' && source.sharePointSiteId && !source.sharePointSiteName && names.has(source.sharePointSiteId)
+          ? { ...source, sharePointSiteName: names.get(source.sharePointSiteId) }
+          : source)
+      }
+    }));
+  };
 
   private loadUserExchangeCalendars = async (): Promise<void> => {
     if (!this.exchangeService) return;
@@ -517,6 +540,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       color: this.state.newCalendarColor,
       isEnabled: true,
       sharePointSiteId: this.state.spSelectedSite.id,
+      sharePointSiteName: this.state.spSelectedSite.name,
       sharePointListId: this.state.spSelectedList.id,
       sharePointFieldMapping: this.state.spFieldMapping
     };
@@ -623,6 +647,23 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private isExchangeCalendarEnabled = (calendarId: string): boolean => {
     const states = this.state.settings.exchangeCalendarStates || {};
     return states[calendarId] !== false;
+  };
+
+  private handleToggleOutlookGroupVisibility = (): void => {
+    this.setState(prev => {
+      const configured = prev.settings.sources.filter(source => source.sourceType === 'exchange').map(source => source.isEnabled);
+      const discovered = prev.userExchangeCalendars.map(calendar => (prev.settings.exchangeCalendarStates || {})[calendar.id] !== false);
+      const target = getBulkVisibilityTarget(getGroupVisibilityState([...discovered, ...configured]));
+      return { settings: setOutlookVisibility(prev.settings, prev.userExchangeCalendars.map(calendar => calendar.id), target) };
+    });
+  };
+
+  private handleToggleSharePointGroupVisibility = (): void => {
+    this.setState(prev => {
+      const values = prev.settings.sources.filter(source => source.sourceType === 'sharepoint').map(source => source.isEnabled);
+      const target = getBulkVisibilityTarget(getGroupVisibilityState(values));
+      return { settings: setSharePointVisibility(prev.settings, target) };
+    });
   };
 
   private handleDeleteSource = (id: string): void => {
@@ -1457,10 +1498,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     subtitle: string;
     showLogoValue?: boolean;
     onShowLogoChange?: (checked: boolean) => void;
+    visibilityState?: GroupVisibilityState;
+    visibilityDisabled?: boolean;
+    onVisibilityChange?: () => void;
     headerActions?: React.ReactNode;
     children: React.ReactNode;
   }): React.ReactElement => {
-    const { sectionKey, icon, iconBg, iconColor, title, subtitle, showLogoValue, onShowLogoChange, headerActions, children } = params;
+    const { sectionKey, icon, iconBg, iconColor, title, subtitle, showLogoValue, onShowLogoChange, visibilityState, visibilityDisabled, onVisibilityChange, headerActions, children } = params;
     const isExpanded = this.state.expandedSections[sectionKey] !== false;
     const toggleExpanded = (): void => {
       this.setState(prev => ({
@@ -1499,12 +1543,23 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
             <div style={{ fontSize: 11, opacity: 0.55, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 1 }}>{subtitle}</div>
           </div>
-          {(headerActions !== undefined || showLogoValue !== undefined) && (
+          {(headerActions !== undefined || showLogoValue !== undefined || visibilityState !== undefined) && (
             <div
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               onClick={e => e.stopPropagation()}
             >
               {headerActions}
+              {visibilityState !== undefined && onVisibilityChange && (
+                <Checkbox
+                  checked={visibilityState === 'on'}
+                  indeterminate={visibilityState === 'mixed'}
+                  disabled={visibilityDisabled}
+                  ariaLabel={strings.GroupVisibilityLabel}
+                  title={strings.GroupVisibilityLabel}
+                  onChange={onVisibilityChange}
+                  styles={{ root: { margin: 0 } }}
+                />
+              )}
               {showLogoValue !== undefined && onShowLogoChange && (
                 <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.6 }}>Show logos</span>
@@ -1596,6 +1651,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               value={source.name}
               onChange={(_, value) => this.handleUpdateSource(source.id, { name: value || '' })}
             />
+            {source.sourceType === 'sharepoint' && (
+              <div style={{ fontSize: 12, color: '#605e5c' }}>
+                {strings.SiteLabel}: {source.sharePointSiteName || strings.SiteNameUnavailableLabel}
+              </div>
+            )}
             <div style={{ order: 3 }}>
               <Label>Color</Label>
               <ColorPicker
@@ -1625,6 +1685,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             }} />
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 13 }}>{source.name}</strong>
+              {source.sourceType === 'sharepoint' && (
+                <div style={{ fontSize: 11, color: '#605e5c' }}>
+                  {strings.SiteLabel}: {source.sharePointSiteName || strings.SiteNameUnavailableLabel}
+                </div>
+              )}
               {isAdminSource && (
                 <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>(Admin default)</span>
               )}
@@ -1741,7 +1806,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               <Stack tokens={{ childrenGap: 12 }}>
 
                 {/* Outlook */}
-                {(userExchangeCalendarsLoading || userExchangeCalendars.length > 0) && this.renderSourceSection({
+                {(userExchangeCalendarsLoading || userExchangeCalendars.length > 0 || settings.sources.some(source => source.sourceType === 'exchange')) && this.renderSourceSection({
                   sectionKey: 'outlook',
                   icon: 'OutlookLogo',
                   iconBg: 'rgba(0, 120, 212, 0.12)',
@@ -1750,6 +1815,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   subtitle: 'Personal & shared mailboxes',
                   showLogoValue: settings.exchangeShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, exchangeShowSourceLogo: checked } }),
+                  visibilityState: getGroupVisibilityState([
+                    ...userExchangeCalendars.map(calendar => this.isExchangeCalendarEnabled(calendar.id)),
+                    ...settings.sources.filter(source => source.sourceType === 'exchange').map(source => source.isEnabled)
+                  ]),
+                  visibilityDisabled: userExchangeCalendarsLoading || userExchangeCalendars.length + settings.sources.filter(source => source.sourceType === 'exchange').length === 0,
+                  onVisibilityChange: this.handleToggleOutlookGroupVisibility,
                   headerActions: (
                     <DefaultButton
                       text={strings.ManageLabel}
@@ -1758,9 +1829,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                       styles={{ root: { height: 28, minWidth: 0, padding: '0 8px', fontSize: 12 } }}
                     />
                   ),
-                  children: userExchangeCalendarsLoading
-                    ? <Spinner size={SpinnerSize.small} label={strings.LoadingLabel} />
-                    : userExchangeCalendars.map((calendar, i) => this.renderExchangeCalendarItem(calendar, i))
+                  children: (
+                    <Stack tokens={{ childrenGap: 6 }}>
+                      {userExchangeCalendarsLoading
+                        ? <Spinner size={SpinnerSize.small} label={strings.LoadingLabel} />
+                        : userExchangeCalendars.map((calendar, i) => this.renderExchangeCalendarItem(calendar, i))}
+                      {settings.sources.filter(source => source.sourceType === 'exchange').map((source, i) => this.renderCalendarSource(source, userExchangeCalendars.length + i))}
+                    </Stack>
+                  )
                 })}
 
                 {/* SharePoint */}
@@ -1773,6 +1849,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   subtitle: 'Site lists, calendars & events',
                   showLogoValue: settings.sharePointShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, sharePointShowSourceLogo: checked } }),
+                  visibilityState: getGroupVisibilityState(settings.sources.filter(source => source.sourceType === 'sharepoint').map(source => source.isEnabled)),
+                  onVisibilityChange: this.handleToggleSharePointGroupVisibility,
                   children: settings.sources.filter(s => s.sourceType === 'sharepoint').map((source, i) => this.renderCalendarSource(source, i))
                 })}
 

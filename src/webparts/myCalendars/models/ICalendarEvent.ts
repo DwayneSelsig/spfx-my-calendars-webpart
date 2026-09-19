@@ -14,6 +14,8 @@ export interface ICalendarOrganizer {
 }
 
 export type CalendarEventDescriptionFormat = 'plainText' | 'html';
+export type CalendarAvailabilityStatus = 'free' | 'tentative' | 'busy' | 'oof' | 'workingElsewhere' | 'unknown';
+export type CalendarResponseStatus = 'none' | 'organizer' | 'tentativelyAccepted' | 'accepted' | 'declined' | 'notResponded';
 
 /** Canonical, read-only event model used by source adapters and renderers. */
 export interface ICalendarEvent {
@@ -24,6 +26,9 @@ export interface ICalendarEvent {
   end: string;
   sourceType?: CalendarSourceType;
   sourceDisplayName?: string;
+  sharePointSiteName?: string;
+  showAs?: CalendarAvailabilityStatus;
+  responseStatus?: CalendarResponseStatus;
   isFullDay?: boolean;
   attendees?: ICalendarAttendee[];
   organizer?: ICalendarOrganizer;

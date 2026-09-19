@@ -102,6 +102,9 @@ function normalizeCalendarSourceBase(value: unknown): ICalendarSourceBase | unde
   if (typeof value.sharePointSiteId === 'string' && value.sharePointSiteId.trim()) {
     source.sharePointSiteId = value.sharePointSiteId.trim();
   }
+  if (typeof value.sharePointSiteName === 'string' && value.sharePointSiteName.trim()) {
+    source.sharePointSiteName = value.sharePointSiteName.trim();
+  }
   if (typeof value.sharePointListId === 'string' && value.sharePointListId.trim()) {
     source.sharePointListId = value.sharePointListId.trim();
   }

@@ -20,7 +20,7 @@ Read only the section selected by [AGENTS.md](../AGENTS.md). Requirements are no
 
 ## Precedence and fields
 
-**Read when:** changing defaults, effective settings, `resolveCalendarSettings`, personal override derivation, automatic source modes, scalar settings, or source-entry fields. Related records: DEC-009, DEC-014, DEC-015, DEV-003, and DEV-004.
+**Read when:** changing defaults, effective settings, `resolveCalendarSettings`, personal override derivation, automatic source modes, scalar settings, or source-entry fields. Related records: DEC-009, DEC-014, DEC-015, DEC-020, DEV-003, and DEV-004.
 
 ### Effective precedence
 
@@ -50,7 +50,7 @@ Precedence is not uniform for every field:
 
 | Setting | Scope/default | Admin UI | User UI/current override | Effective precedence | Used by | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | All contracts; `4` | No | No | Normalizers emit current version | Settings service | Migration metadata |
+| `schemaVersion` | All contracts; `6` | No | No | Normalizers emit current version | Settings service | Migration metadata |
 | `defaultView` | Admin `month` | Yes | Toolbar; full override | Personal → admin → default | Web part/coordinator | Scalar, not source-lockable |
 | `showWeekends` | Admin `true` | Yes | Optional personal override | Personal → admin → default | Week/range logic | Override can be removed |
 | `preferredStartMinutes` | Admin `480` | Yes | Optional personal override | Renderer: personal → admin | Day/Week | Clamped and snapped to admin slot duration |
@@ -83,6 +83,7 @@ Source-type logo fields are `exchangeShowSourceLogo`, `sharePointShowSourceLogo`
 | `sourceType` | All entries | Selected at creation; not overrideable | Six model values; `ics` has no adapter |
 | Exchange mailbox/calendar ID | Exchange | Creation only | Mailbox and calendar endpoint identity |
 | SharePoint site/list IDs | SharePoint | Creation only | Required for loading |
+| SharePoint site name | SharePoint | Captured during creation; lazy legacy enrichment | Separate from calendar name; optional for schema compatibility |
 | SharePoint field mapping | SharePoint | Creation flows; all-day selector not exposed | Required/optional column mapping; future option capability |
 | Planner plan ID/title | Planner | Creation only | Plan ID required; title not used for retrieval |
 | Planner assignment/completion filters | Planner | Creation; no current admin-source user override | Independently allow/deny in policy |
@@ -214,12 +215,13 @@ Reset deletes current and legacy personal files. In-memory reset occurs only aft
 
 ### Personal migration
 
-Current personal settings use schema version 4. Normalization:
+Current personal settings use schema version 6. Normalization:
 
 - drops malformed personal sources and overrides;
 - migrates legacy `userStartHour` to minutes;
 - derives visible hours from legacy start/end hours;
 - retains only boolean Exchange states and supported optional scalar values.
+- retains a trimmed SharePoint site name when present and accepts older sources without it.
 
 When the current file is absent or unreadable, the web part reads legacy `calendar-settings.json`. Migration treats all legacy sources as personal, carries supported logo/automatic settings, and creates no administrator overrides. It attempts to save the migrated current file; the legacy file remains until reset.
 
@@ -275,6 +277,10 @@ The current personal panel exposes:
 - current modification/removal of applicable administrator sources;
 - ICS subscription links, optionally prefilled from the administrator catalog; and
 - reset of current and legacy personal-settings files.
+
+The Outlook and SharePoint section headers expose a tri-state bulk visibility control derived entirely from their individual states. Outlook combines `exchangeCalendarStates` with configured/effective Exchange `isEnabled`; SharePoint uses configured/effective `isEnabled`. Mixed or hidden groups become fully visible when activated, while fully visible groups become hidden. The controls do not store group state and do not alter Planner, Unified Group, or Teams Shifts automatic-mode fields.
+
+SharePoint rows display site name separately from calendar name. Missing legacy names are resolved best-effort when a panel opens and are persisted only when the owning personal or administrator draft is explicitly saved.
 
 The panel deep-clones effective settings when opened. Unsaved changes are discarded on close. It emits `onSave` or `onReset`; it does not write storage.
 

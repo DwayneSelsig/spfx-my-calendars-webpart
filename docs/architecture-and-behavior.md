@@ -63,7 +63,8 @@ See [Components and data flow](components-and-data-flow.md) for the component ma
 - An adapter **MUST** reject an item when required dates cannot be made valid and **MUST NOT** substitute the current time.
 - A normalized event **MUST** identify its source type before rendering when a logo can be shown.
 - A renderer **MUST NOT** expose an internal source-type key as the user-facing source name.
-- An event **SHOULD** include a display color and **MAY** include all-day state, attendees, organizer, location, progress, draft state, meeting link, or source link. Organizer metadata **MUST NOT** be attached to an attendee-less appointment.
+- An event **SHOULD** include a display color and **MAY** include all-day state, attendees, organizer, location, progress, draft state, meeting link, source link, SharePoint site context, calendar availability, or the signed-in user's response status. Organizer metadata **MUST NOT** be attached to an attendee-less appointment.
+- Calendar availability and meeting response **MUST** remain separate concepts. A response from another mailbox or a Microsoft 365 Group calendar **MUST NOT** be presented as the signed-in user's response.
 - A description **MAY** declare HTML formatting. Renderers **MUST** treat an absent format as plain text and **MUST** sanitize declared HTML before rendering it.
 - The event contract **MUST NOT** imply write access.
 

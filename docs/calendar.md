@@ -99,7 +99,7 @@ There are no automated tests for successful-month caching, obsolete-load rejecti
 
 ## Rendering and interaction
 
-**Read when:** changing Day, Week, Month, Search, toolbar navigation, date/time formatting, event layout, event details, or renderer styling. Related records: DEC-003, DEC-009, DEC-011, DEC-018, and DEBT-001.
+**Read when:** changing Day, Week, Month, Search, toolbar navigation, date/time formatting, event layout, event details, or renderer styling. Related records: DEC-003, DEC-009, DEC-011, DEC-018, DEC-019, and DEBT-001.
 
 Also read [Loading, range, and cache](#loading-range-and-cache) only when a view change alters visible-range loading, refresh, status, or cached state.
 
@@ -149,10 +149,14 @@ Organizer details are displayed only for meetings with at least one normalized a
 
 Exchange and Microsoft 365 Group mappings can currently supply those links. Planner, SharePoint, and Teams Shifts mappings do not currently produce event deep links.
 
+SharePoint events display their persisted or lazily resolved site name separately from the calendar name. Missing legacy metadata uses a neutral localized fallback; Event Details does not call Graph.
+
+Exchange and Microsoft 365 Group events can display `showAs` as calendar availability. The calendar color remains a solid identity edge while icons and secondary fill, outline, or pattern styling communicate availability without color alone. `free` uses the untinted underlying theme surface, `tentative` uses diagonal bands, and `oof` uses cross-hatching made from two opposing diagonal patterns. A meeting response is displayed only for events retrieved through `/me`; values from another mailbox or a group calendar are not treated as the signed-in user's response. Declined `/me` events remain visible with a muted surface, a response glyph, and a struck-through title. Day, Week, Month, Search, and Event Details use the same status labels and presentation rules.
+
 ### Inactive Schedule view
 
 `ScheduleView.tsx` exists but is not imported by the coordinator. A commented command-bar branch refers to Schedule. Its presence is technical debt, not supported behavior or product intent.
 
 ### Rendering verification focus
 
-There are no automated tests for date-range calculations, overlap layout, locale formatting, search behavior, view-state preservation, or renderer link behavior. Verify affected interactions manually and run `npm run build`.
+Focused pure tests cover event-status presentation. There are no automated tests for date-range calculations, overlap layout, locale formatting, search behavior, view-state preservation, renderer links, or complete React interaction. Verify affected interactions manually and run `npm run build`.

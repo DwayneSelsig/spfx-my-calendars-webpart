@@ -30,7 +30,7 @@ interface ICalendarEventCacheEntry {
   segments: ICalendarEventCacheSegment[];
 }
 
-export const CALENDAR_EVENT_CACHE_SCHEMA_VERSION = 1;
+export const CALENDAR_EVENT_CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_CACHE_DURATION_MINUTES = 10;
 export const MIN_CACHE_DURATION_MINUTES = 1;
 export const MAX_CACHE_DURATION_MINUTES = 60;

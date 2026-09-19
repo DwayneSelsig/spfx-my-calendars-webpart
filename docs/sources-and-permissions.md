@@ -73,11 +73,11 @@ A retry policy, mandatory-source retry policy, and error-record schema remain un
 
 ### Missing automated coverage
 
-There are no automated tests for endpoint construction, pagination, source mappings, invalid-date handling, permission alignment, ICS link generation, source identity, deduplication, status, or retry eligibility. `npm run build` remains the production verification command.
+Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping. There are no automated tests for pagination, complete endpoint construction, permission alignment, ICS link generation, source identity, deduplication, orchestration, or retry eligibility. `npm run build` remains the production verification command.
 
 ## Exchange calendars
 
-**Read when:** changing current-user calendars, shared/configured mailboxes, Outlook calendar discovery, `calendarView`, Exchange mapping, or Exchange links. Related records: DEC-004, DEC-008, DEC-018, DEV-007, and DEV-008.
+**Read when:** changing current-user calendars, shared/configured mailboxes, Outlook calendar discovery, `calendarView`, Exchange mapping, or Exchange links. Related records: DEC-004, DEC-008, DEC-018, DEC-019, DEV-007, and DEV-008.
 
 ### Discovery and retrieval
 
@@ -90,7 +90,7 @@ Events use `GET /me/calendars/{calendarId}/calendarView` or `GET /users/{mailbox
 
 ### Mapping contract
 
-The adapter maps ID, subject, plain-text preview, start/end, all-day state, location, attendees, online meeting, join URL, and web link. It maps organizer metadata and `isOrganizer` only when at least one normalized attendee makes the event a meeting. The coordinator supplies source display name, source ID, Outlook color, source type, and logo setting.
+The adapter maps ID, subject, plain-text preview, start/end, all-day state, location, attendees, online meeting, join URL, web link, and normalized `showAs`. It maps `responseStatus` only for `/me` retrieval and ignores that property for `/users/{mailbox}` so a mailbox response is not presented as personal. It maps organizer metadata and `isOrganizer` only when at least one normalized attendee makes the event a meeting. The coordinator supplies source display name, source ID, Outlook color, source type, and logo setting.
 
 Missing or invalid required timed dates fail that calendar request. Date-only/all-day values are converted through local midnight before ISO serialization. The current user email determines `isOrganizer`; failure to obtain it produces `false` without failing retrieval.
 
@@ -107,13 +107,14 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 
 ## SharePoint list calendars
 
-**Read when:** changing SharePoint site/list discovery, column inspection, field mapping, list-item retrieval, or SharePoint event conversion. Related records: DEC-004, DEC-008, DEC-018, DEV-004, and DEV-008.
+**Read when:** changing SharePoint site/list discovery, column inspection, field mapping, list-item retrieval, or SharePoint event conversion. Related records: DEC-004, DEC-008, DEC-018, DEC-019, DEV-004, and DEV-008.
 
 ### Discovery
 
 - Site discovery uses `GET /sites?search=*` or a search term, with `$top=999`.
 - List discovery uses `GET /sites/{siteId}/lists` with `$top=200` and accepts visible `events` and `genericList` templates.
 - Settings panels read list columns and can inspect the first item to propose a field mapping.
+- A missing persisted site name can be resolved from `GET /sites/{siteId}`. Resolutions are cached per service instance; failure does not block event retrieval.
 
 ### Retrieval and mapping
 
@@ -121,14 +122,14 @@ Runtime retrieval calls `GET /sites/{siteId}/lists/{listId}/items?expand=fields`
 
 Configured or detected columns map title, start, end, description, location, and all-day state. Default names are `Title`, `EventDate`, `EndDate`, `Description`, `Location`, and `fAllDayEvent`.
 
-For all-day items, `EventDate` is interpreted as a calendar date at local midnight and SharePoint's inclusive `EndDate` is converted to the exclusive local midnight after that date. Timed values retain their source instants. SharePoint descriptions are marked as HTML for sanitized rendering.
+For all-day items, `EventDate` is interpreted as a calendar date at local midnight and SharePoint's inclusive `EndDate` is converted to the exclusive local midnight after that date. Timed values retain their source instants. SharePoint descriptions are marked as HTML for sanitized rendering. Events carry the configured or lazily resolved SharePoint site name to renderers.
 
 Items without a title or start date, items with invalid dates, and items outside the range are skipped. A missing end uses the start value.
 
 ### Settings, cache, and failures
 
 - Source identity is site ID plus list ID.
-- Name, color, enabled state, IDs, and field mapping are stored in the source entry.
+- Calendar name, SharePoint site name, color, enabled state, IDs, and field mapping are stored separately in the source entry. Legacy entries without a site name remain valid and are backfilled only on an explicit save by the settings owner.
 - Runtime currently uses the source-type-wide logo flag, not per-source `showSourceLogo`.
 - Configured sources load independently and successful months are cached in memory.
 - Site search falls back to wildcard accessible-site discovery after an error; several discovery methods return an empty array on failure.
@@ -186,7 +187,7 @@ Configured plan access can be checked with `GET /planner/plans/{planId}`. Runtim
 
 `GET /groups/{groupId}/calendarView` uses the requested range, UTC preference, selected event fields, and `$top=500`.
 
-Mapping matches Exchange: title, plain-text preview, dates, all-day state, location, attendees, online meeting, join URL, and web link, with organizer metadata only for events having at least one normalized attendee. Missing or invalid required dates fail that group request. The coordinator supplies group/source identity, display name, color, logo, and a Team-versus-Group icon.
+Mapping matches Exchange for title, plain-text preview, dates, all-day state, location, attendees, online meeting, join URL, web link, and normalized `showAs`, with organizer metadata only for events having at least one normalized attendee. Group `responseStatus` is not mapped because it is not the signed-in user's personal response. Missing or invalid required dates fail that group request. The coordinator supplies group/source identity, display name, color, logo, and a Team-versus-Group icon.
 
 ### Automatic mode, cache, and failures
 

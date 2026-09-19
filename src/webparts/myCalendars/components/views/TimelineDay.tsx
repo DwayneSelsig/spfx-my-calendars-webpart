@@ -4,6 +4,8 @@ import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { getSourceIconName } from '../../utils/sourceIconHelper';
 import { getCalendarLabels } from './calendarLabels';
 import { formatCalendarTime } from './calendarFormatting';
+import { EventStatusGlyphs, getEventStatusAriaText } from './EventStatusGlyphs';
+import { getEventStatusPresentation } from './eventStatusPresentation';
 import {
   buildTimedSegments,
   eventsForDay,
@@ -70,17 +72,21 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
         }}
       >
         {allDayEvents.length === 0 && <span style={{ fontSize: 11, color: 'var(--neutralTertiary, #a19f9d)' }}>{labels.allDay}</span>}
-        {allDayEvents.map(event => (
+        {allDayEvents.map(event => {
+          const color = getCalendarColor(event);
+          const statusPresentation = getEventStatusPresentation(event, color);
+          const statusAria = getEventStatusAriaText(event);
+          return (
           <button
             key={`${event.sourceId}:${event.id}`}
             type="button"
             onClick={click => onSelectEvent(event, click.currentTarget)}
+            aria-label={[event.title, statusAria].filter(Boolean).join(', ')}
             style={{
               border: 0,
-              borderLeft: `3px solid ${getCalendarColor(event)}`,
+              borderLeft: `3px solid ${color}`,
               borderRadius: 2,
-              background: `color-mix(in srgb, ${getCalendarColor(event)} 18%, var(--white, #fff))`,
-              color: 'var(--neutralPrimary, #323130)',
+              ...statusPresentation.cardStyle,
               padding: '3px 6px',
               minWidth: 0,
               maxWidth: '100%',
@@ -92,9 +98,11 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
             }}
           >
             {event.showSourceLogo !== false && <Icon iconName={getSourceIconName(event.sourceType, event.sourceIconName)} style={{ marginRight: 4 }} />}
-            {event.title}
+            <EventStatusGlyphs event={event} color={color} />
+            <span style={statusPresentation.titleStyle}>{event.title}</span>
           </button>
-        ))}
+          );
+        })}
       </div>
       <div style={{ position: 'relative', height: MINUTES_PER_DAY, minWidth: compact ? 270 : 500 }}>
         {slots.map(slot => {
@@ -131,6 +139,8 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
         ))}
         {segments.map(segment => {
           const color = getCalendarColor(segment.event);
+          const statusPresentation = getEventStatusPresentation(segment.event, color);
+          const statusAria = getEventStatusAriaText(segment.event);
           const columnFraction = segment.column / segment.columnCount;
           const leftOffset = gutterWidth + 3 - (gutterWidth + 4) * columnFraction;
           const widthOffset = (gutterWidth + 4) / segment.columnCount + 3;
@@ -139,7 +149,7 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
               key={`${segment.event.sourceId}:${segment.event.id}:${segment.startMinutes}`}
               type="button"
               onClick={click => onSelectEvent(segment.event, click.currentTarget)}
-              aria-label={`${segment.event.title}, ${formatCalendarTime(new Date(segment.event.start), locale)}`}
+              aria-label={[segment.event.title, formatCalendarTime(new Date(segment.event.start), locale), statusAria].filter(Boolean).join(', ')}
               style={{
                 position: 'absolute',
                 top: segment.startMinutes + 1,
@@ -154,15 +164,15 @@ export const TimelineDay: React.FC<ITimelineDayProps> = ({
                 borderLeft: `4px solid ${color}`,
                 borderRadius: 3,
                 padding: compact ? '3px 5px' : '5px 7px',
-                background: `color-mix(in srgb, ${color} 18%, var(--white, #fff))`,
-                color: 'var(--neutralPrimary, #323130)',
+                ...statusPresentation.cardStyle,
                 cursor: 'pointer',
                 fontStyle: segment.event.isDraft ? 'italic' : 'normal'
               }}
             >
               <div style={{ fontWeight: 600, fontSize: compact ? 11 : 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {segment.event.showSourceLogo !== false && <Icon iconName={getSourceIconName(segment.event.sourceType, segment.event.sourceIconName)} style={{ marginRight: 4 }} />}
-                {segment.event.title}
+                <EventStatusGlyphs event={segment.event} color={color} />
+                <span style={statusPresentation.titleStyle}>{segment.event.title}</span>
               </div>
               {(segment.endMinutes - segment.startMinutes >= 32) && (
                 <div style={{ fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

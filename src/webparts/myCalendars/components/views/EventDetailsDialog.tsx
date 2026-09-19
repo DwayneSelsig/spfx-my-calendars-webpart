@@ -4,7 +4,7 @@ import { Dialog, DialogFooter, DialogType } from '@fluentui/react/lib/Dialog';
 import { Icon } from '@fluentui/react/lib/Icon';
 import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { getSourceIconName, getSourceTypeDisplayName } from '../../utils/sourceIconHelper';
-import { getCalendarLabels } from './calendarLabels';
+import { getAvailabilityLabel, getCalendarLabels, getResponseLabel } from './calendarLabels';
 import { formatCalendarDate, formatCalendarDateTime } from './calendarFormatting';
 import { getCalendarColor, safeOpen } from './calendarUtils';
 import { sanitizeCalendarEventHtml } from './descriptionRendering';
@@ -60,6 +60,15 @@ export const EventDetailsDialog: React.FC<IEventDetailsDialogProps> = ({ event, 
             {event.showSourceLogo !== false && <Icon iconName={getSourceIconName(event.sourceType, event.sourceIconName)} style={{ marginRight: 4 }} />}
             <strong>{labels.source}:</strong> {sourceDisplayName}
           </div>
+        )}
+        {event.sourceType === 'sharepoint' && (
+          <div><Icon iconName="SharepointLogo" /> <strong>{labels.site}:</strong> {event.sharePointSiteName || labels.siteNameUnavailable}</div>
+        )}
+        {event.showAs && (
+          <div><Icon iconName="Calendar" /> <strong>{labels.calendarAvailability}:</strong> {getAvailabilityLabel(event.showAs)}</div>
+        )}
+        {event.responseStatus && (
+          <div><Icon iconName="Ringer" /> <strong>{labels.yourResponse}:</strong> {getResponseLabel(event.responseStatus)}</div>
         )}
       </div>
       <DialogFooter>

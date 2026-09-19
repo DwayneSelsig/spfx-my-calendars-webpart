@@ -5,6 +5,8 @@ import { getSourceIconName } from '../../utils/sourceIconHelper';
 import { EventDetailsDialog } from './EventDetailsDialog';
 import { addLocalDays, eventsForDay, getCalendarColor, isToday, startOfLocalDay } from './calendarUtils';
 import { formatCalendarDate, formatCalendarTime } from './calendarFormatting';
+import { EventStatusGlyphs, getEventStatusAriaText } from './EventStatusGlyphs';
+import { getEventStatusPresentation } from './eventStatusPresentation';
 
 export interface IMonthViewProps {
   appointments: ICalendarEvent[];
@@ -46,17 +48,20 @@ export const MonthView: React.FC<IMonthViewProps> = ({ appointments, currentDate
               <div style={{ height: 'calc(100% - 24px)', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {dayEvents.map(event => {
                   const color = getCalendarColor(event);
+                  const statusPresentation = getEventStatusPresentation(event, color, 16);
                   return (
                     <button
                       key={`${event.sourceId}:${event.id}`}
                       type="button"
                       onClick={click => { restoreFocusRef.current = click.currentTarget; setSelectedEvent(event); }}
                       title={event.title}
-                      style={{ display: 'block', width: '100%', flex: '0 0 auto', border: 0, borderLeft: `3px solid ${color}`, borderRadius: 2, padding: '3px 5px', textAlign: 'left', background: `color-mix(in srgb, ${color} 16%, var(--white, #fff))`, color: 'var(--neutralPrimary, #323130)', cursor: 'pointer', fontSize: 11, lineHeight: '16px', fontStyle: event.isDraft ? 'italic' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      aria-label={[event.title, getEventStatusAriaText(event)].filter(Boolean).join(', ')}
+                      style={{ display: 'block', width: '100%', flex: '0 0 auto', border: 0, borderLeft: `3px solid ${color}`, borderRadius: 2, padding: '3px 5px', textAlign: 'left', ...statusPresentation.cardStyle, cursor: 'pointer', fontSize: 11, lineHeight: '16px', fontStyle: event.isDraft ? 'italic' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     >
                       {event.showSourceLogo !== false && <Icon iconName={getSourceIconName(event.sourceType, event.sourceIconName)} style={{ marginRight: 4 }} />}
+                      <EventStatusGlyphs event={event} color={color} />
                       {!event.isFullDay && `${formatCalendarTime(new Date(event.start), locale)} `}
-                      {event.title}
+                      <span style={statusPresentation.titleStyle}>{event.title}</span>
                     </button>
                   );
                 })}

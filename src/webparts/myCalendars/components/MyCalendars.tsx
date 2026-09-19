@@ -642,7 +642,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source.sharePointListId,
                 startDate,
                 endDate,
-                source.sharePointFieldMapping
+                source.sharePointFieldMapping,
+                source.sharePointSiteName
               );
               const normalizedEvents = items.map(item => ({
                 ...item,
