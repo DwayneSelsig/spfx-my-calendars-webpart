@@ -85,11 +85,13 @@ describe('CalendarEventCache', () => {
   });
 
   it('rejects invalid JSON and removes the complete entry', () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation();
     const key = getCalendarEventCacheKey(configuration) as string;
     window.localStorage.setItem(key, '{invalid');
 
     expect(new CalendarEventCache().read(configuration, 10, allowedMonthKeys)).toBeUndefined();
     expect(window.localStorage.getItem(key)).toBeNull();
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('invalid JSON'), expect.any(Error));
   });
 
   it.each([
@@ -98,6 +100,7 @@ describe('CalendarEventCache', () => {
     ['segments', { segments: [{ ...createSegment(Date.now()), cachedAt: -1 }] }],
     ['events', { segments: [{ ...createSegment(Date.now()), events: [{ ...createSegment(Date.now()).events[0], start: 'invalid' }] }] }]
   ])('rejects invalid %s data and removes the complete entry', (_name, override) => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation();
     const key = getCalendarEventCacheKey(configuration) as string;
     window.localStorage.setItem(key, JSON.stringify({
       tenantId: 'tenant', userId: 'user', webPartInstanceId: 'webpart',
@@ -106,9 +109,11 @@ describe('CalendarEventCache', () => {
 
     expect(new CalendarEventCache().read(configuration, 10, allowedMonthKeys)).toBeUndefined();
     expect(window.localStorage.getItem(key)).toBeNull();
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('incompatible or invalid'));
   });
 
   it('recovers after localStorage reads become available again', () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation();
     const cache = new CalendarEventCache();
     const key = getCalendarEventCacheKey(configuration) as string;
     const getItem = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('read failed'); });
@@ -116,6 +121,7 @@ describe('CalendarEventCache', () => {
 
     expect(cache.read(configuration, 10, allowedMonthKeys)).toBeUndefined();
     expect(removeItem).toHaveBeenCalledWith(key);
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('Could not read'), expect.any(Error));
     getItem.mockRestore();
 
     expect(cache.replaceSegments(configuration, [createSegment(Date.now())], allowedMonthKeys)).toBe(true);
@@ -123,12 +129,14 @@ describe('CalendarEventCache', () => {
   });
 
   it('continues uncached when removal fails and can later write a fresh entry', () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation();
     const cache = new CalendarEventCache();
     const key = getCalendarEventCacheKey(configuration) as string;
     window.localStorage.setItem(key, '{invalid');
     const removeItem = jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('remove failed'); });
 
     expect(cache.read(configuration, 10, allowedMonthKeys)).toBeUndefined();
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('Could not remove'), expect.any(Error));
     removeItem.mockRestore();
 
     expect(cache.replaceSegments(configuration, [createSegment(Date.now())], allowedMonthKeys)).toBe(true);

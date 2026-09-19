@@ -174,16 +174,6 @@ export class ExchangeCalendarService {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
 
-      const mailboxSettings = await UserHelper.getCurrentUserMailboxSettings(this.graphClient);
-      console.log('[ExchangeCalendarService] Timezone debug', {
-        calendarId,
-        mailbox: mailbox || 'me',
-        graphTimeZone: mailboxSettings?.timeZone || null,
-        appliedTimeZone: 'UTC',
-        startISO,
-        endISO
-      });
-
       const data = await this.graphClient
         .api(endpoint)
         .header('Prefer', 'outlook.timezone="UTC"')

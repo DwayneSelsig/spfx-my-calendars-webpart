@@ -10,7 +10,6 @@ describe('ExchangeCalendarService event mapping', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it('uses the configured mailbox and only exposes organizer metadata for meetings', async () => {
-    jest.spyOn(UserHelper, 'getCurrentUserMailboxSettings').mockResolvedValue(undefined);
     jest.spyOn(UserHelper, 'getCurrentUserEmail').mockResolvedValue('viewer@example.com');
 
     const get = jest.fn().mockResolvedValue({
@@ -64,7 +63,6 @@ describe('ExchangeCalendarService event mapping', () => {
   });
 
   it('maps every supported current-user response and availability value', async () => {
-    jest.spyOn(UserHelper, 'getCurrentUserMailboxSettings').mockResolvedValue(undefined);
     jest.spyOn(UserHelper, 'getCurrentUserEmail').mockResolvedValue('viewer@example.com');
     const responses = ['none', 'organizer', 'tentativelyAccepted', 'accepted', 'declined', 'notResponded'];
     const availability = ['free', 'tentative', 'busy', 'oof', 'workingElsewhere', 'unknown'];

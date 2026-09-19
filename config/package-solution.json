@@ -30,7 +30,10 @@
         "title": "spfx-my-calendars-webpart Feature",
         "description": "The feature that activates elements of the spfx-my-calendars-webpart solution.",
         "id": "818ed68b-6410-4195-891b-926a49703b57",
-        "version": "1.0.0.0"
+        "version": "1.0.0.0",
+        "componentIds": [
+          "9c86a7fd-8a26-4829-be28-0d4cb700f4e6"
+        ]
       }
     ],
     "webApiPermissionRequests": [

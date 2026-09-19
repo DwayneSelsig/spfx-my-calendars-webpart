@@ -2,6 +2,8 @@ import { eventOccursOnDay, localDateKey } from '../components/views/calendarUtil
 import { normalizeSharePointEventDates, SharePointCalendarService } from './SharePointCalendarService';
 
 describe('SharePointCalendarService event mapping', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it.each(['2026-03-29', '2026-10-25'])('keeps the all-day boundary at local midnight for %s', date => {
     const dates = normalizeSharePointEventDates(`${date}T00:00:00Z`, `${date}T23:59:00Z`, true);
 
@@ -85,6 +87,8 @@ describe('SharePointCalendarService event mapping', () => {
         : { expand: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(itemData) })
     };
     const fallbackService = new SharePointCalendarService(failingClient as never);
+    const warning = jest.spyOn(console, 'warn').mockImplementation();
     await expect(fallbackService.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'))).resolves.toHaveLength(1);
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('Could not resolve SharePoint site site-id'), expect.any(Error));
   });
 });

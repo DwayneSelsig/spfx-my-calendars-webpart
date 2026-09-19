@@ -135,14 +135,6 @@ export class UnifiedGroupCalendarService {
     try {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
-      const mailboxSettings = await UserHelper.getCurrentUserMailboxSettings(this.graphClient);
-      console.log('[UnifiedGroupCalendarService] Timezone debug', {
-        groupId,
-        graphTimeZone: mailboxSettings?.timeZone || null,
-        appliedTimeZone: 'UTC',
-        startISO,
-        endISO
-      });
 
       const data = await this.graphClient
         .api(`/groups/${groupId}/calendarView`)

@@ -315,7 +315,6 @@ export class SharePointCalendarService {
       allDayField: this.findField(fieldNames, ['fAllDayEvent', 'AllDayEvent', 'IsAllDay'])
     };
 
-    console.log('[SharePointCalendarService] Auto-detected field mapping:', mapping);
     return mapping;
   }
 

@@ -5,7 +5,6 @@ describe('UnifiedGroupCalendarService event status mapping', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it.each(['free', 'tentative', 'busy', 'oof', 'workingElsewhere', 'unknown'])('maps group availability %s without a personal response', async showAs => {
-    jest.spyOn(UserHelper, 'getCurrentUserMailboxSettings').mockResolvedValue(undefined);
     jest.spyOn(UserHelper, 'getCurrentUserEmail').mockResolvedValue('viewer@example.com');
     const request = {
       header: jest.fn().mockReturnThis(), query: jest.fn().mockReturnThis(),
