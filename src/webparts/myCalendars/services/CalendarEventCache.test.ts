@@ -70,6 +70,17 @@ describe('CalendarEventCache', () => {
     expect(persisted).not.toContain('schemaVersion');
   });
 
+  it('preserves an event source link across cache storage and hydration', () => {
+    const cache = new CalendarEventCache();
+    const segment = createSegment(Date.now());
+    segment.events[0].webLink = 'https://contoso.example/events/event-1';
+
+    expect(cache.replaceSegments(configuration, [segment], allowedMonthKeys)).toBe(true);
+
+    expect(cache.read(configuration, 10, allowedMonthKeys)?.segments[0].events[0].webLink)
+      .toBe('https://contoso.example/events/event-1');
+  });
+
   it('ignores a schema version in an existing entry and omits it after refresh', () => {
     const key = getCalendarEventCacheKey(configuration) as string;
     window.localStorage.setItem(key, JSON.stringify({

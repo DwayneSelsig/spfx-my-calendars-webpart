@@ -35,6 +35,7 @@ interface IGraphList {
 
 interface IGraphListItemWithFields {
   id: string;
+  webUrl?: string;
   fields?: Record<string, unknown>;
 }
 
@@ -44,6 +45,24 @@ type IGraphListItem = IGraphListItemWithFields;
 interface INormalizedSharePointDates {
   start: Date;
   end: Date;
+}
+
+/**
+ * Graph bases a SharePoint list item's webUrl on its FileRef. For classic
+ * calendar lists that can point to an internal file such as `2_.000`, which
+ * the browser downloads instead of displaying the event. Use the containing
+ * list path and the item's stable list ID to address SharePoint's display form.
+ */
+export function getSharePointItemWebLink(itemWebUrl: string | undefined, itemId: string): string | undefined {
+  const normalizedWebUrl = itemWebUrl?.trim();
+  const normalizedItemId = itemId?.trim();
+  if (!normalizedWebUrl || !normalizedItemId || !/^https?:\/\//i.test(normalizedWebUrl)) return undefined;
+
+  const urlWithoutQueryOrFragment = normalizedWebUrl.split(/[?#]/, 1)[0];
+  const lastPathSeparator = urlWithoutQueryOrFragment.lastIndexOf('/');
+  if (lastPathSeparator < 'https://a'.length) return undefined;
+
+  return `${urlWithoutQueryOrFragment.substring(0, lastPathSeparator + 1)}DispForm.aspx?ID=${encodeURIComponent(normalizedItemId)}`;
 }
 
 function parseSharePointCalendarDate(value: string): Date | undefined {
@@ -279,6 +298,7 @@ export class SharePointCalendarService {
       // Fetch all items - need to expand fields to get the actual field values
       const data = await this.graphClient
         .api(`/sites/${siteId}/lists/${listId}/items`)
+        .select('id,webUrl')
         .expand('fields')
         .get();
 
@@ -383,7 +403,8 @@ export class SharePointCalendarService {
       isFullDay: isAllDay,
       sourceId: '', // Will be set by caller
       color: undefined, // Will be set by caller
-      attendees: []
+      attendees: [],
+      webLink: getSharePointItemWebLink(item.webUrl, item.id)
     };
   }
 }

@@ -45,9 +45,11 @@ export class PlannerTaskService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
   private graphClient: MSGraphClientV3 | null = null;
   private currentUserId: string | null = null;
+  private readonly tenantId?: string;
 
-  constructor(graphClient?: MSGraphClientV3) {
+  constructor(graphClient?: MSGraphClientV3, tenantId?: string) {
     this.graphClient = graphClient || null;
+    this.tenantId = tenantId?.trim() || undefined;
   }
 
   /**
@@ -191,7 +193,7 @@ export class PlannerTaskService {
 
       // Map to appointments and filter by date range
       const appointments = tasks
-        .map((task: IGraphPlannerTask) => this.mapPlannerTaskToAppointment(task, source, showSourceLogo))
+        .map((task: IGraphPlannerTask) => this.mapPlannerTaskToAppointment(task, planId, source, showSourceLogo))
         .filter((apt: IEvent | null): apt is IEvent => apt !== null);
 
       // Client-side date filtering (only include tasks with dates in range)
@@ -209,7 +211,7 @@ export class PlannerTaskService {
    * Map Planner task to IEvent
    * Returns null if the task has no usable date
    */
-  private mapPlannerTaskToAppointment(task: IGraphPlannerTask, source: ICalendarSource, showSourceLogo: boolean): IEvent | null {
+  private mapPlannerTaskToAppointment(task: IGraphPlannerTask, planId: string, source: ICalendarSource, showSourceLogo: boolean): IEvent | null {
     // Determine dates - use both if available, otherwise use whichever is available
     let startDate: Date | null = null;
     let endDate: Date | null = null;
@@ -263,8 +265,17 @@ export class PlannerTaskService {
       colorHex: source.color,
       sourceType: 'planner',
       showSourceLogo: showSourceLogo,
-      percentComplete: task.percentComplete
+      percentComplete: task.percentComplete,
+      webLink: this.getTaskWebLink(planId, task.id)
     };
+  }
+
+  private getTaskWebLink(planId: string | undefined, taskId: string | undefined): string | undefined {
+    const normalizedPlanId = planId?.trim();
+    const normalizedTaskId = taskId?.trim();
+    if (!normalizedPlanId || !normalizedTaskId || !this.tenantId) return undefined;
+
+    return `https://planner.cloud.microsoft/webui/v1/plan/${encodeURIComponent(normalizedPlanId)}/task/${encodeURIComponent(normalizedTaskId)}?tid=${encodeURIComponent(this.tenantId)}`;
   }
 
   /**

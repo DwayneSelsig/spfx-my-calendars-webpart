@@ -123,6 +123,8 @@ Configured or detected columns map title, start, end, description, location, and
 
 For all-day items, `EventDate` is interpreted as a calendar date at local midnight and SharePoint's inclusive `EndDate` is converted to the exclusive local midnight after that date. Timed values retain their source instants. SharePoint descriptions are marked as HTML for sanitized rendering. Events carry the configured or lazily resolved SharePoint site name to renderers.
 
+The adapter uses a non-empty HTTP(S) Graph list-item `webUrl` to locate the containing list, then constructs `DispForm.aspx?ID={itemId}` as the exact source-item link used by Event Details. It does not open the Graph URL directly because classic calendar items can expose an internal `FileRef` such as `2_.000`, which browsers treat as a download. Missing or unusable URL and ID values produce no link.
+
 Items without a title or start date, items with invalid dates, and items outside the range are skipped. A missing end uses the start value.
 
 ### Settings, cache, and failures
@@ -158,7 +160,7 @@ Configured plan access can be checked with `GET /planner/plans/{planId}`. Runtim
 - A task with neither start nor due date is skipped.
 - A single date becomes both start and end; reversed start/end dates are swapped.
 - Tasks are all-day events and can include progress/checklist text and `percentComplete`.
-- No Planner task deep link is mapped.
+- When plan, task, and tenant identifiers are available, the adapter constructs the exact Planner web task URL and maps it as the source-item link. It omits the link rather than falling back to a general Planner page when any required identifier is unavailable.
 
 **Deviation:** invalid non-empty Planner date strings are not explicitly rejected before `toISOString`; they can throw and fail that plan load rather than skip only the invalid task.
 
@@ -217,7 +219,7 @@ Teams Shifts **MUST** include all shifts returned for all Teams where the curren
 - Notes and activity names form the description.
 - Shift theme can override the configured source color.
 - Draft events set `isDraft`; renderers display draft text in italics.
-- No Shifts deep link is mapped.
+- No Shifts deep link is mapped because the source does not provide a reliable exact shift destination. Event Details does not fall back to the general Shifts application.
 
 ### Settings, cache, and failures
 

@@ -143,11 +143,11 @@ Weekend visibility can be an administrator default or explicit personal override
 
 ### Event details and links
 
-`EventDetailsDialog` displays one normalized event. It can open Graph-supplied `joinUrl` or `webLink` through `safeOpen` in a new tab.
+`EventDetailsDialog` displays one normalized event. It can open a `joinUrl` or an exact source-item `webLink` through `safeOpen` in a new tab. The Open action is omitted when an adapter cannot supply an exact item destination; it does not fall back to a general source or application page.
 
 Organizer details are displayed only for meetings with at least one normalized attendee. Descriptions without a format are rendered as escaped plain text. Descriptions explicitly marked as HTML are sanitized before rendering; active content, inline handlers, inline styles, embeds, and unsafe URLs are removed, and retained links open in a protected new tab.
 
-Exchange and Microsoft 365 Group mappings can currently supply those links. Planner, SharePoint, and Teams Shifts mappings do not currently produce event deep links.
+Exchange and Microsoft 365 Group mappings use Graph-provided event links. SharePoint derives the list path from the Graph list item's `webUrl` and constructs its display-form URL from that path and the item ID; it does not open the internal `FileRef` target because classic calendar items can otherwise download an empty `_.000` file. Planner constructs the current Planner task URL from the plan, task, and tenant identifiers. Teams Shifts does not produce an event deep link because no reliable exact shift destination is available.
 
 SharePoint events display their persisted or lazily resolved site name separately from the calendar name. Missing legacy metadata uses a neutral localized fallback; Event Details does not call Graph.
 

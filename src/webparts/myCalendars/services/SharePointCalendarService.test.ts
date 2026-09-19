@@ -33,7 +33,8 @@ describe('SharePointCalendarService event mapping', () => {
   it('preserves timed values and marks SharePoint descriptions as HTML', async () => {
     const get = jest.fn().mockResolvedValue({
       value: [{
-        id: 'timed',
+        id: '7',
+        webUrl: 'https://contoso.sharepoint.com/sites/calendar/Lists/Events/7_.000',
         fields: {
           Title: 'Timed event',
           EventDate: '2026-09-10T08:00:00Z',
@@ -43,7 +44,7 @@ describe('SharePointCalendarService event mapping', () => {
         }
       }]
     });
-    const request = { expand: jest.fn().mockReturnThis(), get };
+    const request = { select: jest.fn().mockReturnThis(), expand: jest.fn().mockReturnThis(), get };
     const service = new SharePointCalendarService({ api: jest.fn().mockReturnValue(request) } as never);
 
     const events = await service.getListEvents(
@@ -60,8 +61,43 @@ describe('SharePointCalendarService event mapping', () => {
       end: '2026-09-10T09:00:00.000Z',
       description: '<p><strong>Details</strong></p>',
       descriptionFormat: 'html',
-      sharePointSiteName: 'Contoso Site'
+      sharePointSiteName: 'Contoso Site',
+      webLink: 'https://contoso.sharepoint.com/sites/calendar/Lists/Events/DispForm.aspx?ID=7'
     });
+  });
+
+  it('encodes the item ID and discards the FileRef query and fragment', async () => {
+    const request = {
+      select: jest.fn().mockReturnThis(),
+      expand: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ value: [{
+        id: 'item / 7',
+        webUrl: 'https://contoso.sharepoint.com/sites/calendar/Lists/Events/7_.000?download=1#fragment',
+        fields: { Title: 'Event', EventDate: '2026-09-10T08:00:00Z', EndDate: '2026-09-10T09:00:00Z' }
+      }] })
+    };
+    const service = new SharePointCalendarService({ api: jest.fn().mockReturnValue(request) } as never);
+
+    const events = await service.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'), undefined, 'Contoso Site');
+
+    expect(events[0].webLink).toBe('https://contoso.sharepoint.com/sites/calendar/Lists/Events/DispForm.aspx?ID=item%20%2F%207');
+  });
+
+  it.each([undefined, '', '   ', 'mailto:calendar@contoso.com'])('omits the source link when the SharePoint webUrl is %p', async webUrl => {
+    const request = {
+      select: jest.fn().mockReturnThis(),
+      expand: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ value: [{
+        id: 'event',
+        webUrl,
+        fields: { Title: 'Event', EventDate: '2026-09-10T08:00:00Z', EndDate: '2026-09-10T09:00:00Z' }
+      }] })
+    };
+    const service = new SharePointCalendarService({ api: jest.fn().mockReturnValue(request) } as never);
+
+    const events = await service.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'), undefined, 'Contoso Site');
+
+    expect(events[0].webLink).toBeUndefined();
   });
 
   it('resolves a missing site name once and does not block events when resolution fails', async () => {
@@ -71,7 +107,7 @@ describe('SharePointCalendarService event mapping', () => {
     const graphClient = {
       api: jest.fn((endpoint: string) => endpoint === '/sites/site-id'
         ? { query: jest.fn().mockReturnThis(), get: siteGet }
-        : { expand: jest.fn().mockReturnThis(), get: itemGet })
+        : { select: jest.fn().mockReturnThis(), expand: jest.fn().mockReturnThis(), get: itemGet })
     };
     const service = new SharePointCalendarService(graphClient as never);
 
@@ -84,7 +120,7 @@ describe('SharePointCalendarService event mapping', () => {
     const failingClient = {
       api: jest.fn((endpoint: string) => endpoint === '/sites/site-id'
         ? { query: jest.fn().mockReturnThis(), get: jest.fn().mockRejectedValue(new Error('denied')) }
-        : { expand: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(itemData) })
+        : { select: jest.fn().mockReturnThis(), expand: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(itemData) })
     };
     const fallbackService = new SharePointCalendarService(failingClient as never);
     const warning = jest.spyOn(console, 'warn').mockImplementation();

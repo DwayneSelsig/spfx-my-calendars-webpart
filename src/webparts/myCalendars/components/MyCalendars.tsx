@@ -456,7 +456,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const graphClient = await graphClientPromise;
     const exchangeService = new ExchangeCalendarService(httpClient, graphClient);
     const sharePointService = new SharePointCalendarService(graphClient);
-    const plannerService = new PlannerTaskService(graphClient);
+    const plannerService = new PlannerTaskService(graphClient, this.props.tenantId);
     const teamsShiftsService = this.teamsShiftsService || new TeamsShiftsService(graphClient);
     teamsShiftsService.setGraphClient(graphClient);
     this.teamsShiftsService = teamsShiftsService;

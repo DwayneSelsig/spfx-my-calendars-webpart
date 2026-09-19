@@ -11,12 +11,14 @@ describe('UnifiedGroupCalendarService event status mapping', () => {
       get: jest.fn().mockResolvedValue({ value: [{
         id: 'event', subject: 'Group event', bodyPreview: '',
         start: { dateTime: '2026-09-10T08:00:00Z' }, end: { dateTime: '2026-09-10T09:00:00Z' },
-        isReminderOn: false, attendees: [], showAs, responseStatus: { response: 'accepted' }
+        isReminderOn: false, attendees: [], showAs, responseStatus: { response: 'accepted' },
+        webLink: 'https://outlook.office.com/calendar/item/group-event'
       }] })
     };
     const service = new UnifiedGroupCalendarService({ api: jest.fn().mockReturnValue(request) });
     const events = await service.getGroupEvents('group-id', new Date('2026-09-01'), new Date('2026-10-01'));
     expect(events[0].showAs).toBe(showAs);
     expect(events[0].responseStatus).toBeUndefined();
+    expect(events[0].webLink).toBe('https://outlook.office.com/calendar/item/group-event');
   });
 });

@@ -41,7 +41,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Assign administrator sources and ICS catalog entries to Entra groups. The current implementation only discovers non-mail-enabled security groups; the confirmed target model is broader.
 - Store personal settings and per-source visibility choices in the OneDrive App Folder.
 - Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
-- Open source systems through deep links when the source supports this function.
+- Open exact Outlook and Microsoft 365 Group calendar events, SharePoint list events, and Planner tasks from Event Details. Sources without a reliable exact item link, including Teams Shifts, do not receive a general application fallback.
 
 ## Scope and non-goals
 

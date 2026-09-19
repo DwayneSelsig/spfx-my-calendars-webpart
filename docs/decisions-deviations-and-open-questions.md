@@ -22,6 +22,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - **Status:** Decision
 - My Calendars reads and combines source data. It does not create, change, or delete source events or tasks.
 - It can open a source event, calendar, task, or subscription flow through a deep link when supported.
+- Event Details exposes Open only for an exact source-item link. It does not substitute a general source or application destination when an exact item link is unavailable.
 - Write operations do not belong in source services or renderers.
 
 ### DEC-003 — Local calendar renderer
