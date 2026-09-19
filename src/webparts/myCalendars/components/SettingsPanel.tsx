@@ -20,6 +20,8 @@ import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 import { formatCalendarTime } from './views/calendarFormatting';
 import { getBulkVisibilityTarget, getGroupVisibilityState, type GroupVisibilityState, setOutlookVisibility, setSharePointVisibility } from './calendarVisibility';
+import { formatLocalizedString } from '../utils/localization';
+import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
 
 export interface ISettingsPanelProps {
   isOpen: boolean;
@@ -245,7 +247,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.setState({ addingCalendarType: type, addingCalendarStep: 'unified-group-select', unifiedGroupsLoading: true, unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4' });
       await this.loadUnifiedGroups();
     } else if (type === 'teamsShifts') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'teams-shifts', newCalendarName: 'Teams Shifts', newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', teamsShiftsShowLogo: true });
+      this.setState({ addingCalendarType: type, addingCalendarStep: 'teams-shifts', newCalendarName: strings.TeamsShiftsLabel, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', teamsShiftsShowLogo: true });
     }
   };
 
@@ -425,20 +427,20 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
       if (fieldOptions.length > 0) {
         const candidateLists = {
-          title: this.getFieldCandidates('title'),
-          start: this.getFieldCandidates('start'),
-          end: this.getFieldCandidates('end')
+          title: getFieldCandidates('title'),
+          start: getFieldCandidates('start'),
+          end: getFieldCandidates('end')
         };
 
         const guessedMapping = { ...this.state.spFieldMapping };
         if (!guessedMapping.titleField) {
-          guessedMapping.titleField = this.findBestMatchingFieldKey(fieldOptions, candidateLists.title);
+          guessedMapping.titleField = findBestMatchingFieldKey(fieldOptions, candidateLists.title) as string | undefined;
         }
         if (!guessedMapping.startDateField) {
-          guessedMapping.startDateField = this.findBestMatchingFieldKey(fieldOptions, candidateLists.start);
+          guessedMapping.startDateField = findBestMatchingFieldKey(fieldOptions, candidateLists.start) as string | undefined;
         }
         if (!guessedMapping.endDateField) {
-          guessedMapping.endDateField = this.findBestMatchingFieldKey(fieldOptions, candidateLists.end);
+          guessedMapping.endDateField = findBestMatchingFieldKey(fieldOptions, candidateLists.end) as string | undefined;
         }
 
         this.setState({
@@ -453,69 +455,6 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.setState({ addingCalendarStep: 'sharepoint-fields' });
     }
   };
-
-  private parseFieldCandidates(value: string | undefined): string[] {
-    if (!value) return [];
-    return value.split(';').map(candidate => candidate.trim()).filter(Boolean);
-  }
-
-  private getFieldCandidates(field: 'title' | 'start' | 'end'): string[] {
-    const defaults: Record<'title' | 'start' | 'end', string[]> = {
-      title: ['Title', 'Subject', 'Event Title'],
-      start: ['Start Time', 'Start', 'Start Date', 'StartDate', 'StartDateTime', 'EventDate', 'Starttijd', 'Begindatum', 'Begin', 'Startdatum'],
-      end: ['End Time', 'End', 'End Date', 'EndDate', 'EndDateTime', 'Eindtijd', 'Einddatum', 'Einde']
-    };
-
-    const localized = this.parseFieldCandidates(
-      field === 'title' ? strings.FieldTitleCandidates
-        : field === 'start' ? strings.FieldStartCandidates
-          : strings.FieldEndCandidates
-    );
-
-    const merged = [...localized, ...defaults[field]];
-    const seen = new Set<string>();
-    return merged.filter(candidate => {
-      const normalized = this.normalizeFieldCandidate(candidate);
-      if (!normalized || seen.has(normalized)) {
-        return false;
-      }
-      seen.add(normalized);
-      return true;
-    });
-  }
-
-  private normalizeFieldCandidate(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ''); }
-
-  private findBestMatchingFieldKey(options: IDropdownOption[], candidates: string[]): string | undefined {
-    const normalizedCandidates = candidates.map(candidate => this.normalizeFieldCandidate(candidate));
-    const normalizedOptions = options.map(option => ({
-      option,
-      text: this.normalizeFieldCandidate(String(option.text || '')),
-      key: this.normalizeFieldCandidate(String(option.key || ''))
-    }));
-
-    for (const candidate of normalizedCandidates) {
-      if (!candidate) {
-        continue;
-      }
-      const exactMatch = normalizedOptions.find(entry => entry.text === candidate || entry.key === candidate);
-      if (exactMatch) {
-        return exactMatch.option.key as string;
-      }
-    }
-
-    for (const candidate of normalizedCandidates) {
-      if (!candidate) {
-        continue;
-      }
-      const partialMatch = normalizedOptions.find(entry => entry.text.includes(candidate) || entry.key.includes(candidate));
-      if (partialMatch) {
-        return partialMatch.option.key as string;
-      }
-    }
-
-    return undefined;
-  }
 
   private handleConfirmSharePointCalendar = (): void => {
     if (!this.state.spSelectedSite || !this.state.spSelectedList) {
@@ -569,7 +508,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         exchangeCalendarsLoading: false,
         exchangeMailboxResolved: false
       });
-      alert('Mailbox not found or not accessible');
+      alert(strings.MailboxUnavailableAlertLabel);
     }
   };
 
@@ -668,7 +607,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private handleSave = (): void => { this.props.onSave(this.state.settings); this.props.onDismiss(); };
 
   private handleReset = (): void => {
-    if (confirm('Are you sure you want to reset all settings to the defaults? This action cannot be undone.')) {
+    if (confirm(strings.ResetSettingsConfirmationLabel)) {
       if (this.props.onReset) this.props.onReset();
       this.props.onDismiss();
     }
@@ -722,7 +661,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           />
           <Dropdown
             label={strings.LocationFieldOptionalLabel}
-            options={[{ key: '', text: '(none)' }, ...spAvailableFields]}
+            options={[{ key: '', text: strings.NoneLabel }, ...spAvailableFields]}
             selectedKey={spFieldMapping.locationField || ''}
             onChange={(_, option) => this.setState({
               spFieldMapping: { ...spFieldMapping, locationField: option?.key as string }
@@ -730,7 +669,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           />
           <Dropdown
             label={strings.DescriptionFieldOptionalLabel}
-            options={[{ key: '', text: '(none)' }, ...spAvailableFields]}
+            options={[{ key: '', text: strings.NoneLabel }, ...spAvailableFields]}
             selectedKey={spFieldMapping.descriptionField || ''}
             onChange={(_, option) => this.setState({
               spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string }
@@ -742,7 +681,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
           />
           <div>
-            <Label>Color</Label>
+            <Label>{strings.ColorLabel}</Label>
             <ColorPicker
               color={this.state.newCalendarColor}
               onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
@@ -759,8 +698,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (spSelectedList) {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Selected List: {spSelectedList.name}</Label>
-          <Label style={{ color: '#605e5c' }}>Configuring field mapping...</Label>
+          <Label>{formatLocalizedString(strings.SelectedListLabel, spSelectedList.name)}</Label>
+          <Label style={{ color: '#605e5c' }}>{strings.ConfiguringFieldMappingLabel}</Label>
         </Stack>
       );
     }
@@ -773,14 +712,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       if (spLists.length === 0) {
         return (
           <Stack tokens={{ childrenGap: 12 }}>
-            <Label>No calendar lists found in this site</Label>
+            <Label>{strings.NoCalendarListsFoundLabel}</Label>
           </Stack>
         );
       }
 
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Select a calendar list from {spSelectedSite.name}:</Label>
+          <Label>{formatLocalizedString(strings.SelectCalendarListLabel, spSelectedSite.name)}</Label>
           <Stack tokens={{ childrenGap: 8 }}>
             {spLists.map(list => (
               <DefaultButton
@@ -808,7 +747,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
-        <Label>Search and select a SharePoint site:</Label>
+        <Label>{strings.SearchSelectSharePointSiteLabel}</Label>
         <TextField
           placeholder={strings.FilterSitesPlaceholder}
           value={spSiteFilter}
@@ -818,7 +757,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
         {spSites.length === 0 && !spSiteFilter && (
           <Label style={{ color: '#605e5c', fontStyle: 'italic' }}>
-            No sites found. Try searching for a specific site name.
+            {strings.NoSitesFoundTrySearchLabel}
           </Label>
         )}
 
@@ -850,6 +789,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   <IconButton
                     iconProps={{ iconName: 'ChevronRight' }}
                     title={strings.SelectThisSiteLabel}
+                    ariaLabel={strings.SelectThisSiteLabel}
                     styles={{ root: { pointerEvents: 'none' } }}
                   />
                 </Stack>
@@ -865,7 +805,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage - 1 })}
                 />
                 <Label style={{ margin: 0 }}>
-                  Page {this.state.spCurrentPage + 1} of {totalPages}
+                  {formatLocalizedString(strings.PageOfLabel, this.state.spCurrentPage + 1, totalPages)}
                 </Label>
                 <DefaultButton
                   text={strings.NextLabel}
@@ -876,7 +816,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             )}
 
             <Label style={{ fontSize: 12, color: '#605e5c' }}>
-              Showing {sitesOnPage.length} of {filteredSites.length} sites
+              {formatLocalizedString(strings.ShowingSitesLabel, sitesOnPage.length, filteredSites.length)}
             </Label>
           </>
         )}
@@ -896,7 +836,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
           />
           <div>
-            <Label>Color</Label>
+            <Label>{strings.ColorLabel}</Label>
             <ColorPicker
               color={this.state.newCalendarColor}
               onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
@@ -917,7 +857,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (exchangeMailboxResolved && exchangeCalendars.length > 0) {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Select a calendar from {exchangeMailbox || 'your mailbox'}:</Label>
+          <Label>{formatLocalizedString(strings.SelectCalendarFromMailboxLabel, exchangeMailbox || strings.YourMailboxLabel)}</Label>
           <Stack tokens={{ childrenGap: 8 }}>
             {exchangeCalendars.map(cal => (
               <Stack
@@ -944,7 +884,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 <div style={{ flex: 1 }}>
                   <strong>{cal.name}</strong>
                   {cal.isDefaultCalendar && (
-                    <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>(Default)</span>
+                    <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>{strings.DefaultLabel}</span>
                   )}
                 </div>
               </Stack>
@@ -953,7 +893,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
           {/* Option to search another mailbox */}
           <div style={{ borderTop: '1px solid #edebe9', paddingTop: 12, marginTop: 8 }}>
-            <Label>Or enter another mailbox email:</Label>
+            <Label>{strings.EnterMailboxEmailLabel}</Label>
             <TextField
               placeholder={strings.MailboxPlaceholder}
               value={exchangeMailbox}
@@ -970,7 +910,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     // Default: Show instructions to open Outlook
     return (
       <Stack tokens={{ childrenGap: 16 }}>
-        <Label>To add an Outlook calendar from a shared mailbox or another user:</Label>
+        <Label>{strings.OutlookCalendarDescription}</Label>
         <div style={{
           padding: '16px',
           backgroundColor: '#f3f2f1',
@@ -979,10 +919,10 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         }}>
           <ol style={{ margin: 0, paddingLeft: 20 }}>
             <li style={{ marginBottom: 8 }}>
-              Open Outlook (web) by clicking the button below
+              {strings.OpenOutlookInstructionLabel}
             </li>
             <li style={{ marginBottom: 8 }}>
-              In Outlook, click on the left sidebar button:
+              {strings.OutlookDirectoryInstructionLabel}
               <div style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -995,11 +935,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 fontSize: 12
               }}>
                 <span style={{ fontSize: 14 }}>👥</span>
-                <strong>Add from directory</strong>
+                <strong>{strings.AddFromDirectoryLabel}</strong>
               </div>
             </li>
             <li>
-              Select the calendar you want to add and it will automatically appear in this webpart
+              {strings.CalendarAppearsAutomaticallyLabel}
             </li>
           </ol>
         </div>
@@ -1023,7 +963,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       <Stack tokens={{ childrenGap: 12 }}>
         {settings.availableAdminIcsCatalogItems.length > 0 && (
           <Stack tokens={{ childrenGap: 8 }}>
-            <Label>Beschikbaar via beheer</Label>
+            <Label>{strings.AvailableViaAdminLabel}</Label>
             {settings.availableAdminIcsCatalogItems.map(item => (
               <DefaultButton
                 key={item.adminIcsId}
@@ -1041,13 +981,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           label={strings.CalendarNameLabel}
           value={this.state.newCalendarName}
           onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
-          placeholder="e.g. Office Holidays"
+          placeholder={strings.IcsNamePlaceholder}
         />
         <TextField
           label={strings.IcsUrlLabel}
           value={icsUrl}
           onChange={(_, value) => this.setState({ icsUrl: value || '' })}
-          placeholder="https://www.officeholidays.com/ics-all/netherlands"
+          placeholder={strings.IcsUrlPlaceholder}
         />
 
         <Stack horizontal tokens={{ childrenGap: 8 }}>
@@ -1175,8 +1115,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (unifiedGroupsLoading) {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Loading groups and teams...</Label>
-          <Spinner size={SpinnerSize.large} />
+          <Label>{strings.LoadingGroupsAndTeamsLabel}</Label>
+          <Spinner size={SpinnerSize.large} label={strings.LoadingLabel} />
         </Stack>
       );
     }
@@ -1184,8 +1124,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (unifiedGroups.length === 0) {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>No M365 groups found</Label>
-          <div>You don&apos;t have access to any Microsoft 365 groups.</div>
+          <Label>{strings.NoGroupsFoundLabel}</Label>
+          <div>{strings.NoGroupsAccessLabel}</div>
           <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
         </Stack>
       );
@@ -1193,7 +1133,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
-        <Label>Select one or more groups or teams:</Label>
+        <Label>{strings.SelectGroupsOrTeamsLabel}</Label>
         <Stack tokens={{ childrenGap: 8 }}>
           {unifiedGroups.map(group => (
             <Stack
@@ -1218,7 +1158,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           ))}
         </Stack>
         <div>
-          <Label>Color</Label>
+          <Label>{strings.ColorLabel}</Label>
           <ColorPicker
             color={this.state.newCalendarColor}
             onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
@@ -1227,7 +1167,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         </div>
         <Stack horizontal tokens={{ childrenGap: 8 }}>
           <PrimaryButton
-            text={selectedCount > 1 ? 'Add Calendars' : 'Add Calendar'}
+            text={selectedCount > 1 ? strings.AddCalendarsLabel : strings.AddCalendarLabel}
             onClick={this.handleConfirmUnifiedGroups}
             disabled={selectedCount === 0}
           />
@@ -1242,12 +1182,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
-        <Label>Teams Shifts</Label>
+        <Label>{strings.TeamsShiftsLabel}</Label>
         <TextField
           label={strings.CalendarNameLabel}
           value={this.state.newCalendarName}
           onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
-          placeholder="e.g. Teams Shifts"
+          placeholder={strings.TeamsShiftsLabel}
           required
         />
 
@@ -1255,8 +1195,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           label={strings.SourceLogoLabel}
           checked={this.state.teamsShiftsShowLogo}
           onChange={(_, checked) => this.setState({ teamsShiftsShowLogo: checked || false })}
-          onText="Ja"
-          offText="Nee"
+          onText={strings.OnLabel}
+          offText={strings.OffLabel}
         />
 
         <ColorPicker
@@ -1286,8 +1226,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       if (plannerPlansLoading) {
         return (
           <Stack tokens={{ childrenGap: 12 }}>
-            <Label>Loading your Planner plans...</Label>
-            <Spinner size={SpinnerSize.large} />
+            <Label>{strings.LoadingPlannerPlansLabel}</Label>
+            <Spinner size={SpinnerSize.large} label={strings.LoadingLabel} />
           </Stack>
         );
       }
@@ -1295,8 +1235,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       if (plannerPlans.length === 0) {
         return (
           <Stack tokens={{ childrenGap: 12 }}>
-            <Label>No Planner plans found</Label>
-            <div>You don&apos;t have access to any Planner plans, or there are no plans in your organization.</div>
+            <Label>{strings.NoPlannerPlansFoundLabel}</Label>
+            <div>{strings.NoPlannerPlansAccessLabel}</div>
             <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
           </Stack>
         );
@@ -1304,7 +1244,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Select a Planner plan to add:</Label>
+          <Label>{strings.SelectPlannerPlanLabel}</Label>
           <Stack tokens={{ childrenGap: 8 }}>
             {plannerPlans.map(plan => (
               <div
@@ -1334,7 +1274,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
       return (
         <Stack tokens={{ childrenGap: 12 }}>
-          <Label>Configure Planner integration</Label>
+          <Label>{strings.ConfigurePlannerIntegrationLabel}</Label>
 
           {selectedPlan && (
             <div style={{ padding: '8px', backgroundColor: '#f3f2f1', borderRadius: '4px' }}>
@@ -1347,7 +1287,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
             onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
-            placeholder="e.g. Project Tasks"
+            placeholder={strings.ProjectTasksPlaceholder}
             required
           />
 
@@ -1355,24 +1295,24 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.AssignedToMeOnlyLabel}
             checked={this.state.plannerAssignedToMeOnly}
             onChange={(_, checked) => this.setState({ plannerAssignedToMeOnly: checked || false })}
-            onText="Ja"
-            offText="Nee"
+            onText={strings.OnLabel}
+            offText={strings.OffLabel}
           />
 
           <Toggle
             label={strings.ShowCompletedTasksLabel}
             checked={this.state.plannerShowCompleted}
             onChange={(_, checked) => this.setState({ plannerShowCompleted: checked || false })}
-            onText="Ja"
-            offText="Nee"
+            onText={strings.OnLabel}
+            offText={strings.OffLabel}
           />
 
           <Toggle
             label={strings.SourceLogoLabel}
             checked={this.state.plannerShowLogo}
             onChange={(_, checked) => this.setState({ plannerShowLogo: checked || false })}
-            onText="Ja"
-            offText="Nee"
+            onText={strings.OnLabel}
+            offText={strings.OffLabel}
           />
 
           <ColorPicker
@@ -1394,7 +1334,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       );
     }
 
-    return <div>Unknown step</div>;
+    return <div>{strings.UnknownStepLabel}</div>;
   };
 
   private renderAddCalendarFlow = (): React.ReactElement => {
@@ -1404,7 +1344,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     if (addingCalendarStep === 'initial') {
       return (
         <Stack tokens={{ childrenGap: 16 }}>
-          <Label>Select the type of calendar to add:</Label>
+      <Label>{strings.SelectCalendarTypeLabel}</Label>
           <Stack tokens={{ childrenGap: 12 }}>
             <PrimaryButton
               text={strings.AddCalendarSharePointLabel}
@@ -1443,7 +1383,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             />
             <PrimaryButton
               text={strings.TeamsShiftsLabel}
-              secondaryText={strings.TeamsShiftsLabel}
+              secondaryText={strings.TeamsShiftsDescription}
               iconProps={{ iconName: 'Clock' }}
               onClick={() => this.handleSelectAddType('teamsShifts')}
               style={{ textAlign: 'left', height: 'auto', padding: '12px' }}
@@ -1465,7 +1405,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     // Show flow for selected type
     if (!addingCalendarType) {
-      return <div>Unknown calendar type</div>;
+      return <div>{strings.UnknownCalendarTypeLabel}</div>;
     }
 
     return (
@@ -1546,18 +1486,20 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   checked={visibilityState === 'on'}
                   indeterminate={visibilityState === 'mixed'}
                   disabled={visibilityDisabled}
-                  ariaLabel={strings.GroupVisibilityLabel}
-                  title={strings.GroupVisibilityLabel}
+                  ariaLabel={visibilityState === 'on' ? strings.HideAllCalendarsLabel : strings.ShowAllCalendarsLabel}
+                  title={visibilityState === 'on' ? strings.HideAllCalendarsLabel : strings.ShowAllCalendarsLabel}
                   onChange={onVisibilityChange}
                   styles={{ root: { margin: 0 } }}
                 />
               )}
               {showLogoValue !== undefined && onShowLogoChange && (
                 <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.6 }}>Show logos</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.6 }}>{strings.ShowLogosLabel}</span>
                   <Toggle
                     checked={showLogoValue}
                     onChange={(_, checked) => onShowLogoChange(!!checked)}
+                    onText={strings.OnLabel}
+                    offText={strings.OffLabel}
                     styles={{ root: { margin: 0 } }}
                   />
                 </Stack>
@@ -1601,18 +1543,20 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <div style={{ flex: 1 }}>
             <strong style={{ fontSize: 13 }}>{calendar.name}</strong>
             {calendar.isDefaultCalendar && (
-              <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>(Default)</span>
+              <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>{strings.DefaultLabel}</span>
             )}
           </div>
           <IconButton
             iconProps={{ iconName: 'Edit' }}
             title={strings.EditLabel}
+            ariaLabel={strings.EditLabel}
             onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
             styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
           />
           <IconButton
             iconProps={{ iconName: isEnabled ? 'View' : 'Hide' }}
-            title={isEnabled ? 'Hide calendar' : 'Show calendar'}
+            title={isEnabled ? strings.HideCalendarLabel : strings.ShowCalendarLabel}
+            ariaLabel={isEnabled ? strings.HideCalendarLabel : strings.ShowCalendarLabel}
             onClick={() => this.handleToggleExchangeCalendar(calendar.id, !isEnabled)}
             styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 16, color: isEnabled ? 'inherit' : '#a19f9d' } }}
           />
@@ -1649,7 +1593,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               </div>
             )}
             <div style={{ order: 3 }}>
-              <Label>Color</Label>
+              <Label>{strings.ColorLabel}</Label>
               <ColorPicker
                 color={source.color}
                 onChange={(_, color) => this.handleUpdateSource(source.id, { color: `#${color.hex}` })}
@@ -1660,10 +1604,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               label={strings.EnabledLabel}
               checked={source.isEnabled}
               onChange={(_, checked) => this.handleUpdateSource(source.id, { isEnabled: !!checked })}
+              onText={strings.OnLabel}
+              offText={strings.OffLabel}
             />
             <Stack horizontal tokens={{ childrenGap: 8 }}>
               <PrimaryButton text={strings.DoneLabel} onClick={() => this.toggleEdit(undefined)} />
-              <DefaultButton text={isAdminSource ? 'Remove for me' : 'Delete'} onClick={() => this.handleDeleteSource(source.id)} />
+              <DefaultButton text={isAdminSource ? strings.RemoveForMeLabel : strings.DeleteLabel} onClick={() => this.handleDeleteSource(source.id)} />
             </Stack>
           </Stack>
         ) : (
@@ -1683,23 +1629,25 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 </div>
               )}
               {isAdminSource && (
-                <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>(Admin default)</span>
+                <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>({strings.AdminDefaultLabel})</span>
               )}
               {isAdminSource && source.audienceGroupNames && source.audienceGroupNames.length > 0 && (
                 <div style={{ fontSize: 11, color: '#605e5c' }}>
-                  Via: {source.audienceGroupNames.join(', ')}
+                  {strings.ViaLabel}: {source.audienceGroupNames.join(', ')}
                 </div>
               )}
             </div>
             <IconButton
               iconProps={{ iconName: 'Edit' }}
               title={strings.EditLabel}
+              ariaLabel={strings.EditLabel}
               onClick={() => this.toggleEdit(source.id)}
               styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
             />
             <IconButton
               iconProps={{ iconName: source.isEnabled ? 'View' : 'Hide' }}
-              title={source.isEnabled ? 'Hide calendar' : 'Show calendar'}
+              title={source.isEnabled ? strings.HideCalendarLabel : strings.ShowCalendarLabel}
+              ariaLabel={source.isEnabled ? strings.HideCalendarLabel : strings.ShowCalendarLabel}
               onClick={() => this.handleUpdateSource(source.id, { isEnabled: !source.isEnabled })}
               styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 16, color: source.isEnabled ? 'inherit' : '#a19f9d' } }}
             />
@@ -1740,6 +1688,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 label={strings.UsePersonalStartTimeLabel}
                 checked={settings.userPreferredStartMinutes !== undefined}
                 onChange={(_, checked) => this.setState({ settings: { ...settings, userPreferredStartMinutes: checked ? settings.preferredStartMinutes : undefined } })}
+                onText={strings.OnLabel}
+                offText={strings.OffLabel}
               />
               <Dropdown
                 label={strings.PreferredStartTimeLabel}
@@ -1752,6 +1702,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 label={strings.UsePersonalVisibleHoursLabel}
                 checked={settings.userVisibleHourCount !== undefined}
                 onChange={(_, checked) => this.setState({ settings: { ...settings, userVisibleHourCount: checked ? settings.visibleHourCount : undefined } })}
+                onText={strings.OnLabel}
+                offText={strings.OffLabel}
               />
               <Dropdown
                 label={strings.VisibleHoursLabel}
@@ -1772,15 +1724,19 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   showWeekends: checked ? settings.showWeekends : settings.adminShowWeekends,
                   userShowWeekends: checked ? settings.showWeekends : undefined
                 } })}
+                onText={strings.OnLabel}
+                offText={strings.OffLabel}
               />
               <Toggle
                 label={strings.ShowWeekendsLabel}
                 disabled={settings.userShowWeekends === undefined}
                 checked={settings.showWeekends}
                 onChange={(_, checked) => this.setState({ settings: { ...settings, showWeekends: !!checked, userShowWeekends: !!checked } })}
+                onText={strings.OnLabel}
+                offText={strings.OffLabel}
               />
               <div style={{ marginTop: 6, fontSize: 12, color: '#605e5c' }}>
-                Grid: {settings.slotDurationMinutes} minutes · Weekends: {settings.showWeekends ? 'shown' : 'hidden'}
+                {formatLocalizedString(strings.GridSummaryLabel, settings.slotDurationMinutes, settings.showWeekends ? strings.WeekendsShownLabel : strings.WeekendsHiddenLabel)}
               </div>
             </div>
 
@@ -1803,8 +1759,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   icon: 'OutlookLogo',
                   iconBg: 'rgba(0, 120, 212, 0.12)',
                   iconColor: '#0078d4',
-                  title: 'Outlook',
-                  subtitle: 'Personal & shared mailboxes',
+                  title: strings.OutlookLabel,
+                  subtitle: strings.OutlookSectionSubtitle,
                   showLogoValue: settings.exchangeShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, exchangeShowSourceLogo: checked } }),
                   visibilityState: getGroupVisibilityState([
@@ -1837,8 +1793,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   icon: 'SharepointLogo',
                   iconBg: 'rgba(3, 129, 134, 0.12)',
                   iconColor: '#038186',
-                  title: 'SharePoint',
-                  subtitle: 'Site lists, calendars & events',
+                  title: strings.SharePointLabel,
+                  subtitle: strings.SharePointSectionSubtitle,
                   showLogoValue: settings.sharePointShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, sharePointShowSourceLogo: checked } }),
                   visibilityState: getGroupVisibilityState(settings.sources.filter(source => source.sourceType === 'sharepoint').map(source => source.isEnabled)),
@@ -1852,8 +1808,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   icon: 'PlannerLogo',
                   iconBg: 'rgba(16, 124, 65, 0.12)',
                   iconColor: '#107c41',
-                  title: 'Planner',
-                  subtitle: 'Task deadlines & milestones',
+                  title: strings.PlannerLabel,
+                  subtitle: strings.PlannerSectionSubtitle,
                   showLogoValue: settings.plannerShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, plannerShowSourceLogo: checked } }),
                   children: (() => {
@@ -1866,17 +1822,21 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                           label={strings.ShowAllPlannerPlansLabel}
                           checked={showAllPlanner}
                           onChange={(_, checked) => this.handleTogglePlannerShowAll(!!checked)}
+                          onText={strings.OnLabel}
+                          offText={strings.OffLabel}
                         />
                         {showAllPlanner && (
                           <Toggle
                             label={strings.AssignedToMeOnlyLabel}
                             checked={settings.plannerShowAllAssignedToMeOnly ?? false}
                             onChange={(_, checked) => this.handleTogglePlannerAssignedToMeOnly(!!checked)}
+                            onText={strings.OnLabel}
+                            offText={strings.OffLabel}
                           />
                         )}
                         {showAllPlanner && (
                           <MessageBar messageBarType={MessageBarType.info}>
-                            All Planner plans are loaded automatically.
+                            {strings.AllPlannerPlansLoadedLabel}
                           </MessageBar>
                         )}
                         {plannerSources.length > 0 && (
@@ -1895,8 +1855,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   icon: 'Group',
                   iconBg: 'rgba(91, 95, 199, 0.12)',
                   iconColor: '#5b5fc7',
-                  title: 'Groups & Teams',
-                  subtitle: 'Shared group calendars',
+                  title: strings.GroupsAndTeamsLabel,
+                  subtitle: strings.GroupsAndTeamsSectionSubtitle,
                   showLogoValue: settings.unifiedGroupShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, unifiedGroupShowSourceLogo: checked } }),
                   children: (() => {
@@ -1909,10 +1869,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                           label={strings.ShowAllGroupsAndTeamsLabel}
                           checked={showAllUnifiedGroups}
                           onChange={(_, checked) => this.handleToggleUnifiedGroupShowAll(!!checked)}
+                          onText={strings.OnLabel}
+                          offText={strings.OffLabel}
                         />
                         {showAllUnifiedGroups && (
                           <MessageBar messageBarType={MessageBarType.info}>
-                            All group and team calendars are loaded automatically.
+                            {strings.AllGroupTeamCalendarsLoadedLabel}
                           </MessageBar>
                         )}
                         {unifiedGroupSources.length > 0 && (
@@ -1931,8 +1893,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   icon: 'Clock',
                   iconBg: 'rgba(74, 79, 190, 0.12)',
                   iconColor: '#4a4fbe',
-                  title: 'Teams Shifts',
-                  subtitle: 'Work schedules & rotas',
+                  title: strings.TeamsShiftsLabel,
+                  subtitle: strings.TeamsShiftsSectionSubtitle,
                   showLogoValue: settings.teamsShiftsShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, teamsShiftsShowSourceLogo: checked } }),
                   children: (() => {
@@ -1945,10 +1907,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                           label={strings.ShowAllTeamsShiftsLabel}
                           checked={showAllTeamsShifts}
                           onChange={(_, checked) => this.handleToggleTeamsShiftsShowAll(!!checked)}
+                          onText={strings.OnLabel}
+                          offText={strings.OffLabel}
                         />
                         {showAllTeamsShifts && (
                           <MessageBar messageBarType={MessageBarType.info}>
-                            All Teams Shifts are loaded automatically.
+                            {strings.AllTeamsShiftsLoadedLabel}
                           </MessageBar>
                         )}
                         {teamsShiftsSources.length > 0 && (
@@ -1964,7 +1928,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 {/* Empty state */}
                 {!userExchangeCalendarsLoading && userExchangeCalendars.length === 0 && settings.sources.length === 0 && (
                   <Label style={{ color: '#605e5c', fontStyle: 'italic' }}>
-                    No calendars found. Click &quot;Add Calendar&quot; to add a calendar source.
+                    {strings.NoCalendarsFoundLabel}
                   </Label>
                 )}
               </Stack>

@@ -1,6 +1,8 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
+import * as strings from 'MyCalendarsWebPartStrings';
+import { formatLocalizedString } from '../utils/localization';
 
 interface IGraphTeam {
   id: string;
@@ -243,7 +245,7 @@ export class TeamsShiftsService {
       .map(activity => activity.displayName)
       .filter((name): name is string => !!name && name.trim().length > 0);
 
-    const activityText = activities.length > 0 ? `Activities: ${activities.join(', ')}` : '';
+    const activityText = activities.length > 0 ? formatLocalizedString(strings.ActivitiesLabel, activities.join(', ')) : '';
 
     if (notes && activityText) {
       return `${notes}\n${activityText}`;

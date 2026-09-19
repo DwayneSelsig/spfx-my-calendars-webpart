@@ -1,6 +1,8 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
+import * as strings from 'MyCalendarsWebPartStrings';
+import { formatLocalizedString } from '../utils/localization';
 
 export interface IPlannerPlan {
   id: string;
@@ -241,16 +243,16 @@ export class PlannerTaskService {
     // Build description with progress info
     let description = '';
     if (task.percentComplete > 0) {
-      description = `Progress: ${task.percentComplete}%`;
+      description = formatLocalizedString(strings.ProgressLabel, task.percentComplete);
     }
     if (task.checklistItemCount && task.checklistItemCount > 0) {
       const completed = task.checklistItemCount - (task.activeChecklistItemCount || 0);
-      description += (description ? '\n' : '') + `Checklist: ${completed}/${task.checklistItemCount} completed`;
+      description += (description ? '\n' : '') + formatLocalizedString(strings.ChecklistLabel, completed, task.checklistItemCount);
     }
 
     return {
       id: task.id,
-      title: task.title || 'Untitled Task',
+      title: task.title || strings.UntitledTaskLabel,
       description: description || undefined,
       location: undefined, // Planner tasks don't have locations
       start: startDate.toISOString(),

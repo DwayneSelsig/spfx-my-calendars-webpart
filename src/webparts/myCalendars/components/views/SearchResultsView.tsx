@@ -6,6 +6,10 @@ import { getEventStatusPresentation } from './eventStatusPresentation';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { getSourceIconName } from '../../utils/sourceIconHelper';
 import { formatCalendarTime, resolveCalendarLocale } from './calendarFormatting';
+import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
+import * as strings from 'MyCalendarsWebPartStrings';
+import { formatLocalizedString } from '../../utils/localization';
+import { formatAppointmentDuration } from './searchFormatting';
 
 export interface ISearchResultsViewProps {
   appointments: IEvent[];
@@ -104,21 +108,6 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
   // Helper function to pad numbers
   const padZero = (value: number): string => value < 10 ? '0' + value : String(value);
 
-  const getAppointmentDuration = React.useCallback((startDate: Date, endDate: Date, isFullDay: boolean): string => {
-    if (isFullDay) {
-      return 'All day';
-    }
-
-    const durationMs = endDate.getTime() - startDate.getTime();
-    const hours = Math.floor(durationMs / (1000 * 60 * 60));
-    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-    if (hours > 0) {
-      return `${hours} hr${hours > 1 ? 's' : ''}${minutes > 0 ? ` ${minutes} min` : ''}`;
-    }
-
-    return `${minutes} min`;
-  }, []);
-
   // Group appointments by date and precompute display labels to keep render work minimal.
   const groupedByDate = React.useMemo(() => {
     const groups: { [key: string]: IGroupedAppointments } = {};
@@ -141,7 +130,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
         };
       }
 
-      let startTimeLabel = '09:00';
+      let startTimeLabel = '';
       if (!apt.isFullDay) {
         const startTimeKey = startDate.getTime();
         const cachedStartTime = timeLabelCache.get(startTimeKey);
@@ -156,7 +145,7 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
       groups[dateKey].appointments.push({
         appointment: apt,
         startTimeLabel,
-        durationLabel: getAppointmentDuration(startDate, endDate, apt.isFullDay ?? false)
+        durationLabel: formatAppointmentDuration(startDate, endDate, apt.isFullDay ?? false)
       });
     });
 
@@ -171,13 +160,17 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
             new Date(a.appointment.start).getTime() - new Date(b.appointment.start).getTime()
         )
       }));
-  }, [appointments, dateFormatter, getAppointmentDuration, locale, weekdayFormatter]);
+  }, [appointments, dateFormatter, locale, weekdayFormatter]);
 
-  if (groupedByDate.length === 0 && !isLoading) {
+  if (groupedByDate.length === 0) {
     return (
       <div className={styles.scheduleView}>
         <div className={styles.noAppointments}>
-          {searchQuery ? `No results found for "${searchQuery}"` : 'No appointments'}
+          {isLoading
+            ? <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />
+            : searchQuery
+              ? formatLocalizedString(strings.NoSearchResultsForLabel, searchQuery)
+              : strings.NoAppointmentsLabel}
         </div>
       </div>
     );

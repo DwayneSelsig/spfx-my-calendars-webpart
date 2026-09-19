@@ -1,0 +1,13 @@
+export const FieldTitleCandidates = 'Title;Subject;Event Title';
+export const FieldStartCandidates = 'Start Time;Start;Start Date;StartDate;StartDateTime;EventDate;Starttijd;Begindatum;Begin;Startdatum';
+export const FieldEndCandidates = 'End Time;End;End Date;EndDate;EndDateTime;Eindtijd;Einddatum;Einde';
+export const AllDayLabel = 'All day';
+export const DurationHoursLabel = '{0} hr';
+export const DurationHoursMinutesLabel = '{0} hr {1} min';
+export const DurationMinutesLabel = '{0} min';
+export const UntitledEventLabel = 'Untitled';
+export const UntitledTaskLabel = 'Untitled Task';
+export const UnnamedListLabel = 'Unnamed List';
+export const ProgressLabel = 'Progress: {0}%';
+export const ChecklistLabel = 'Checklist: {0}/{1} completed';
+export const ActivitiesLabel = 'Activities: {0}';

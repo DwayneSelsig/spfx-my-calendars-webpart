@@ -82,4 +82,22 @@ describe('ExchangeCalendarService event mapping', () => {
     expect(events.map(event => event.responseStatus)).toEqual(responses);
     expect(events.map(event => event.showAs)).toEqual(availability);
   });
+
+  it('uses the localized fallback for events without a subject', async () => {
+    jest.spyOn(UserHelper, 'getCurrentUserEmail').mockResolvedValue('viewer@example.com');
+    const request = {
+      header: jest.fn().mockReturnThis(),
+      query: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ value: [{
+        id: 'fallback', subject: '', bodyPreview: '',
+        start: { dateTime: '2026-09-10T08:00:00Z' }, end: { dateTime: '2026-09-10T09:00:00Z' },
+        isReminderOn: false, attendees: []
+      }] })
+    };
+    const service = new ExchangeCalendarService({} as HttpClient, { api: jest.fn().mockReturnValue(request) });
+
+    const events = await service.getCalendarEvents('calendar-id', new Date('2026-09-01'), new Date('2026-10-01'));
+
+    expect(events[0].title).toBe('Untitled');
+  });
 });

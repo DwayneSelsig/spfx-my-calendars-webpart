@@ -152,14 +152,14 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       pages: [
         {
           header: {
-            description: 'Configure administrator defaults for this web part'
+            description: strings.PropertyPaneAdminDescription
           },
           groups: [
             {
-              groupName: 'Administrator Defaults',
+              groupName: strings.AdminDefaultsGroupName,
               groupFields: [
                 PropertyPaneAdminCalendarManager('adminSettings', {
-                  label: 'Default calendars and ICS catalog',
+                  label: strings.AdminCalendarManagerLabel,
                   adminSettings: this._adminSettings,
                   backupTargetProperty: 'adminSettingsBackup',
                   adminLoadNotice: this._adminLoadNotice,

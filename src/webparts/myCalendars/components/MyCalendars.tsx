@@ -31,6 +31,7 @@ import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 import { formatCalendarDate } from './views/calendarFormatting';
 import * as strings from 'MyCalendarsWebPartStrings';
+import { formatLocalizedString } from '../utils/localization';
 
 type ServiceKey = CalendarCacheServiceKey;
 type ServiceStatus = 'loading' | 'ready' | 'error';
@@ -622,7 +623,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           console.error('Failed to load user Exchange calendars:', error);
         }
 
-        updateStatus('exchange', hadError ? 'error' : 'ready', hadError ? 'One or more Exchange calendars failed.' : undefined);
+        updateStatus('exchange', hadError ? 'error' : 'ready', hadError ? strings.ExchangeLoadErrorLabel : undefined);
       })());
     }
 
@@ -661,7 +662,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
         const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
-        updateStatus('sharepoint', hadError ? 'error' : 'ready', hadError ? 'One or more SharePoint calendars failed.' : undefined);
+        updateStatus('sharepoint', hadError ? 'error' : 'ready', hadError ? strings.SharePointLoadErrorLabel : undefined);
       })());
     }
 
@@ -723,7 +724,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           console.error('Failed to load Planner plans for auto mode:', error);
         }
 
-        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? 'One or more Planner sources failed.' : undefined);
+        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? strings.PlannerLoadErrorLabel : undefined);
       })());
     } else if (servicesToLoad.has('planner') && sourceGroups.planner.length > 0) {
       tasks.push((async () => {
@@ -753,7 +754,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
         const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
-        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? 'One or more Planner sources failed.' : undefined);
+        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? strings.PlannerLoadErrorLabel : undefined);
       })());
     }
 
@@ -764,7 +765,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           id: 'auto_teamsShifts',
           origin: 'user' as const,
           sourceType: 'teamsShifts' as const,
-          name: 'Teams Shifts',
+          name: strings.TeamsShiftsLabel,
           color: this.props.settings.organizationPrimaryColor || '#4a4fbe',
           isEnabled: true,
           showSourceLogo: this.props.settings.teamsShiftsShowSourceLogo ?? true
@@ -787,7 +788,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           console.error('Failed to load Teams shifts for auto mode:', error);
         }
 
-        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? 'One or more Teams Shifts sources failed.' : undefined);
+        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? strings.TeamsShiftsLoadErrorLabel : undefined);
       })());
     } else if (servicesToLoad.has('teamsShifts') && sourceGroups.teamsShifts.length > 0) {
       tasks.push((async () => {
@@ -812,7 +813,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
         const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
-        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? 'One or more Teams Shifts sources failed.' : undefined);
+        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? strings.TeamsShiftsLoadErrorLabel : undefined);
       })());
     }
 
@@ -865,7 +866,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           console.error('Failed to load group calendars for auto mode:', error);
         }
 
-        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? 'One or more group calendars failed.' : undefined);
+        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? strings.GroupsTeamsLoadErrorLabel : undefined);
       })());
     } else if (servicesToLoad.has('unifiedGroup') && sourceGroups.unifiedGroup.length > 0) {
       tasks.push((async () => {
@@ -909,7 +910,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
         const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
         appendAppointments(flattenedAppointments);
-        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? 'One or more group calendars failed.' : undefined);
+        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? strings.GroupsTeamsLoadErrorLabel : undefined);
       })());
     }
 
@@ -988,6 +989,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       onRender: () => (
         <SearchBox
           placeholder={strings.SearchAppointmentsPlaceholder}
+          ariaLabel={strings.SearchAppointmentsLabel}
           onChange={(_event, newValue) => this.handleSearch(newValue || '')}
           styles={{
             root: {
@@ -1009,6 +1011,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     const refreshItem: ICommandBarItemProps = {
       key: 'refresh',
+      name: strings.RefreshLabel,
+      ariaLabel: strings.RefreshLabel,
       iconProps: { iconName: 'Refresh' },
       onClick: () => {
         this.handleManualRefresh().catch(err => console.error('Failed to refresh appointments:', err));
@@ -1024,6 +1028,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     return [
       {
         key: 'settings',
+        name: strings.SettingsLabel,
+        ariaLabel: strings.SettingsLabel,
         iconProps: { iconName: 'Settings' },
         onClick: this.openSettingsPanel
       },
@@ -1078,12 +1084,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const { isLoadingStatusOpen, loadingSources, loadErrors } = this.state;
     const enabledServices = this.getEnabledServiceKeys();
     const serviceLabels: Record<ServiceKey, string> = {
-      exchange: 'Exchange',
-      ics: 'ICS',
-      sharepoint: 'SharePoint',
-      planner: 'Planner',
-      teamsShifts: 'Teams Shifts',
-      unifiedGroup: 'Groups/Teams'
+      exchange: strings.ServiceExchangeLabel,
+      ics: strings.ServiceIcsLabel,
+      sharepoint: strings.ServiceSharePointLabel,
+      planner: strings.ServicePlannerLabel,
+      teamsShifts: strings.ServiceTeamsShiftsLabel,
+      unifiedGroup: strings.ServiceGroupsTeamsLabel
     };
     const hasLoading = enabledServices.reduce((acc, service) => acc || loadingSources[service] === 'loading', false);
     const buttonLabel = hasLoading ? strings.ShowLoadingStatusLabel : strings.ShowLoadingSummaryLabel;
@@ -1138,7 +1144,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const { currentDate, currentView, searchQuery } = this.state;
     
     if (currentView === 'search') {
-      return searchQuery ? `${strings.SearchResultsForLabel} "${searchQuery}"` : strings.SearchLabel;
+      return searchQuery ? formatLocalizedString(strings.SearchResultsForLabel, searchQuery) : strings.SearchLabel;
     }
     
     const options: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };

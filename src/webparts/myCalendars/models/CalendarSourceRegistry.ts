@@ -2,8 +2,8 @@ import type { CalendarSourceType } from './ICalendarSettings';
 
 export interface ICalendarSourceDefinition {
   type: CalendarSourceType;
-  displayName: string;
-  description: string;
+  displayNameKey: keyof IMyCalendarsWebPartStrings;
+  descriptionKey: keyof IMyCalendarsWebPartStrings;
   iconName: string;
   defaultColor: string;
   userSelectable: boolean;
@@ -14,8 +14,8 @@ export interface ICalendarSourceDefinition {
 export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   {
     type: 'sharepoint',
-    displayName: 'SharePoint Calendar',
-    description: 'Select a calendar from a SharePoint site',
+    displayNameKey: 'SharePointCalendarLabel',
+    descriptionKey: 'AddCalendarSharePointDescription',
     iconName: 'SharepointLogo',
     defaultColor: '#038186',
     userSelectable: true,
@@ -23,8 +23,8 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'exchange',
-    displayName: 'Outlook Calendar',
-    description: 'Manage Outlook calendars (opens in new window)',
+    displayNameKey: 'OutlookCalendarLabel',
+    descriptionKey: 'OutlookCalendarDescription',
     iconName: 'OutlookLogo',
     defaultColor: '#0078d4',
     userSelectable: true,
@@ -32,8 +32,8 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'planner',
-    displayName: 'Microsoft Planner',
-    description: 'Voeg taken toe vanuit een Planner plan',
+    displayNameKey: 'MicrosoftPlannerLabel',
+    descriptionKey: 'AddFromPlannerLabel',
     iconName: 'PlannerLogo',
     defaultColor: '#107c41',
     userSelectable: true,
@@ -41,8 +41,8 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'unifiedGroup',
-    displayName: 'Microsoft 365 Group / Teams',
-    description: 'Add a calendar from a Microsoft 365 group or Team',
+    displayNameKey: 'Microsoft365GroupTeamsLabel',
+    descriptionKey: 'AddGroupAndTeamCalendarDescription',
     iconName: 'Group',
     defaultColor: '#5b5fc7',
     userSelectable: true,
@@ -50,8 +50,8 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'teamsShifts',
-    displayName: 'Teams Shifts',
-    description: 'Toon diensten uit Teams shifts',
+    displayNameKey: 'TeamsShiftsLabel',
+    descriptionKey: 'TeamsShiftsDescription',
     iconName: 'Clock',
     defaultColor: '#4a4fbe',
     userSelectable: true,
@@ -59,8 +59,8 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   },
   {
     type: 'ics',
-    displayName: 'Internet Calendar',
-    description: 'Subscribe to an internet calendar through Outlook',
+    displayNameKey: 'InternetCalendarLabel',
+    descriptionKey: 'AddIcsCalendarDescription',
     iconName: 'World',
     defaultColor: '#605e5c',
     userSelectable: true,

@@ -18,6 +18,9 @@ import {
   type PropertyPaneChangeCallback
 } from '../services/AdminSettingsPropertyPersistence';
 import { AdminSettingsPanel } from '../components/AdminSettingsPanel';
+import * as strings from 'MyCalendarsWebPartStrings';
+import { formatLocalizedString } from '../utils/localization';
+import { getCalendarLabels } from '../components/views/calendarLabels';
 
 export interface IPropertyPaneAdminCalendarManagerProps {
   label: string;
@@ -81,6 +84,10 @@ class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerC
   public render(): React.ReactElement {
     const { adminSettings, adminLoadNotice, label, context } = this.props;
     const { isPanelOpen, graphClient, isSaving } = this.state;
+    const calendarLabels = getCalendarLabels();
+    const defaultViewLabel = adminSettings.defaultView === 'day'
+      ? calendarLabels.day
+      : adminSettings.defaultView === 'week' ? calendarLabels.week : calendarLabels.month;
 
     return (
       <div style={{ marginTop: 12 }}>
@@ -92,10 +99,10 @@ class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerC
             </MessageBar>
           )}
           <div style={{ fontSize: 12, color: '#605e5c' }}>
-            {adminSettings.assignedSources.length} admin default calendar(s), {adminSettings.icsCatalog.length} admin ICS catalog item(s), default view: {adminSettings.defaultView}
+            {formatLocalizedString(strings.AdminPropertyPaneSummaryLabel, adminSettings.assignedSources.length, adminSettings.icsCatalog.length, defaultViewLabel)}
           </div>
           <DefaultButton
-            text={isSaving ? 'Saving...' : 'Manage Admin Defaults'}
+            text={isSaving ? strings.SavingLabel : strings.ManageAdminDefaultsLabel}
             onClick={() => this.setState({ isPanelOpen: true })}
             disabled={isSaving}
           />

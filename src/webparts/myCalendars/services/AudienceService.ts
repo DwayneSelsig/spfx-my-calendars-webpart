@@ -1,4 +1,5 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import * as strings from 'MyCalendarsWebPartStrings';
 
 export interface IEntraSecurityGroup {
   id: string;
@@ -42,7 +43,7 @@ export class AudienceService {
       return (data.value || [])
         .map((item: { id?: string; displayName?: string }) => ({
           id: item.id || '',
-          displayName: item.displayName || 'Unnamed group'
+          displayName: item.displayName || strings.UnnamedSecurityGroupLabel
         }))
         .filter((item: IEntraSecurityGroup) => !!item.id);
     } catch (error) {

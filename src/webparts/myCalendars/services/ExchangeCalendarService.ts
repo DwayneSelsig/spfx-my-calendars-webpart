@@ -2,6 +2,7 @@ import { HttpClient } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
 import { normalizeAvailabilityStatus, normalizeResponseStatus } from './GraphEventStatus';
+import * as strings from 'MyCalendarsWebPartStrings';
 
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -217,7 +218,7 @@ export class ExchangeCalendarService {
 
     return {
       id: graphEvent.id,
-      title: graphEvent.subject || 'Untitled',
+      title: graphEvent.subject || strings.UntitledEventLabel,
       start: startISO,
       end: endISO,
       isFullDay: graphEvent.isAllDay || false,

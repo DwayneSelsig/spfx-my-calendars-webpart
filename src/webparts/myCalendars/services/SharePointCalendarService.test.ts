@@ -91,4 +91,16 @@ describe('SharePointCalendarService event mapping', () => {
     await expect(fallbackService.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'))).resolves.toHaveLength(1);
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('Could not resolve SharePoint site site-id'), expect.any(Error));
   });
+
+  it('uses the localized fallback for a calendar list without a name', async () => {
+    const request = {
+      query: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ value: [{ id: 'list-id', displayName: '', name: '', webUrl: 'https://contoso.sharepoint.com/lists/calendar', list: { template: 'events', hidden: false } }] })
+    };
+    const service = new SharePointCalendarService({ api: jest.fn().mockReturnValue(request) } as never);
+
+    const lists = await service.getCalendarLists('site-id');
+
+    expect(lists[0].name).toBe('Unnamed List');
+  });
 });

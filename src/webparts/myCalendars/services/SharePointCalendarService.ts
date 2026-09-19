@@ -1,6 +1,7 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ISharePointFieldMapping } from '../models/ICalendarSettings';
+import * as strings from 'MyCalendarsWebPartStrings';
 
 export interface ISharePointSite {
   id: string;
@@ -161,7 +162,7 @@ export class SharePointCalendarService {
       
       const sites = (data.value || []).map((site: IGraphSite) => ({
         id: site.id,
-        name: site.displayName || site.name || 'Unnamed Site',
+        name: site.displayName || site.name || strings.UnnamedSiteLabel,
         url: site.webUrl
       }));
 
@@ -199,7 +200,7 @@ export class SharePointCalendarService {
 
       const searchResults = (data.value || []).map((site: IGraphSite) => ({
         id: site.id,
-        name: site.displayName || site.name || 'Unnamed Site',
+        name: site.displayName || site.name || strings.UnnamedSiteLabel,
         url: site.webUrl
       }));
 
@@ -246,7 +247,7 @@ export class SharePointCalendarService {
         })
         .map((list: IGraphList) => ({
           id: list.id,
-          name: list.displayName || list.name || 'Unnamed List',
+          name: list.displayName || list.name || strings.UnnamedListLabel,
           webUrl: list.webUrl
         }));
     } catch (error) {
