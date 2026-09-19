@@ -69,12 +69,12 @@ Only successful source/month combinations enter the runtime range cache. Failed 
 ### Optional persistent appointment cache
 
 - Administrator settings `enableCache` and `cacheDurationMinutes` exclusively control the feature. Defaults are enabled and ten minutes; duration is normalized to 1–60 whole minutes.
-- The cache key includes normalized tenant, user, and web-part instance identity. The entry also carries a schema version and a stable signature of result-affecting effective settings.
+- The cache key includes normalized tenant, user, and web-part instance identity. New entries have no schema version; a schema-version field in an existing entry is ignored. The entry carries a stable signature of result-affecting effective settings and is validated structurally as one unit.
 - Cached canonical events are always reprocessed for presentation, search indexing, and deduplication. Fresh source/month segments suppress GET requests; stale segments remain visible while they refresh in the background.
 - Cache expiry by itself **MUST NOT** schedule retrieval while the component remains mounted. When a later load finds stale segments, that retrieval **MUST** use the existing loading and toolbar-status workflow.
 - A successful source GET replaces that source/month segment, including with an empty result. A failed GET retains the prior segment and remains visibly failed.
 - Persistent segments are restricted to the moving initial seven-month range. Visible months outside that range remain runtime-only.
-- Manual refresh keeps appointments visible, bypasses freshness, and refreshes the initial and currently visible ranges. Disabling cache removes the current identity's entry; invalid data and unavailable or full storage degrade to uncached loading.
+- Manual refresh keeps appointments visible, bypasses freshness, and refreshes the initial and currently visible ranges. Disabling cache removes the current identity's entry. Any read, parse, identity, signature, segment, or event validation failure rejects the entire entry and attempts to remove it; no partial data is hydrated. Normal source loading rebuilds the cache. Unavailable, read-only, or full storage degrades to uncached loading, and physical removal is best-effort.
 
 ### Identity and partial failures
 
@@ -93,13 +93,13 @@ Independent successes are retained, but isolation inside a family varies:
 
 ### Loading verification focus
 
-Focused unit tests cover cache-duration normalization, fresh/stale boundaries, and successful empty segment replacement. Source orchestration and host storage behavior still require manual verification.
+Focused unit tests cover cache-duration normalization, fresh/stale boundaries, versionless persistence, successful empty segment replacement, structural rejection, compatibility with an existing version field, best-effort removal, and recovery after browser-storage failures. Source orchestration and host storage behavior still require manual verification.
 
 There are no automated tests for successful-month caching, obsolete-load rejection, deduplication, partial failures, automatic versus explicit source selection, or retry eligibility. Until a test architecture is confirmed, `npm run build` is the production verification command.
 
 ## Rendering and interaction
 
-**Read when:** changing Day, Week, Month, Search, toolbar navigation, date/time formatting, event layout, event details, or renderer styling. Related records: DEC-003, DEC-009, DEC-011, DEC-018, DEC-019, and DEBT-001.
+**Read when:** changing Day, Week, Month, Search, toolbar navigation, date/time formatting, event layout, event details, or renderer styling. Related records: DEC-003, DEC-009, DEC-011, DEC-018, and DEC-019.
 
 Also read [Loading, range, and cache](#loading-range-and-cache) only when a view change alters visible-range loading, refresh, status, or cached state.
 
@@ -108,7 +108,7 @@ Also read [Loading, range, and cache](#loading-range-and-cache) only when a view
 - The active local renderer **MUST** provide Day, Week, and Month.
 - A renderer **MUST** display prepared local event data and **MUST NOT** access persistent settings storage or a source API.
 - Search **MUST** remain a separate result view while preserving the mounted calendar view.
-- Schedule **MUST NOT** be presented as supported while `ScheduleView` remains inactive.
+- Schedule **MUST NOT** be presented as supported.
 - Visible date and time text **MUST** use the current SharePoint page culture unless a later confirmed localization decision replaces it.
 - A renderer **MUST NOT** expose an internal source-type key as a user-facing source name.
 - Rendering remains read-only; links may open source or meeting destinations, but renderers do not mutate source data.
@@ -152,10 +152,6 @@ Exchange and Microsoft 365 Group mappings can currently supply those links. Plan
 SharePoint events display their persisted or lazily resolved site name separately from the calendar name. Missing legacy metadata uses a neutral localized fallback; Event Details does not call Graph.
 
 Exchange and Microsoft 365 Group events can display `showAs` as calendar availability. The calendar color remains a solid identity edge while icons and secondary fill, outline, or pattern styling communicate availability without color alone. `free` uses the untinted underlying theme surface, `tentative` uses diagonal bands, and `oof` uses cross-hatching made from two opposing diagonal patterns. A meeting response is displayed only for events retrieved through `/me`; values from another mailbox or a group calendar are not treated as the signed-in user's response. Declined `/me` events remain visible with a muted surface, a response glyph, and a struck-through title. Day, Week, Month, Search, and Event Details use the same status labels and presentation rules.
-
-### Inactive Schedule view
-
-`ScheduleView.tsx` exists but is not imported by the coordinator. A commented command-bar branch refers to Schedule. Its presence is technical debt, not supported behavior or product intent.
 
 ### Rendering verification focus
 

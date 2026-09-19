@@ -1,4 +1,4 @@
-import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
 
@@ -32,12 +32,10 @@ interface IGraphShift {
  * Requires Team.ReadBasic.All and Schedule.Read.All permissions
  */
 export class TeamsShiftsService {
-  private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | undefined;
   private joinedTeamsPromise?: Promise<IGraphTeam[]>;
 
-  constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
-    this.httpClient = httpClient;
+  constructor(graphClient?: MSGraphClientV3) {
     this.graphClient = graphClient;
   }
 

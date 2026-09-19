@@ -1,8 +1,5 @@
 define([], function() {
   return {
-    "PropertyPaneDescription": "Beschrijving",
-    "BasicGroupName": "Groepsnaam",
-    "DescriptionFieldLabel": "Beschrijvingveld",
     "AppLocalEnvironmentSharePoint": "De app wordt uitgevoerd in de lokale SharePoint-omgeving",
     "AppLocalEnvironmentTeams": "De app wordt uitgevoerd in de lokale Microsoft Teams-omgeving",
     "AppLocalEnvironmentOffice": "De app wordt uitgevoerd in de lokale office.com-omgeving",
@@ -13,32 +10,20 @@ define([], function() {
     "AppOutlookEnvironment": "De app wordt uitgevoerd in Outlook",
     "UnknownEnvironment": "De app wordt uitgevoerd in een onbekende omgeving",
     "CalendarSettingsTitle": "Agenda-instellingen",
-    "CalendarSourcesLabel": "Agendabronnen",
     "AddCalendarLabel": "Agenda toevoegen",
     "AddCalendarSharePointLabel": "SharePoint-agenda",
     "AddCalendarSharePointDescription": "Selecteer een agenda van een SharePoint-site",
     "AddCalendarExchangeLabel": "Exchange-agenda",
-    "AddCalendarExchangeDescription": "Voeg een agenda uit uw postvak of een ander postvak toe",
-    "AddCalendarIcsLabel": "Internetagenda",
-    "AddCalendarIcsDescription": "Voeg een agenda van een ICS-URL toe",
-    "SearchSitesLabel": "Zoek SharePoint-sites",
-    "SelectSiteLabel": "Site selecteren",
-    "SelectListLabel": "Agendalijst selecteren",
     "CalendarNameLabel": "Agendanaam",
-    "CalendarColorLabel": "Kleur",
     "FieldTitleCandidates": "Titel;Onderwerp;Gebeurtenistitel",
     "FieldStartCandidates": "Begintijd;Begin;Begindatum;Startdatum",
     "FieldEndCandidates": "Eindtijd;Einde;Einddatum",
-    "SelectMailboxLabel": "Postvak selecteren",
-    "EnterMailboxLabel": "E-mailadres van ander postvak invoeren",
     "MailboxPlaceholder": "gebruiker@voorbeeld.nl",
-    "SelectCalendarLabel": "Agenda selecteren",
     "DoneLabel": "Gereed",
     "DeleteLabel": "Verwijderen",
     "BackLabel": "Terug",
     "SearchLabel": "Zoeken",
     "LoadCalendarsLabel": "Agenda's laden",
-    "NoCalendarsFoundLabel": "Geen agendalijsten gevonden op deze site",
     "LoadingLabel": "Laden...",
     "TodayLabel": "Vandaag",
     "PreviousLabel": "Vorige",
@@ -112,7 +97,7 @@ define([], function() {
     ,"AddFromPlannerLabel": "Taken uit een Planner-plan toevoegen"
     ,"AddGroupCalendarDescription": "Een agenda uit een Microsoft 365-groep toevoegen"
     ,"AddTeamCalendarDescription": "Een agenda uit een Team toevoegen"
-    ,"AddIcsCalendarDescription": "Agenda via URL toevoegen of ICS-inhoud plakken"
+    ,"AddIcsCalendarDescription": "Abonneer u via Outlook op een internetagenda"
     ,"NextChooseGroupsLabel": "Volgende: groepen kiezen"
     ,"DisplayNameLabel": "Weergavenaam"
     ,"IcsUrlLabel": "ICS-URL"

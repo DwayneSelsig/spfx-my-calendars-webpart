@@ -1,4 +1,3 @@
-import type { HttpClient } from '@microsoft/sp-http';
 import { eventOccursOnDay, localDateKey } from '../components/views/calendarUtils';
 import { normalizeSharePointEventDates, SharePointCalendarService } from './SharePointCalendarService';
 
@@ -43,7 +42,7 @@ describe('SharePointCalendarService event mapping', () => {
       }]
     });
     const request = { expand: jest.fn().mockReturnThis(), get };
-    const service = new SharePointCalendarService({} as HttpClient, { api: jest.fn().mockReturnValue(request) } as never);
+    const service = new SharePointCalendarService({ api: jest.fn().mockReturnValue(request) } as never);
 
     const events = await service.getListEvents(
       'site-id',
@@ -72,7 +71,7 @@ describe('SharePointCalendarService event mapping', () => {
         ? { query: jest.fn().mockReturnThis(), get: siteGet }
         : { expand: jest.fn().mockReturnThis(), get: itemGet })
     };
-    const service = new SharePointCalendarService({} as HttpClient, graphClient as never);
+    const service = new SharePointCalendarService(graphClient as never);
 
     const first = await service.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'));
     const second = await service.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'));
@@ -85,7 +84,7 @@ describe('SharePointCalendarService event mapping', () => {
         ? { query: jest.fn().mockReturnThis(), get: jest.fn().mockRejectedValue(new Error('denied')) }
         : { expand: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(itemData) })
     };
-    const fallbackService = new SharePointCalendarService({} as HttpClient, failingClient as never);
+    const fallbackService = new SharePointCalendarService(failingClient as never);
     await expect(fallbackService.getListEvents('site-id', 'list-id', new Date('2026-09-01'), new Date('2026-10-01'))).resolves.toHaveLength(1);
   });
 });

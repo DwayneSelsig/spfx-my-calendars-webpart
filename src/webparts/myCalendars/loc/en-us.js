@@ -1,8 +1,5 @@
 define([], function() {
   return {
-    "PropertyPaneDescription": "Description",
-    "BasicGroupName": "Group Name",
-    "DescriptionFieldLabel": "Description Field",
     "AppLocalEnvironmentSharePoint": "The app is running on your local environment as SharePoint web part",
     "AppLocalEnvironmentTeams": "The app is running on your local environment as Microsoft Teams app",
     "AppLocalEnvironmentOffice": "The app is running on your local environment in office.com",
@@ -14,32 +11,20 @@ define([], function() {
     "UnknownEnvironment": "The app is running in an unknown environment",
     // Calendar strings
     "CalendarSettingsTitle": "Calendar Settings",
-    "CalendarSourcesLabel": "Calendar Sources",
     "AddCalendarLabel": "Add Calendar",
     "AddCalendarSharePointLabel": "SharePoint Calendar",
     "AddCalendarSharePointDescription": "Select a calendar from a SharePoint site",
     "AddCalendarExchangeLabel": "Exchange Calendar",
-    "AddCalendarExchangeDescription": "Add a calendar from your mailbox or another mailbox",
-    "AddCalendarIcsLabel": "Internet Calendar",
-    "AddCalendarIcsDescription": "Add a calendar from an ICS URL or paste content",
-    "SearchSitesLabel": "Search SharePoint Sites",
-    "SelectSiteLabel": "Select Site",
-    "SelectListLabel": "Select Calendar List",
     "CalendarNameLabel": "Calendar Name",
-    "CalendarColorLabel": "Color",
     "FieldTitleCandidates": "Title;Subject;Event Title",
     "FieldStartCandidates": "Start Time;Start;Start Date;StartDate;StartDateTime;EventDate;Starttijd;Begindatum;Begin;Startdatum",
     "FieldEndCandidates": "End Time;End;End Date;EndDate;EndDateTime;Eindtijd;Einddatum;Einde",
-    "SelectMailboxLabel": "Select Mailbox",
-    "EnterMailboxLabel": "Enter another mailbox email",
     "MailboxPlaceholder": "user@example.com",
-    "SelectCalendarLabel": "Select Calendar",
     "DoneLabel": "Done",
     "DeleteLabel": "Delete",
     "BackLabel": "Back",
     "SearchLabel": "Search",
     "LoadCalendarsLabel": "Load Calendars",
-    "NoCalendarsFoundLabel": "No calendar lists found in this site",
     "LoadingLabel": "Loading...",
     "TodayLabel": "Today",
     "PreviousLabel": "Previous",
@@ -113,7 +98,7 @@ define([], function() {
     ,"AddFromPlannerLabel": "Add tasks from a Planner plan"
     ,"AddGroupCalendarDescription": "Add a calendar from a Microsoft 365 group"
     ,"AddTeamCalendarDescription": "Add a calendar from a Team"
-    ,"AddIcsCalendarDescription": "Add calendar from URL or paste ICS content"
+    ,"AddIcsCalendarDescription": "Subscribe to an internet calendar through Outlook"
     ,"NextChooseGroupsLabel": "Next: choose groups"
     ,"DisplayNameLabel": "Display Name"
     ,"IcsUrlLabel": "ICS URL"

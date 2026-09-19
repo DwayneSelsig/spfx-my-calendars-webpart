@@ -60,7 +60,7 @@ export const calendarSourceRegistry: ICalendarSourceDefinition[] = [
   {
     type: 'ics',
     displayName: 'Internet Calendar',
-    description: 'Add calendar from URL or paste ICS content',
+    description: 'Subscribe to an internet calendar through Outlook',
     iconName: 'World',
     defaultColor: '#605e5c',
     userSelectable: true,

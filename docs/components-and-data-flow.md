@@ -49,8 +49,5 @@ This document describes verified current responsibilities. Normative cross-cutti
 
 | Component/data | Classification | Handling |
 | --- | --- | --- |
-| `ScheduleView.tsx` | Inactive technical debt | Not imported; not supported |
-| `AddCalendarDialog.tsx` | Inactive legacy UI | Not imported; obsolete subset of integrated settings flow |
 | `ics` source shape | Legacy/inert runtime type | No adapter; coordinator marks ready |
-| Unused source-service `HttpClient` fields | Technical debt | Do not infer a desired dual-client architecture |
 | PnP Calendar history/comments | Historical | No active renderer dependency |

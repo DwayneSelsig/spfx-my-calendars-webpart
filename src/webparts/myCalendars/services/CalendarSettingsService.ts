@@ -33,6 +33,14 @@ interface IParsedSourceShape extends Partial<ICalendarSourceBase> {
 }
 
 const SOURCE_TYPES = new Set(['ics', 'exchange', 'sharepoint', 'planner', 'teamsShifts', 'unifiedGroup']);
+const MIN_SUPPORTED_CALENDAR_SETTINGS_SCHEMA_VERSION = 2;
+
+function hasSupportedSettingsSchemaVersion(value: Record<string, unknown>): boolean {
+  return typeof value.schemaVersion === 'number' &&
+    Number.isInteger(value.schemaVersion) &&
+    value.schemaVersion >= MIN_SUPPORTED_CALENDAR_SETTINGS_SCHEMA_VERSION &&
+    value.schemaVersion <= CALENDAR_SETTINGS_SCHEMA_VERSION;
+}
 
 function normalizeSlotDuration(value: unknown): 15 | 30 | 60 {
   return value === 15 || value === 30 || value === 60 ? value : 30;
@@ -231,7 +239,7 @@ function dedupeAudienceGroups(groups: IAudienceGroup[]): IAudienceGroup[] {
 }
 
 export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSettings | undefined {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || !hasSupportedSettingsSchemaVersion(value)) {
     return undefined;
   }
 
@@ -342,7 +350,7 @@ export function parseAdminWebPartSettingsJson(raw: string | undefined): IAdminWe
 }
 
 export function normalizeUserCalendarSettings(value: unknown): IUserCalendarSettings | undefined {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || !hasSupportedSettingsSchemaVersion(value)) {
     return undefined;
   }
 

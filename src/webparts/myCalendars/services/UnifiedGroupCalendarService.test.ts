@@ -1,6 +1,3 @@
-jest.mock('@microsoft/sp-http', () => ({ HttpClient: { configurations: { v1: {} } } }));
-
-import type { HttpClient } from '@microsoft/sp-http';
 import { UserHelper } from '../utils/userHelper';
 import { UnifiedGroupCalendarService } from './UnifiedGroupCalendarService';
 
@@ -18,7 +15,7 @@ describe('UnifiedGroupCalendarService event status mapping', () => {
         isReminderOn: false, attendees: [], showAs, responseStatus: { response: 'accepted' }
       }] })
     };
-    const service = new UnifiedGroupCalendarService({} as HttpClient, { api: jest.fn().mockReturnValue(request) });
+    const service = new UnifiedGroupCalendarService({ api: jest.fn().mockReturnValue(request) });
     const events = await service.getGroupEvents('group-id', new Date('2026-09-01'), new Date('2026-10-01'));
     expect(events[0].showAs).toBe(showAs);
     expect(events[0].responseStatus).toBeUndefined();

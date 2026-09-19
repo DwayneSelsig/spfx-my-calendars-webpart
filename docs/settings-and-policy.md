@@ -50,7 +50,7 @@ Precedence is not uniform for every field:
 
 | Setting | Scope/default | Admin UI | User UI/current override | Effective precedence | Used by | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | All contracts; `6` | No | No | Normalizers emit current version | Settings service | Migration metadata |
+| `schemaVersion` | Current settings contracts; `6` | No | No | Versions 2–6 normalize to 6 | Settings service | Missing, invalid, older unknown, and future versions are rejected outside explicit legacy paths |
 | `defaultView` | Admin `month` | Yes | Toolbar; full override | Personal → admin → default | Web part/coordinator | Scalar, not source-lockable |
 | `showWeekends` | Admin `true` | Yes | Optional personal override | Personal → admin → default | Week/range logic | Override can be removed |
 | `preferredStartMinutes` | Admin `480` | Yes | Optional personal override | Renderer: personal → admin | Day/Week | Clamped and snapped to admin slot duration |
@@ -174,7 +174,7 @@ The first two items conflict with the confirmed target model. The cache-key scop
 
 ## Storage and migration
 
-**Read when:** changing administrator properties, current/backup recovery, OneDrive App Folder access, personal save/reset, schema normalization, or legacy migration. Related records: DEC-013, DEV-010, DEV-011, INT-001, OQ-003, OQ-004, and OQ-005.
+**Read when:** changing administrator properties, current/backup recovery, OneDrive App Folder access, personal save/reset, schema normalization, or legacy migration. Related records: DEC-013, DEC-021, DEV-010, DEV-011, INT-001, OQ-003, OQ-004, and OQ-005.
 
 ### Ownership
 
@@ -193,6 +193,8 @@ The first two items conflict with the confirmed target model. The cache-key scop
 | Hardcoded defaults | No recoverable input | Used; notice shown after invalid current/backup data |
 
 Administrator normalization drops malformed list entries. It rejects the complete payload when two assigned sources have the same source identity or two ICS catalog items have the same case-insensitive URL.
+
+Current administrator and personal locations accept only integer schema versions 2 through 6. Versions 2–5 are normalized to version 6; version 6 is accepted directly. A missing version, non-integer version, version below 2, or future version is rejected. Unversioned input is accepted only from the explicit legacy `settings` property or legacy OneDrive filename, after those locations have been selected by the recovery flow.
 
 ### Administrator save
 
@@ -215,7 +217,7 @@ Reset deletes current and legacy personal files. In-memory reset occurs only aft
 
 ### Personal migration
 
-Current personal settings use schema version 6. Normalization:
+Current personal settings use schema version 6. Known versions 2–5 migrate through the same normalizer and are emitted as version 6. Normalization:
 
 - drops malformed personal sources and overrides;
 - migrates legacy `userStartHour` to minutes;
@@ -223,7 +225,7 @@ Current personal settings use schema version 6. Normalization:
 - retains only boolean Exchange states and supported optional scalar values.
 - retains a trimmed SharePoint site name when present and accepts older sources without it.
 
-When the current file is absent or unreadable, the web part reads legacy `calendar-settings.json`. Migration treats all legacy sources as personal, carries supported logo/automatic settings, and creates no administrator overrides. It attempts to save the migrated current file; the legacy file remains until reset.
+When the current file is absent, unreadable, or rejected for an unsupported schema version, the web part reads legacy `calendar-settings.json`. The rejected current file is not deleted automatically. Migration treats all legacy sources as personal, carries supported logo/automatic settings, and creates no administrator overrides. It attempts to save the migrated current file; the legacy file remains until reset.
 
 ### Persistence and cache inventory
 
@@ -237,7 +239,7 @@ When the current file is absent or unreadable, the web part reads legacy `calend
 | `sessionStorage.myCalendarsAudienceMembershipCache` | Group membership/expiry | Five minutes per entry | Errors logged; evaluation continues |
 | `localStorage.currentUserEmailCache` | Email/timestamp | Twelve hours | Errors logged; Graph retried |
 | `localStorage.currentUserMailboxSettingsCache` | Working hours/time zone | Twelve hours | Errors logged; Graph retried |
-| `localStorage.myCalendars:<tenant>:<user>:<instance>` | Versioned canonical event segments for the initial seven-month range | Until disabled, incompatible, replaced, or browser-evicted | Stale data remains visible; invalid/unavailable/full storage falls back to GET |
+| `localStorage.myCalendars:<tenant>:<user>:<instance>` | Structurally validated canonical event segments for the initial seven-month range; new writes are versionless | Until disabled, invalid, replaced, or browser-evicted | Any read or validation failure rejects the whole entry; best-effort removal and source retrieval rebuild it |
 | React/coordinator fields | Events, ranges, discovery promises | Component lifetime/reset | Not persisted |
 
 Personal settings are the only current product data written to OneDrive. When enabled by an administrator, initial-range event segments are additionally persisted in browser `localStorage`; no event data is written to OneDrive. Mandatory-source error records are an intention with no confirmed schema, retention, or implementation.

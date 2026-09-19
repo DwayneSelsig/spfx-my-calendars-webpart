@@ -1,6 +1,7 @@
 import { CALENDAR_SETTINGS_SCHEMA_VERSION, defaultAdminWebPartSettings, defaultUserCalendarSettings } from '../models/ICalendarSettings';
 import {
   loadAdminWebPartSettings,
+  migrateLegacyUserSettings,
   normalizeAdminWebPartSettings,
   normalizeUserCalendarSettings,
   resolveCalendarSettings
@@ -88,5 +89,67 @@ describe('administrator settings normalization and loading', () => {
     expect(user?.personalSources[0].sharePointSiteName).toBeUndefined();
     const resolved = resolveCalendarSettings({ adminSettings: admin, userSettings: user, matchedGroupIds: new Set(['group']) });
     expect(resolved.sources.map(source => source.sharePointSiteName)).toEqual(['Contoso', undefined]);
+  });
+
+  it.each([2, 3, 4, 5, 6])('accepts administrator and personal schema version %s and normalizes it to version 6', schemaVersion => {
+    const admin = normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, schemaVersion });
+    const user = normalizeUserCalendarSettings({ ...defaultUserCalendarSettings, schemaVersion });
+
+    expect(admin?.schemaVersion).toBe(CALENDAR_SETTINGS_SCHEMA_VERSION);
+    expect(user?.schemaVersion).toBe(CALENDAR_SETTINGS_SCHEMA_VERSION);
+  });
+
+  it('migrates version 2 hour fields into the current settings shape', () => {
+    const admin = normalizeAdminWebPartSettings({
+      ...defaultAdminWebPartSettings,
+      schemaVersion: 2,
+      startHour: 7,
+      endHour: 19,
+      slotDuration: 15,
+      preferredStartMinutes: undefined,
+      visibleHourCount: undefined,
+      slotDurationMinutes: undefined
+    });
+    const user = normalizeUserCalendarSettings({
+      ...defaultUserCalendarSettings,
+      schemaVersion: 2,
+      userStartHour: 9,
+      userEndHour: 17,
+      userPreferredStartMinutes: undefined,
+      userVisibleHourCount: undefined
+    });
+
+    expect(admin).toMatchObject({ schemaVersion: 6, preferredStartMinutes: 420, visibleHourCount: 12, slotDurationMinutes: 15 });
+    expect(user).toMatchObject({ schemaVersion: 6, userPreferredStartMinutes: 540, userVisibleHourCount: 8 });
+  });
+
+  it.each([undefined, 1, 1.5, 7, '6'])('rejects unsupported current schema version %p', schemaVersion => {
+    expect(normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, schemaVersion })).toBeUndefined();
+    expect(normalizeUserCalendarSettings({ ...defaultUserCalendarSettings, schemaVersion })).toBeUndefined();
+  });
+
+  it('falls back from an unknown current administrator version to backup, legacy, and defaults', () => {
+    const invalidCurrent = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 7 });
+    const backup = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 6, defaultView: 'day' });
+
+    expect(loadAdminWebPartSettings({ current: invalidCurrent, backup })).toMatchObject({ source: 'backup', settings: { defaultView: 'day' } });
+    expect(loadAdminWebPartSettings({
+      current: invalidCurrent,
+      backup: invalidCurrent,
+      legacy: JSON.stringify({ sources: [], defaultView: 'week' })
+    })).toMatchObject({ source: 'legacy', settings: { defaultView: 'week' } });
+    expect(loadAdminWebPartSettings({ current: invalidCurrent, backup: invalidCurrent })).toMatchObject({ source: 'defaults' });
+  });
+
+  it('accepts unversioned personal data only through the explicit legacy migration path', () => {
+    const legacy = { sources: [], defaultView: 'day' as const, userStartHour: 6, userEndHour: 18 };
+
+    expect(normalizeUserCalendarSettings(legacy)).toBeUndefined();
+    expect(migrateLegacyUserSettings(legacy)).toMatchObject({
+      schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
+      defaultView: 'day',
+      userPreferredStartMinutes: 360,
+      userVisibleHourCount: 12
+    });
   });
 });

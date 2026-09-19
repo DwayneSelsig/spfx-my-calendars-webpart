@@ -1,4 +1,3 @@
-import { HttpClient } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
 import { normalizeAvailabilityStatus } from './GraphEventStatus';
@@ -46,11 +45,9 @@ interface IGraphEventAttendee {
  * Requires Group.Read.All and Calendars.Read permissions
  */
 export class UnifiedGroupCalendarService {
-  private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
 
-  constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
-    this.httpClient = httpClient;
+  constructor(graphClient?: MSGraphClientV3) {
     this.graphClient = graphClient || null;
   }
 

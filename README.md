@@ -18,7 +18,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 | ICS subscription | Available | Opens the Exchange Online subscription wizard with a generated deep link. The web part does not parse ICS data. |
 | Day, Week, and Month views | Available | Uses the local read-only calendar renderer. |
 | Search view | Available | Uses a custom search result view. The active calendar stays mounted while search is active. |
-| Schedule view | Not supported | The repository contains inactive schedule code. This code is not a supported capability. |
+| Schedule view | Not supported | Day, Week, and Month are the supported calendar views. |
 | Partial source results | Available | A source failure does not remove events that other sources loaded successfully. |
 
 ## Main features
@@ -26,7 +26,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
 - Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
 - Use optimized search and settings flows. Search covers event titles and locations while the active calendar remains mounted.
-- Navigate beyond the initial seven-month window with source- and month-aware loading, and optionally cache the initial range in the browser for an administrator-defined lifetime.
+- Navigate beyond the initial seven-month window with source- and month-aware loading, and optionally cache the initial range in the browser for an administrator-defined lifetime. An unreadable or incompatible appointment-cache entry is discarded as a whole and rebuilt from source data.
 - Handle source-specific date and time behavior defensively, including mailbox time zones, Graph all-day values, and SharePoint's inclusive all-day end dates.
 - Show sanitized HTML descriptions and meeting organizer information without presenting an attendee-less appointment as a meeting.
 - Enable or disable individual sources. Outlook and SharePoint sections also provide a tri-state bulk visibility control that changes those same individual visibility settings.

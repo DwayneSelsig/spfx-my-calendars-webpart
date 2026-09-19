@@ -106,17 +106,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     if (props.httpClient) {
       this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
-      this.sharePointService = new SharePointCalendarService(props.httpClient, props.graphClient);
-      this.plannerService = new PlannerTaskService(props.httpClient, props.graphClient);
-      this.unifiedGroupService = new UnifiedGroupCalendarService(props.httpClient, props.graphClient);
-
-      // If graphClient is provided, set it on the services
-      if (props.graphClient) {
-        this.exchangeService.setGraphClient(props.graphClient);
-        this.sharePointService.setGraphClient(props.graphClient);
-        this.plannerService.setGraphClient(props.graphClient);
-        this.unifiedGroupService.setGraphClient(props.graphClient);
-      }
+      this.sharePointService = new SharePointCalendarService(props.graphClient);
+      this.plannerService = new PlannerTaskService(props.graphClient);
+      this.unifiedGroupService = new UnifiedGroupCalendarService(props.graphClient);
     }
 
     this.state = {

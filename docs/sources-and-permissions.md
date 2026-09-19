@@ -14,13 +14,12 @@ Read the [common contract](#common-contract-permissions-and-resilience) and only
 | Teams Shifts | Active | Yes | All shifts from all directly joined Teams |
 | ICS subscription | Active action, not an event source | No | Personal deep-link flow or administrator audience catalog |
 | Legacy `ics` source record | Inert/legacy | No | Can survive normalization/migration; marked ready by coordinator |
-| Schedule view | Inactive | N/A | Source-independent inactive renderer |
 
 All active adapters are read-only. They return normalized local events or discovery values and never create, update, or delete external source data.
 
 ## Common contract, permissions, and resilience
 
-**Read when:** changing the shared event model, source coordination boundaries, Graph permission manifests, authentication context, pagination, retry, throttling, or cross-source verification. Related records: DEC-001, DEC-004, DEC-008, DEC-018, DEV-005, DEV-008, DEBT-003, and OQ-006.
+**Read when:** changing the shared event model, source coordination boundaries, Graph permission manifests, authentication context, pagination, retry, throttling, or cross-source verification. Related records: DEC-001, DEC-004, DEC-008, DEC-018, DEV-005, DEV-008, and OQ-006.
 
 ### Shared adapter contract
 
@@ -232,7 +231,7 @@ Teams Shifts **MUST** include all shifts returned for all Teams where the curren
 
 ## ICS subscription
 
-**Read when:** changing ICS URL handling, Outlook subscription links, administrator ICS catalog entries, or legacy ICS source records. Related records: DEC-002, DEV-012, and DEBT-002. Read [Settings: audiences](settings-and-policy.md#audiences) when catalog targeting changes.
+**Read when:** changing ICS URL handling, Outlook subscription links, administrator ICS catalog entries, or legacy ICS source records. Related record: DEC-002. Read [Settings: audiences](settings-and-policy.md#audiences) when catalog targeting changes.
 
 ICS is an active subscription action, not an event source.
 
@@ -246,5 +245,3 @@ ICS is an active subscription action, not an event source.
 ### Legacy records
 
 Legacy `ics` source records can be normalized or migrated. The coordinator registers them, performs no retrieval, and marks the ICS service ready. They are inert and **MUST NOT** be documented as rendered calendars.
-
-`CalendarSourceRegistry` and inactive `AddCalendarDialog` contain obsolete wording about adding or pasting ICS content. That wording is a registered deviation and does not override this contract.

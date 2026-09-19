@@ -1,4 +1,4 @@
-import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
 
@@ -41,12 +41,10 @@ interface IGraphPlannerTask {
  */
 export class PlannerTaskService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
-  private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
   private currentUserId: string | null = null;
 
-  constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
-    this.httpClient = httpClient;
+  constructor(graphClient?: MSGraphClientV3) {
     this.graphClient = graphClient || null;
   }
 

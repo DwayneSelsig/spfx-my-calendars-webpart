@@ -22,7 +22,6 @@ export interface ICalendarEventCacheReadResult {
 }
 
 interface ICalendarEventCacheEntry {
-  schemaVersion: number;
   tenantId: string;
   userId: string;
   webPartInstanceId: string;
@@ -30,7 +29,6 @@ interface ICalendarEventCacheEntry {
   segments: ICalendarEventCacheSegment[];
 }
 
-export const CALENDAR_EVENT_CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_CACHE_DURATION_MINUTES = 10;
 export const MIN_CACHE_DURATION_MINUTES = 1;
 export const MAX_CACHE_DURATION_MINUTES = 60;
@@ -95,7 +93,6 @@ export class CalendarEventCache {
       .forEach(segment => byIdentity.set(this.getSegmentKey(segment), segment));
 
     const entry: ICalendarEventCacheEntry = {
-      schemaVersion: CALENDAR_EVENT_CACHE_SCHEMA_VERSION,
       ...identity,
       configSignature: configuration.configSignature,
       segments: Array.from(byIdentity.values())
@@ -145,6 +142,7 @@ export class CalendarEventCache {
       raw = storage.getItem(key);
     } catch (error) {
       this.warn('Could not read the appointment cache; continuing without cached appointments.', error);
+      this.removeStorageItem(storage, key);
       return undefined;
     }
     if (!raw) return undefined;
@@ -171,8 +169,7 @@ export class CalendarEventCache {
   }
 
   private isValidEntry(value: unknown, identity: Pick<ICalendarEventCacheEntry, 'tenantId' | 'userId' | 'webPartInstanceId'>, signature: string): value is ICalendarEventCacheEntry {
-    if (!this.isRecord(value) || value.schemaVersion !== CALENDAR_EVENT_CACHE_SCHEMA_VERSION ||
-      value.tenantId !== identity.tenantId || value.userId !== identity.userId ||
+    if (!this.isRecord(value) || value.tenantId !== identity.tenantId || value.userId !== identity.userId ||
       value.webPartInstanceId !== identity.webPartInstanceId || value.configSignature !== signature ||
       !Array.isArray(value.segments)) return false;
     return value.segments.every(segment => this.isValidSegment(segment));

@@ -27,7 +27,6 @@ import { CommandBarButton } from '@fluentui/react/lib/Button';
 import { SearchBox } from '@fluentui/react/lib/SearchBox';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { SettingsPanel } from './SettingsPanel';
-//import { CalendarToolbar } from './CalendarToolbar';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 import { formatCalendarDate } from './views/calendarFormatting';
@@ -455,16 +454,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     const graphClientPromise = this.props.context.msGraphClientFactory.getClient('3');
     const graphClient = await graphClientPromise;
     const exchangeService = new ExchangeCalendarService(httpClient, graphClient);
-    exchangeService.setGraphClient(graphClient);
-    const sharePointService = new SharePointCalendarService(httpClient, graphClient);
-    sharePointService.setGraphClient(graphClient);
-    const plannerService = new PlannerTaskService(httpClient, graphClient);
-    plannerService.setGraphClient(graphClient);
-    const teamsShiftsService = this.teamsShiftsService || new TeamsShiftsService(httpClient, graphClient);
+    const sharePointService = new SharePointCalendarService(graphClient);
+    const plannerService = new PlannerTaskService(graphClient);
+    const teamsShiftsService = this.teamsShiftsService || new TeamsShiftsService(graphClient);
     teamsShiftsService.setGraphClient(graphClient);
     this.teamsShiftsService = teamsShiftsService;
-    const unifiedGroupService = new UnifiedGroupCalendarService(httpClient, graphClient);
-    unifiedGroupService.setGraphClient(graphClient);
+    const unifiedGroupService = new UnifiedGroupCalendarService(graphClient);
     
     const markLoaded = (service: ServiceKey, sourceId: string, events: IEvent[] = []): void => {
       if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) {
@@ -1027,47 +1022,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     };
 
     return [
-      /*{
-        key: 'views',
-        text: displayView.charAt(0).toUpperCase() + displayView.slice(1),
-        iconProps: { iconName: 'View' },
-        subMenuProps: {
-          items: [
-            {
-              key: 'day',
-              text: 'Day',
-              iconProps: { iconName: 'CalendarDay' },
-              canCheck: true,
-              checked: displayView === 'day',
-              onClick: () => this.handleViewChange('day')
-            },
-            {
-              key: 'week',
-              text: 'Week',
-              iconProps: { iconName: 'CalendarWeek' },
-              canCheck: true,
-              checked: displayView === 'week',
-              onClick: () => this.handleViewChange('week')
-            },
-            {
-              key: 'month',
-              text: 'Month',
-              iconProps: { iconName: 'Calendar' },
-              canCheck: true,
-              checked: displayView === 'month',
-              onClick: () => this.handleViewChange('month')
-            },
-            {
-              key: 'schedule',
-              text: 'Schedule',
-              iconProps: { iconName: 'BulletedList' },
-              canCheck: true,
-              checked: displayView === 'schedule',
-              onClick: () => this.handleViewChange('schedule')
-            }
-          ]
-        }
-      },*/
       {
         key: 'settings',
         iconProps: { iconName: 'Settings' },

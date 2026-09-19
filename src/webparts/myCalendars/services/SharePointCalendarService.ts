@@ -1,4 +1,4 @@
-import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ISharePointFieldMapping } from '../models/ICalendarSettings';
 
@@ -86,12 +86,10 @@ export function normalizeSharePointEventDates(
  */
 export class SharePointCalendarService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
-  private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
   private readonly sitePromises = new Map<string, Promise<ISharePointSite | undefined>>();
 
-  constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
-    this.httpClient = httpClient;
+  constructor(graphClient?: MSGraphClientV3) {
     this.graphClient = graphClient || null;
   }
 

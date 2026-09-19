@@ -57,11 +57,11 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - Browser appointment caching is an administrator-only setting, enabled by default with a ten-minute duration normalized to 1–60 whole minutes.
-- The versioned `localStorage` entry is isolated by tenant, user, web-part instance, and result-affecting configuration signature and contains canonical events per source/month for only the initial seven-month range.
+- New `localStorage` entries are versionless and isolated by tenant, user, web-part instance, and result-affecting configuration signature. A schema-version field in an existing entry is ignored. Entries contain canonical events per source/month for only the initial seven-month range.
 - Compatible cached events render immediately and are reprocessed locally. Fresh segments suppress retrieval; stale segments remain visible while retrieval runs in the background.
 - Cache expiry by itself does not schedule retrieval while the component remains mounted. A later load that finds stale segments uses the existing loading and toolbar-status workflow.
 - Successful source/month retrieval atomically replaces that segment, including with an empty result. Failure preserves stale data and the source failure remains visible.
-- Manual refresh preserves visible appointments, bypasses freshness, and forces the initial and visible ranges. Invalid, disabled, unavailable, or quota-constrained cache state falls back safely to normal retrieval.
+- Manual refresh preserves visible appointments, bypasses freshness, and forces the initial and visible ranges. Any read, parse, structural, identity, or signature failure rejects the entire entry; removal is best-effort, no partial data is hydrated, and normal source retrieval rebuilds the cache. Invalid, disabled, unavailable, read-only, or quota-constrained cache state falls back safely to normal retrieval.
 
 ### DEC-018 — Event detail semantics
 
@@ -88,10 +88,9 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### DEBT-001 — Inactive Schedule view
 
-- **Status:** Technical debt
-- `ScheduleView.tsx` exists but is not imported by the runtime.
-- A commented command-bar branch refers to Schedule.
-- Its presence is not support or intent.
+- **Status:** Resolved
+- The inactive `ScheduleView.tsx` and its commented command-bar branch were removed.
+- Schedule remains unsupported under DEC-003.
 
 ## Sources and resilience
 
@@ -173,20 +172,20 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### DEV-012 — Source registry and inactive UI contain obsolete ICS wording
 
-- **Current state:** `CalendarSourceRegistry` and unused `AddCalendarDialog` describe adding or pasting ICS content.
-- **Confirmed behavior:** active UI opens an Outlook subscription link and does not parse content.
+- **Status:** Resolved
+- The inactive dialog was removed and active ICS descriptions now describe an Outlook subscription.
+- The active UI opens an Outlook subscription link and does not parse content.
 
 ### DEBT-002 — Inactive Add Calendar dialog
 
-- **Status:** Technical debt
-- `AddCalendarDialog.tsx` is not imported and duplicates an older subset of the integrated settings-panel flow.
-- It is not an architectural component of the active UI.
+- **Status:** Resolved
+- The inactive `AddCalendarDialog.tsx` was removed; the integrated settings-panel flow remains authoritative.
 
 ### DEBT-003 — Unused service dependencies
 
-- **Status:** Technical debt
-- Planner, SharePoint, Teams Shifts, and Unified Group services retain unused `HttpClient` fields.
-- This does not establish a desired dual-client architecture.
+- **Status:** Resolved
+- Unused `HttpClient` dependencies were removed from Planner, SharePoint, Teams Shifts, and Unified Group services.
+- `ExchangeCalendarService` retains its active `HttpClient` fallback.
 
 ### OQ-002 — Mandatory-source retry
 
@@ -236,6 +235,15 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - **Status:** Decision
 - Organization color, source-type logo defaults, automatic Planner/Group/Shifts loading defaults, and the Planner automatic assigned-to-me default are administrator-configurable product settings.
 - Presence only in model/default values does not satisfy the required administrator UI.
+
+### DEC-021 — Persisted settings version compatibility
+
+- **Status:** Decision
+- Current administrator and personal settings accept integer schema versions 2 through 6 and normalize every accepted payload to version 6.
+- Current settings locations reject missing, non-integer, older unknown, and future schema versions.
+- Unversioned data is accepted only through the explicit legacy administrator property or legacy OneDrive file.
+- Rejection follows the existing recovery order: administrator current → backup → legacy → defaults; personal current → legacy → defaults. A rejected personal current file is not automatically deleted.
+- Persistence-failure UX and historical administrator backup rotation remain unresolved under OQ-004 and OQ-005.
 
 ### DEV-001 — Administrator source policy is not implemented
 

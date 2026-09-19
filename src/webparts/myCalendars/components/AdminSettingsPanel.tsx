@@ -128,14 +128,10 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
     if (props.httpClient) {
       this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
-      this.sharePointService = new SharePointCalendarService(props.httpClient, props.graphClient);
-      this.plannerService = new PlannerTaskService(props.httpClient, props.graphClient);
-      this.unifiedGroupService = new UnifiedGroupCalendarService(props.httpClient, props.graphClient);
+      this.sharePointService = new SharePointCalendarService(props.graphClient);
+      this.plannerService = new PlannerTaskService(props.graphClient);
+      this.unifiedGroupService = new UnifiedGroupCalendarService(props.graphClient);
       if (props.graphClient) {
-        this.exchangeService.setGraphClient(props.graphClient);
-        this.sharePointService.setGraphClient(props.graphClient);
-        this.plannerService.setGraphClient(props.graphClient);
-        this.unifiedGroupService.setGraphClient(props.graphClient);
         this.audienceService = new AudienceService(props.graphClient);
       }
     }
