@@ -250,9 +250,14 @@ export class ExchangeCalendarService {
   public async resolveMailbox(mailbox: string): Promise<boolean> {
     try {
       // Try to fetch user profile to verify the mailbox exists
-      const url = `${this.GRAPH_API_URL}/users/${encodeURIComponent(mailbox)}?$select=id,userPrincipalName`;
-      const response = await this.httpClient.get(url, HttpClient.configurations.v1);
-      return response.ok;
+      const endpoint = `/users/${mailbox}`;
+      
+      const user = await this.graphClient
+        .api(endpoint)
+        .select('id,userPrincipalName2')
+        .get();
+
+      return true; // Only return true if no exception, hence user/shared mailbox exists
     } catch (error) {
       console.error('Error resolving mailbox:', error);
       return false;
