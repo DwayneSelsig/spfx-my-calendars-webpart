@@ -87,6 +87,14 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Outlook bulk visibility updates current-user `exchangeCalendarStates` and configured/effective Exchange `isEnabled`; SharePoint updates configured/effective `isEnabled`.
 - Planner, Microsoft 365 Group/Team, and Teams Shifts discovery-mode settings are not visibility controls and receive no group visibility control in this scope.
 
+### DEC-023 — Responsive search and action bar
+
+- **Status:** Decision
+- A flex layout replaces the top CommandBar; SearchBox and Fluent UI CommandBarButton actions remain.
+- Layout follows the web-part content width, observed with ResizeObserver: labels at 600 px and above, icons only from 360 to below 600 px, and right-aligned actions above full-width search below 360 px.
+- Search stays directly visible and preserves input and focus during resizing. Result filtering retains its existing debounce and calendar-view restoration.
+- Icon-only Settings and Refresh retain localized accessible names and tooltips. The existing loading-status action and callout remain available.
+
 ### DEBT-001 — Inactive Schedule view
 
 - **Status:** Resolved

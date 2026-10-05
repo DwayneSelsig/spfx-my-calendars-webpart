@@ -133,6 +133,8 @@ Also read [Loading, range, and cache](#loading-range-and-cache) only when a view
 
 ### Navigation and preferences
 
+The top action bar **MUST** keep search directly visible outside an overflow menu. Its layout **MUST** follow the web-part content width: at 600 px and above, Settings and Refresh show icons and text; from 360 to below 600 px, they show icons only; below 360 px, the actions appear right-aligned above a full-width search field. Icon-only actions **MUST** retain localized accessible names and tooltips. Resizing **MUST NOT** discard search input or focus. The existing loading-status action replaces Refresh as before. See DEC-023.
+
 `CalendarToolbar` owns date navigation, today, date selection, and Day/Week/Month selection. Selecting a view immediately asks the web part to persist that value as an explicit personal `defaultView`, even when it equals the administrator default. Reset removes the explicit personal value.
 
 Weekend visibility can be an administrator default or explicit personal override. Slot duration is administrator-only. The renderer consumes optional personal start-time and visible-hour overrides ahead of administrator base values.

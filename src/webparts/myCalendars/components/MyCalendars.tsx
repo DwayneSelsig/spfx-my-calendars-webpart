@@ -19,7 +19,7 @@ import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
 import { SearchResultsView } from './views/SearchResultsView';
 import { CalendarToolbar } from './CalendarToolbar';
-import { CommandBar, ICommandBarItemProps } from '@fluentui/react/lib/CommandBar';
+import { TooltipHost } from '@fluentui/react/lib/Tooltip';
 import { Callout } from '@fluentui/react/lib/Callout';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
@@ -37,6 +37,7 @@ import { formatLocalizedString } from '../utils/localization';
 type ServiceKey = CalendarCacheServiceKey;
 type ServiceStatus = 'loading' | 'ready' | 'error';
 type IndexedEvent = IEvent & { searchIndexText?: string };
+type ToolbarLayout = 'wide' | 'compact' | 'stacked';
 
 const defaultLoadingSources: Record<ServiceKey, ServiceStatus> = {
   exchange: 'ready',
@@ -63,10 +64,26 @@ const styles = mergeStyleSets({
     height: '100%',
     color: 'var(--bodyText, #323130)'
   },
-  commandBar: {
+  topToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
     flexShrink: 0,
     borderBottom: '1px solid var(--neutralLight, #edebe9)',
+    paddingTop: 8,
     paddingBottom: 10
+  },
+  toolbarSearch: {
+    flex: '1 1 0',
+    minWidth: 0
+  },
+  toolbarActions: {
+    display: 'flex',
+    flexShrink: 0,
+    alignItems: 'center',
+    selectors: {
+      '.ms-Button': { height: 44 }
+    }
   },
   calendarContainer: {
     flex: 1,
@@ -123,6 +140,8 @@ interface IMyCalendarsState {
   isLoading: boolean;
   isSettingsPanelOpen: boolean;
   searchQuery: string;
+  appliedSearchQuery: string;
+  toolbarLayout: ToolbarLayout;
   graphClient: MSGraphClientV3 | undefined;
   loadingSources: Record<ServiceKey, ServiceStatus>;
   loadErrors: Record<ServiceKey, string | undefined>;
@@ -132,6 +151,8 @@ interface IMyCalendarsState {
 
 export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyCalendarsState> {
   private searchDebounceTimer: number | null = null;
+  private topToolbarRef = React.createRef<HTMLDivElement>();
+  private toolbarResizeObserver: ResizeObserver | undefined;
   private activeLoadId = 0;
   private loadingStatusWrapperRef = React.createRef<HTMLDivElement>();
   private refreshTimer: number | null = null;
@@ -160,6 +181,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       isLoading: false,
       isSettingsPanelOpen: false,
       searchQuery: '',
+      appliedSearchQuery: '',
+      toolbarLayout: 'compact',
       graphClient: undefined,
       loadingSources: { ...defaultLoadingSources },
       loadErrors: { ...defaultLoadErrors },
@@ -169,6 +192,15 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   public componentDidMount(): void {
+    if (this.topToolbarRef.current) {
+      this.toolbarResizeObserver = new ResizeObserver(entries => {
+        const width = entries[0]?.contentRect.width;
+        if (width === undefined) return;
+        const toolbarLayout: ToolbarLayout = width >= 600 ? 'wide' : width >= 360 ? 'compact' : 'stacked';
+        if (toolbarLayout !== this.state.toolbarLayout) this.setState({ toolbarLayout });
+      });
+      this.toolbarResizeObserver.observe(this.topToolbarRef.current);
+    }
     this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
     // Resolve and store graphClient for use in SettingsPanel
     this.props.context.msGraphClientFactory.getClient('3')
@@ -233,6 +265,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   public componentWillUnmount(): void {
+    this.toolbarResizeObserver?.disconnect();
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = null;
@@ -946,59 +979,19 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     this.handleDateChange(newDate);
   };
 
-  private getCommandBarItems = (): ICommandBarItemProps[] => {
-    const searchItem: ICommandBarItemProps = {
-      key: 'search',
-      onRender: () => (
-        <SearchBox
-          placeholder={strings.SearchAppointmentsPlaceholder}
-          ariaLabel={strings.SearchAppointmentsLabel}
-          onChange={(_event, newValue) => this.handleSearch(newValue || '')}
-          styles={{
-            root: {
-              width: '100%',
-              marginTop: 8
-            }
-          }}
+  private renderToolbarButton(iconName: string, label: string, onClick: () => void): React.ReactElement {
+    const iconOnly = this.state.toolbarLayout !== 'wide';
+    return (
+      <TooltipHost content={iconOnly ? label : undefined} setAriaDescribedBy={false}>
+        <CommandBarButton
+          text={iconOnly ? undefined : label}
+          ariaLabel={label}
+          iconProps={{ iconName }}
+          onClick={onClick}
         />
-      )
-    };
-
-    return [
-      searchItem
-    ];
-  };
-
-  private getFarCommandBarItems = (): ICommandBarItemProps[] => {
-    const { showRefreshButton } = this.state;
-
-    const refreshItem: ICommandBarItemProps = {
-      key: 'refresh',
-      name: strings.RefreshLabel,
-      ariaLabel: strings.RefreshLabel,
-      iconProps: { iconName: 'Refresh' },
-      onClick: () => {
-        this.handleManualRefresh().catch(err => console.error('Failed to refresh appointments:', err));
-      }
-    };
-
-    const loadingStatusItem: ICommandBarItemProps = {
-      key: 'loadingStatus',
-      iconOnly: true,
-      onRender: () => this.renderLoadingStatusButton()
-    };
-
-    return [
-      {
-        key: 'settings',
-        name: strings.SettingsLabel,
-        ariaLabel: strings.SettingsLabel,
-        iconProps: { iconName: 'Settings' },
-        onClick: this.openSettingsPanel
-      },
-      showRefreshButton ? refreshItem : loadingStatusItem
-    ];
-  };
+      </TooltipHost>
+    );
+  }
 
   private openSettingsPanel = (): void => {
     if (this.props.context.propertyPane.isPropertyPaneOpen()) {
@@ -1104,10 +1097,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   private getDateRangeText = (): string => {
-    const { currentDate, currentView, searchQuery } = this.state;
+    const { currentDate, currentView, appliedSearchQuery } = this.state;
     
     if (currentView === 'search') {
-      return searchQuery ? formatLocalizedString(strings.SearchResultsForLabel, searchQuery) : strings.SearchLabel;
+      return appliedSearchQuery ? formatLocalizedString(strings.SearchResultsForLabel, appliedSearchQuery) : strings.SearchLabel;
     }
     
     const options: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
@@ -1182,6 +1175,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       this.searchDebounceTimer = null;
     }
 
+    // Keep controlled input immediate; debounce only the applied result query.
+    this.setState({ searchQuery: query });
     const trimmedQuery = (query || '').trim();
 
     // Empty: always switch back to calendar immediately.
@@ -1209,26 +1204,26 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     this.setState(prevState => {
       if (trimmedQuery && prevState.currentView !== 'search') {
         // Switch to search view when search text is entered.
-        return { searchQuery: query, currentView: 'search' };
+        return { appliedSearchQuery: query, currentView: 'search' };
       }
 
       if (!trimmedQuery && prevState.currentView === 'search') {
         // Switch back to previous view when search is cleared.
-        return { searchQuery: '', currentView: prevState.previousView };
+        return { appliedSearchQuery: '', currentView: prevState.previousView };
       }
 
-      return { searchQuery: query, currentView: prevState.currentView };
+      return { appliedSearchQuery: query, currentView: prevState.currentView };
     });
   }
 
   public render(): React.ReactElement<IMyCalendarsProps> {
-    const { currentView, isLoading, searchQuery, appointments } = this.state;
+    const { currentView, isLoading, searchQuery, appliedSearchQuery, appointments, toolbarLayout, showRefreshButton } = this.state;
     const isSearchMode = currentView === 'search';
 
     // Compute filtered appointments only when the search overlay is active.
     let filteredAppointments: IEvent[] = [];
     if (isSearchMode) {
-      const trimmedQuery = (searchQuery || '').trim();
+      const trimmedQuery = appliedSearchQuery.trim();
       if (trimmedQuery) {
         const query = trimmedQuery.toLowerCase();
         filteredAppointments = appointments.filter(apt => {
@@ -1241,16 +1236,35 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     return (
       <div className={styles.myCalendars}>
-        <CommandBar
-          items={this.getCommandBarItems()}
-          farItems={this.getFarCommandBarItems()}
-          className={styles.commandBar}
-          styles={{
-            root: { padding: 0 },
-            primarySet: { padding: 0 },
-            secondarySet: { padding: 0 }
-          }}
-        />
+        <div
+          ref={this.topToolbarRef}
+          className={styles.topToolbar}
+          style={{ flexDirection: toolbarLayout === 'stacked' ? 'column' : 'row' }}
+        >
+          <div
+            className={styles.toolbarSearch}
+            style={toolbarLayout === 'stacked' ? { order: 1, width: '100%', flex: '0 0 auto' } : undefined}
+          >
+            <SearchBox
+              value={searchQuery}
+              placeholder={strings.SearchAppointmentsPlaceholder}
+              ariaLabel={strings.SearchAppointmentsLabel}
+              onChange={(_event, newValue) => this.handleSearch(newValue || '')}
+              styles={{ root: { width: '100%' } }}
+            />
+          </div>
+          <div
+            className={styles.toolbarActions}
+            style={toolbarLayout === 'stacked' ? { alignSelf: 'flex-end' } : undefined}
+          >
+            {this.renderToolbarButton('Settings', strings.SettingsLabel, this.openSettingsPanel)}
+            {showRefreshButton
+              ? this.renderToolbarButton('Refresh', strings.RefreshLabel, () => {
+                this.handleManualRefresh().catch(err => console.error('Failed to refresh appointments:', err));
+              })
+              : this.renderLoadingStatusButton()}
+          </div>
+        </div>
         {!isSearchMode && (
           <CalendarToolbar
             currentDate={this.state.currentDate}
@@ -1275,7 +1289,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             <SearchResultsView
               appointments={filteredAppointments}
               isLoading={isLoading}
-              searchQuery={searchQuery}
+              searchQuery={appliedSearchQuery}
               locale={this.props.locale}
             />
           )}

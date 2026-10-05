@@ -27,6 +27,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
 - Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
 - Use optimized search and settings flows. Search covers event titles and locations while the active calendar remains mounted.
+- Keep search visible in narrow web parts: Settings and Refresh use icons without text when space is limited, and search moves below the actions at very narrow widths.
 - Navigate beyond the initial seven-month window with source- and month-aware loading, and optionally cache the initial range in the browser for an administrator-defined lifetime. An unreadable or incompatible appointment-cache entry is discarded as a whole and rebuilt from source data.
 - Handle source-specific date and time behavior defensively, including mailbox time zones, Graph all-day values, and SharePoint's inclusive all-day end dates.
 - Show sanitized HTML descriptions and meeting organizer information without presenting an attendee-less appointment as a meeting.
