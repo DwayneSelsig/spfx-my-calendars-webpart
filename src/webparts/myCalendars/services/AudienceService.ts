@@ -35,7 +35,7 @@ export class AudienceService {
         .query({
           $select: 'id,displayName',
           $filter: filterSegments.join(' and '),
-          $orderby: 'displayName',
+          // $orderby: 'displayName', // Not supported
           $top: 50
         })
         .get();
