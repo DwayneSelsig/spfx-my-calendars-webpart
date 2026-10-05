@@ -254,7 +254,7 @@ export class ExchangeCalendarService {
       
       const user = await this.graphClient
         .api(endpoint)
-        .select('id,userPrincipalName2')
+        .select('id,userPrincipalName')
         .get();
 
       return true; // Only return true if no exception, hence user/shared mailbox exists
