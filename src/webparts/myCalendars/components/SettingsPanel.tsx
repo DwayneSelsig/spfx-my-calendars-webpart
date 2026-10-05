@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { LatestDiscovery } from './latestDiscovery';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
 import { TextField } from '@fluentui/react/lib/TextField';
 import { PrimaryButton, DefaultButton, IconButton } from '@fluentui/react/lib/Button';
@@ -14,7 +15,7 @@ import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
 import { ICalendarSource, ICalendarSettings, CalendarSourceType } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
-import { ExchangeCalendarService, IExchangeCalendar } from '../services/ExchangeCalendarService';
+import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
@@ -41,6 +42,7 @@ interface ISettingsPanelState {
   // Exchange calendars (auto-loaded)
   userExchangeCalendars: IExchangeCalendar[];
   userExchangeCalendarsLoading: boolean;
+  userExchangeCalendarsError?: string;
   // Add calendar flow state
   addingCalendarType: CalendarSourceType | undefined;
   addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options' | 'teams-shifts' | 'unified-group-select';
@@ -56,6 +58,7 @@ interface ISettingsPanelState {
   // Exchange flow
   exchangeCalendars: IExchangeCalendar[];
   exchangeCalendarsLoading: boolean;
+  exchangeDiscoveryError?: string;
   exchangeMailbox: string;
   exchangeMailboxResolved: boolean;
   exchangeSelectedCalendarId: string | undefined;
@@ -102,12 +105,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   private plannerService: PlannerTaskService | null = null;
   private unifiedGroupService: UnifiedGroupCalendarService | null = null;
   private readonly SITES_PER_PAGE = 20;
+  private readonly mailboxDiscovery = new LatestDiscovery();
+  private readonly userCalendarDiscovery = new LatestDiscovery();
 
   constructor(props: ISettingsPanelProps) {
     super(props);
 
-    if (props.httpClient) {
-      this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
+    if (props.httpClient || props.graphClient) {
+      this.exchangeService = new ExchangeCalendarService(props.graphClient);
       this.sharePointService = new SharePointCalendarService(props.graphClient);
       this.plannerService = new PlannerTaskService(props.graphClient);
       this.unifiedGroupService = new UnifiedGroupCalendarService(props.graphClient);
@@ -165,6 +170,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   public componentDidUpdate(prevProps: ISettingsPanelProps): void {
     if (this.props.graphClient && !prevProps.graphClient) this.initializeGraphClient(this.props.graphClient);
+    if (prevProps.isOpen !== this.props.isOpen) {
+      this.invalidateDialogDiscovery();
+      this.userCalendarDiscovery.invalidate();
+      this.setState({ userExchangeCalendarsLoading: false, exchangeCalendarsLoading: false, exchangeDiscoveryError: undefined });
+    }
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
       this.setState({
         settings: JSON.parse(JSON.stringify(this.props.settings)), editingSourceId: undefined, showAddDialog: false,
@@ -176,9 +186,19 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     }
   }
 
+  private invalidateDialogDiscovery(): void {
+    this.mailboxDiscovery.invalidate();
+  }
+
+  public componentWillUnmount(): void {
+    this.invalidateDialogDiscovery();
+    this.userCalendarDiscovery.invalidate();
+  }
+
   private initializeGraphClient(client: MSGraphClientV3): void {
     if (this.sharePointService) this.sharePointService.setGraphClient(client);
-    if (this.exchangeService) this.exchangeService.setGraphClient(client);
+    this.exchangeService = this.exchangeService || new ExchangeCalendarService(client);
+    this.exchangeService.setGraphClient(client);
     if (this.plannerService) this.plannerService.setGraphClient(client);
     if (this.unifiedGroupService) this.unifiedGroupService.setGraphClient(client);
     this.loadUserExchangeCalendars().catch(err => console.error('Failed to load Exchange calendars:', err));
@@ -205,21 +225,26 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private loadUserExchangeCalendars = async (): Promise<void> => {
-    if (!this.exchangeService) return;
-    this.setState({ userExchangeCalendarsLoading: true });
-    try {
-      const calendars = await this.exchangeService.getCalendars();
-      this.setState({ userExchangeCalendars: calendars, userExchangeCalendarsLoading: false });
-    } catch (error) {
-      console.error('Error loading user Exchange calendars:', error);
-      this.setState({ userExchangeCalendars: [], userExchangeCalendarsLoading: false });
-    }
+    await this.userCalendarDiscovery.run(async () => {
+      if (!this.exchangeService) throw new Error('GraphClient not initialized');
+      return this.exchangeService.getCalendars();
+    }, {
+      start: () => this.setState({ userExchangeCalendarsLoading: true, userExchangeCalendarsError: undefined, userExchangeCalendars: [] }),
+      success: calendars => this.setState({ userExchangeCalendars: calendars }),
+      error: error => {
+        console.error('Error loading user Exchange calendars:', error);
+        this.setState({ userExchangeCalendarsError: getExchangeDiscoveryErrorMessage(error) });
+      },
+      finish: () => this.setState({ userExchangeCalendarsLoading: false })
+    });
   };
 
   private generateId(): string { return `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
 
   private handleOpenAddDialog = (): void => { this.setState({ showAddDialog: true }); };
   private handleCloseAddDialog = (): void => {
+    this.invalidateDialogDiscovery();
+    this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
     this.setState({
       showAddDialog: false, addingCalendarType: undefined, addingCalendarStep: 'initial',
       spSites: [], spSiteFilter: '', spCurrentPage: 0, spSelectedSite: undefined,
@@ -267,6 +292,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleBackToTypeSelection = (): void => {
+    this.invalidateDialogDiscovery();
+    this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
     this.setState({
       addingCalendarStep: 'initial', spSites: [], spSitesLoading: false, spSiteFilter: '', spCurrentPage: 0,
       spSelectedSite: undefined, spLists: [], spListsLoading: false, spSelectedList: undefined,
@@ -485,31 +512,34 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   // Exchange flow
-  private handleExchangeMailboxChange = (value?: string): void => { this.setState({ exchangeMailbox: value || '' }); };
+  private handleExchangeMailboxChange = (value?: string): void => {
+    this.mailboxDiscovery.invalidate();
+    this.setState({
+      exchangeMailbox: value || '', exchangeCalendars: [], exchangeCalendarsLoading: false,
+      exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
+    });
+  };
 
   private handleExchangeLookupMailbox = async (): Promise<void> => {
-    if (!this.state.exchangeMailbox.trim()) {
-      return;
-    }
-
-    this.setState({ exchangeCalendarsLoading: true });
-    const resolved = await this.exchangeService?.resolveMailbox(this.state.exchangeMailbox);
-
-    if (resolved) {
-      const calendars = await this.exchangeService?.getCalendars(this.state.exchangeMailbox) || [];
-      this.setState({
-        exchangeCalendars: calendars,
-        exchangeCalendarsLoading: false,
-        exchangeMailboxResolved: true,
-        addingCalendarStep: 'exchange-calendar'
-      });
-    } else {
-      this.setState({
-        exchangeCalendarsLoading: false,
-        exchangeMailboxResolved: false
-      });
-      alert(strings.MailboxUnavailableAlertLabel);
-    }
+    const mailbox = this.state.exchangeMailbox.trim();
+    await this.mailboxDiscovery.run(async () => {
+      if (!this.exchangeService) throw new Error('GraphClient not initialized');
+      return this.exchangeService.getCalendars(mailbox);
+    }, {
+      start: () => this.setState({
+        exchangeMailbox: mailbox, exchangeCalendarsLoading: true, exchangeCalendars: [],
+        exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
+      }),
+      success: calendars => this.setState({
+        exchangeCalendars: calendars, exchangeMailboxResolved: true,
+        addingCalendarStep: calendars.length ? 'exchange-calendar' : 'exchange-mailbox'
+      }),
+      error: error => {
+        console.error('Exchange mailbox discovery failed:', error);
+        this.setState({ exchangeDiscoveryError: getExchangeDiscoveryErrorMessage(error) });
+      },
+      finish: () => this.setState({ exchangeCalendarsLoading: false })
+    });
   };
 
   private handleSelectExchangeCalendar = (calendar: IExchangeCalendar): void => {
@@ -526,7 +556,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       name: this.state.newCalendarName,
       color: this.state.newCalendarColor,
       isEnabled: true,
-      exchangeMailbox: this.state.exchangeMailbox || undefined,
+      exchangeMailbox: this.state.exchangeMailbox.trim() || undefined,
       exchangeCalendarId: this.state.exchangeSelectedCalendarId || 'calendar'
     };
 
@@ -895,7 +925,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <div style={{ borderTop: '1px solid #edebe9', paddingTop: 12, marginTop: 8 }}>
             <Label>{strings.EnterMailboxEmailLabel}</Label>
             <TextField
-              placeholder={strings.MailboxPlaceholder}
+              description={strings.MailboxInputHelpLabel} placeholder={strings.MailboxPlaceholder}
               value={exchangeMailbox}
               onChange={(_, value) => this.handleExchangeMailboxChange(value)}
             />
@@ -910,6 +940,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     // Default: Show instructions to open Outlook
     return (
       <Stack tokens={{ childrenGap: 16 }}>
+        <TextField label={strings.EnterMailboxEmailLabel} description={strings.MailboxInputHelpLabel} placeholder={strings.MailboxPlaceholder} value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
+        <PrimaryButton text={strings.LoadOtherMailboxLabel} onClick={this.handleExchangeLookupMailbox} />
         <Label>{strings.OutlookCalendarDescription}</Label>
         <div style={{
           padding: '16px',
@@ -1413,6 +1445,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         {this.renderNavigationHeader()}
         {addingCalendarType === 'sharepoint' && this.renderSharePointFlow()}
         {addingCalendarType === 'exchange' && this.renderExchangeFlow()}
+        {addingCalendarType === 'exchange' && this.state.exchangeDiscoveryError && <MessageBar messageBarType={MessageBarType.error}>{this.state.exchangeDiscoveryError}</MessageBar>}
+        {addingCalendarType === 'exchange' && this.state.exchangeMailboxResolved && !this.state.exchangeCalendarsLoading && this.state.exchangeCalendars.length === 0 && <MessageBar>{strings.NoMailboxCalendarsLabel}</MessageBar>}
         {addingCalendarType === 'planner' && this.renderPlannerFlow()}
         {addingCalendarType === 'unifiedGroup' && this.renderUnifiedGroupsFlow()}
         {addingCalendarType === 'teamsShifts' && this.renderTeamsShiftsFlow()}
@@ -1754,6 +1788,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               <Stack tokens={{ childrenGap: 12 }}>
 
                 {/* Outlook */}
+                {this.state.userExchangeCalendarsError && <MessageBar messageBarType={MessageBarType.error}>{this.state.userExchangeCalendarsError}</MessageBar>}
                 {(userExchangeCalendarsLoading || userExchangeCalendars.length > 0 || settings.sources.some(source => source.sourceType === 'exchange')) && this.renderSourceSection({
                   sectionKey: 'outlook',
                   icon: 'OutlookLogo',

@@ -244,6 +244,15 @@ declare interface IMyCalendarsWebPartStrings {
   RefreshLabel: string;
   SelectAdminAudienceGroupsLabel: string;
   ViaLabel: string;
+  MailboxInputHelpLabel: string;
+  MailboxRequiredLabel: string;
+  MailboxNotFoundLabel: string;
+  MailboxAmbiguousLabel: string;
+  MailboxResolutionErrorLabel: string;
+  ExchangeDiscoveryErrorLabel: string;
+  NoMailboxCalendarsLabel: string;
+  SecurityGroupsLoadErrorLabel: string;
+  NoSecurityGroupsLabel: string;
 }
 
 declare module 'MyCalendarsWebPartStrings' {

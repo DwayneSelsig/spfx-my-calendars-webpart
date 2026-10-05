@@ -245,5 +245,14 @@ define([], function() {
     ,"RefreshLabel": "Vernieuwen"
     ,"SelectAdminAudienceGroupsLabel": "Selecteer een of meer Entra-beveiligingsgroepen:"
     ,"ViaLabel": "Via"
+    ,"MailboxInputHelpLabel": "Voer een UPN, object-ID of primair SMTP-adres in. Secundaire aliases worden niet ondersteund."
+    ,"MailboxRequiredLabel": "Voer een mailboxidentificatie in."
+    ,"MailboxNotFoundLabel": "Geen gebruiker gevonden voor deze UPN, object-ID of dit primaire SMTP-adres."
+    ,"MailboxAmbiguousLabel": "Dit adres komt overeen met meerdere gebruikers. Voer de UPN of object-ID van de mailbox in."
+    ,"MailboxResolutionErrorLabel": "De mailboxidentiteit kon niet worden bepaald. Controleer de goedkeuring van Graph-machtigingen en probeer opnieuw."
+    ,"ExchangeDiscoveryErrorLabel": "Agenda’s konden niet worden geladen. Controleer de mailboxidentificatie en je agendatoegang en probeer opnieuw. Beperkte agendarechten kunnen het ophalen verhinderen."
+    ,"NoMailboxCalendarsLabel": "Er zijn geen agenda’s teruggegeven voor deze mailbox."
+    ,"SecurityGroupsLoadErrorLabel": "Beveiligingsgroepen konden niet worden geladen. Zoek opnieuw. Je selectie is behouden."
+    ,"NoSecurityGroupsLabel": "Geen beveiligingsgroepen gevonden."
   };
 });

@@ -1,8 +1,3 @@
-jest.mock('@microsoft/sp-http', () => ({
-  HttpClient: { configurations: { v1: {} } }
-}));
-
-import type { HttpClient } from '@microsoft/sp-http';
 import { UserHelper } from '../utils/userHelper';
 import { ExchangeCalendarService } from './ExchangeCalendarService';
 
@@ -43,8 +38,8 @@ describe('ExchangeCalendarService event mapping', () => {
       query: jest.fn().mockReturnThis(),
       get
     };
-    const graphClient = { api: jest.fn().mockReturnValue(request) };
-    const service = new ExchangeCalendarService({} as HttpClient, graphClient);
+    const graphClient = { api: jest.fn((endpoint: string) => endpoint === '/users' ? { query: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue({ value: [{ id: 'owner-id', userPrincipalName: 'owner@example.com' }] }) } : request) };
+    const service = new ExchangeCalendarService(graphClient);
 
     const events = await service.getCalendarEvents(
       'calendar-id',
@@ -53,7 +48,7 @@ describe('ExchangeCalendarService event mapping', () => {
       'owner@example.com'
     );
 
-    expect(graphClient.api).toHaveBeenCalledWith('/users/owner%40example.com/calendars/calendar-id/calendarView');
+    expect(graphClient.api).toHaveBeenCalledWith('/users/owner-id/calendars/calendar-id/calendarView');
     expect(events[0].organizer).toBeUndefined();
     expect(events[0].isOrganizer).toBeUndefined();
     expect(events[0].showAs).toBe('free');
@@ -75,7 +70,7 @@ describe('ExchangeCalendarService event mapping', () => {
     });
     const request = { header: jest.fn().mockReturnThis(), query: jest.fn().mockReturnThis(), get };
     const graphClient = { api: jest.fn().mockReturnValue(request) };
-    const service = new ExchangeCalendarService({} as HttpClient, graphClient);
+    const service = new ExchangeCalendarService(graphClient);
 
     const events = await service.getCalendarEvents('calendar-id', new Date('2026-09-01'), new Date('2026-10-01'));
 
@@ -94,7 +89,7 @@ describe('ExchangeCalendarService event mapping', () => {
         isReminderOn: false, attendees: []
       }] })
     };
-    const service = new ExchangeCalendarService({} as HttpClient, { api: jest.fn().mockReturnValue(request) });
+    const service = new ExchangeCalendarService({ api: jest.fn().mockReturnValue(request) });
 
     const events = await service.getCalendarEvents('calendar-id', new Date('2026-09-01'), new Date('2026-10-01'));
 

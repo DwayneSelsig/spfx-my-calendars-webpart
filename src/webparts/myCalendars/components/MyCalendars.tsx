@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { loadExchangeSources } from './exchangeLoading';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { CalendarViewType } from '../models/ICalendarSettings';
@@ -451,10 +452,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       this.setState({ isLoading: false, showRefreshButton: true });
       return;
     }
-    const httpClient = this.props.context.httpClient;
     const graphClientPromise = this.props.context.msGraphClientFactory.getClient('3');
     const graphClient = await graphClientPromise;
-    const exchangeService = new ExchangeCalendarService(httpClient, graphClient);
+    const exchangeService = new ExchangeCalendarService(graphClient);
     const sharePointService = new SharePointCalendarService(graphClient);
     const plannerService = new PlannerTaskService(graphClient, this.props.tenantId);
     const teamsShiftsService = this.teamsShiftsService || new TeamsShiftsService(graphClient);
@@ -535,95 +535,58 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     const tasks: Array<Promise<void>> = [];
 
-    // Load Exchange calendars (user's own calendars)
+    // Automatic discovery and configured mailboxes are independent load lanes.
     if (servicesToLoad.has('exchange')) {
       tasks.push((async () => {
-        let hadError = false;
-
-        try {
-          this.exchangeCalendarsPromise = this.exchangeCalendarsPromise || exchangeService.getCalendars();
-          const userCalendars = await this.exchangeCalendarsPromise;
+        const configured = sourceGroups.exchange
+          .filter(source => source.exchangeCalendarId && !this.areMonthsLoaded(source.id, requestedMonthKeys))
+          .map(source => ({
+            sourceId: source.id,
+            load: async (): Promise<IEvent[]> => {
+              const events = await exchangeService.getCalendarEvents(source.exchangeCalendarId as string, startDate, endDate, source.exchangeMailbox);
+              return events.map(event => ({
+                ...event, sourceId: source.id, sourceDisplayName: source.name, colorHex: source.color,
+                sourceType: 'exchange' as const,
+                showSourceLogo: source.showSourceLogo ?? this.props.settings.exchangeShowSourceLogo ?? true
+              } as IEvent));
+            }
+          }));
+        const result = await loadExchangeSources(async () => {
+          let userCalendars: IExchangeCalendar[];
+          try {
+            this.exchangeCalendarsPromise = this.exchangeCalendarsPromise || exchangeService.getCalendars();
+            userCalendars = await this.exchangeCalendarsPromise;
+          } catch (error) {
+            if (currentGeneration === this.loadGeneration) this.exchangeCalendarsPromise = undefined;
+            throw error;
+          }
           const exchangeCalendarStates = this.props.settings.exchangeCalendarStates || {};
-          const discoveredExchangeSourceIds = new Set(userCalendars
+          const discoveredSourceIds = new Set(userCalendars
             .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .map(calendar => `exchange_${calendar.id}`));
           Array.from(this.knownSourceIdsByService.exchange)
-            .filter(sourceId => sourceId.indexOf('exchange_') === 0 && !discoveredExchangeSourceIds.has(sourceId))
+            .filter(sourceId => sourceId.indexOf('exchange_') === 0 && !discoveredSourceIds.has(sourceId))
             .forEach(sourceId => markLoaded('exchange', sourceId));
           userCalendars.filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .forEach(calendar => registerLoadedSource('exchange', `exchange_${calendar.id}`));
-          const calendarPromises = userCalendars
+          return userCalendars
             .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .filter(calendar => !this.areMonthsLoaded(`exchange_${calendar.id}`, requestedMonthKeys))
-            .map(async calendar => {
-              try {
-                const events = await exchangeService.getCalendarEvents(
-                  calendar.id,
-                  startDate,
-                  endDate,
-                  undefined // current user
-                );
-                const normalizedEvents = events.map(event => ({
-                  ...event,
-                  sourceId: `exchange_${calendar.id}`,
-                  sourceDisplayName: calendar.name,
-                  colorHex: calendar.hexColor,
-                  sourceType: 'exchange' as const,
+            .map(calendar => ({
+              sourceId: `exchange_${calendar.id}`,
+              load: async (): Promise<IEvent[]> => {
+                const events = await exchangeService.getCalendarEvents(calendar.id, startDate, endDate);
+                return events.map(event => ({
+                  ...event, sourceId: `exchange_${calendar.id}`, sourceDisplayName: calendar.name,
+                  colorHex: calendar.hexColor, sourceType: 'exchange' as const,
                   showSourceLogo: this.props.settings.exchangeShowSourceLogo ?? true
                 } as IEvent));
-                markLoaded('exchange', `exchange_${calendar.id}`, normalizedEvents);
-                return normalizedEvents;
-              } catch (error) {
-                hadError = true;
-                console.error(`Failed to load Exchange calendar ${calendar.name}:`, error);
-                return [] as IEvent[];
-              }
-            });
-
-          const appointmentGroups = await Promise.all(calendarPromises);
-          const flattenedAppointments = appointmentGroups.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-          appendAppointments(flattenedAppointments);
-
-          if (sourceGroups.exchange.length > 0) {
-            const manualExchangeAppointments = await Promise.all(sourceGroups.exchange.map(async source => {
-              try {
-                if (!source.exchangeCalendarId || this.areMonthsLoaded(source.id, requestedMonthKeys)) {
-                  return [] as IEvent[];
-                }
-
-                const events = await exchangeService.getCalendarEvents(
-                  source.exchangeCalendarId,
-                  startDate,
-                  endDate,
-                  source.exchangeMailbox
-                );
-                const normalizedEvents = events.map(event => ({
-                  ...event,
-                  sourceId: source.id,
-                  sourceDisplayName: source.name,
-                  colorHex: source.color,
-                  sourceType: 'exchange' as const,
-                  showSourceLogo: source.showSourceLogo ?? this.props.settings.exchangeShowSourceLogo ?? true
-                } as IEvent));
-                markLoaded('exchange', source.id, normalizedEvents);
-                return normalizedEvents;
-              } catch (error) {
-                hadError = true;
-                console.error(`Failed to load Exchange source ${source.name}:`, error);
-                return [] as IEvent[];
               }
             }));
-
-            const flattenedManualAppointments = manualExchangeAppointments.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-            appendAppointments(flattenedManualAppointments);
-          }
-        } catch (error) {
-          hadError = true;
-          if (currentGeneration === this.loadGeneration) this.exchangeCalendarsPromise = undefined;
-          console.error('Failed to load user Exchange calendars:', error);
-        }
-
-        updateStatus('exchange', hadError ? 'error' : 'ready', hadError ? strings.ExchangeLoadErrorLabel : undefined);
+        }, configured, (sourceId, events) => markLoaded('exchange', sourceId, events),
+        (error, sourceId) => console.error('Failed to load Exchange source:', sourceId, error));
+        appendAppointments(result.events);
+        updateStatus('exchange', result.hadError ? 'error' : 'ready', result.hadError ? strings.ExchangeLoadErrorLabel : undefined);
       })());
     }
 

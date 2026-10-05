@@ -23,6 +23,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 
 ## Main features
 
+- Configure shared Exchange calendars using a UPN, object ID or primary SMTP address, with clear discovery errors and empty-result feedback. Secondary aliases are not supported.
 - Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
 - Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
 - Use optimized search and settings flows. Search covers event titles and locations while the active calendar remains mounted.
@@ -38,6 +39,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Set a preferred timeline start, visible hours, weekends, and a 15, 30, or 60 minute grid.
 - Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
 - Use organization theme colors and support light and dark themes.
+- Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.
 - Assign administrator sources and ICS catalog entries to Entra groups. The current implementation only discovers non-mail-enabled security groups; the confirmed target model is broader.
 - Store personal settings and per-source visibility choices in the OneDrive App Folder.
 - Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
@@ -56,6 +58,8 @@ The web part does not:
 
 ## Installation
 Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions when prompted.
+
+Configured Exchange mailbox resolution additionally requires approved delegated `User.ReadBasic.All` in SharePoint API access. It reads basic user identity fields to resolve primary SMTP addresses; it does not grant access to calendars. Existing calendar permissions remain required. Full Access, Reviewer and LimitedDetails are separate Exchange rights: LimitedDetails does not promise full event details, and some discovery/event requests may fail. See the [manual validation matrix](docs/shared-mailbox-audience-validation.md).
 
 ### Upgrades
 Upload the new `.sppkg` file and overwrite the existing one when prompted.

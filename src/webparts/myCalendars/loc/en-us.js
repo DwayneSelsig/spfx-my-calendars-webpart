@@ -246,5 +246,14 @@ define([], function() {
     ,"RefreshLabel": "Refresh"
     ,"SelectAdminAudienceGroupsLabel": "Select one or more Entra security groups:"
     ,"ViaLabel": "Via"
+    ,"MailboxInputHelpLabel": "Enter a UPN, object ID or primary SMTP address. Secondary aliases are not supported."
+    ,"MailboxRequiredLabel": "Enter a mailbox identifier."
+    ,"MailboxNotFoundLabel": "No user was found for this UPN, object ID or primary SMTP address."
+    ,"MailboxAmbiguousLabel": "This address matches multiple users. Enter the mailbox UPN or object ID."
+    ,"MailboxResolutionErrorLabel": "The mailbox identity could not be resolved. Check Graph permission approval and try again."
+    ,"ExchangeDiscoveryErrorLabel": "Calendars could not be loaded. Check the mailbox identifier and your calendar access, then try again. Limited calendar permissions may prevent discovery."
+    ,"NoMailboxCalendarsLabel": "No calendars were returned for this mailbox."
+    ,"SecurityGroupsLoadErrorLabel": "Security groups could not be loaded. Try searching again. Your selection has been retained."
+    ,"NoSecurityGroupsLabel": "No security groups found."
   }
 });

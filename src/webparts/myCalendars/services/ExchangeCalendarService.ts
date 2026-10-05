@@ -1,4 +1,3 @@
-import { HttpClient } from '@microsoft/sp-http';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { UserHelper } from '../utils/userHelper';
 import { normalizeAvailabilityStatus, normalizeResponseStatus } from './GraphEventStatus';
@@ -7,6 +6,43 @@ import * as strings from 'MyCalendarsWebPartStrings';
 // MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MSGraphClientV3 = any;
+
+export interface IResolvedMailbox {
+  id: string;
+  userPrincipalName: string;
+}
+
+export class ExchangeRequestError extends Error {
+  public readonly statusCode?: number;
+  public readonly code?: string;
+
+  constructor(
+    public readonly stage: 'identity' | 'discovery' | 'events',
+    public readonly reason: 'empty' | 'notFound' | 'ambiguous' | 'request',
+    public readonly originalError?: unknown
+  ) {
+    super(`Exchange ${stage} failed (${reason}).`);
+    // The SPFx rig targets ES5, so restore the prototype after extending Error.
+    (Object as ObjectConstructor & { setPrototypeOf(value: object, prototype: object): void })
+      .setPrototypeOf(this, ExchangeRequestError.prototype);
+    this.name = 'ExchangeRequestError';
+    const details = originalError as { statusCode?: number; status?: number; code?: string } | undefined;
+    this.statusCode = details?.statusCode || details?.status;
+    this.code = details?.code;
+  }
+}
+
+function asExchangeError(stage: 'identity' | 'discovery' | 'events', error: unknown): ExchangeRequestError {
+  return error instanceof ExchangeRequestError ? error : new ExchangeRequestError(stage, 'request', error);
+}
+
+export function getExchangeDiscoveryErrorMessage(error: unknown): string {
+  if (!(error instanceof ExchangeRequestError)) return strings.ExchangeDiscoveryErrorLabel;
+  if (error.reason === 'empty') return strings.MailboxRequiredLabel;
+  if (error.reason === 'notFound' || (error.stage === 'identity' && error.statusCode === 404)) return strings.MailboxNotFoundLabel;
+  if (error.reason === 'ambiguous') return strings.MailboxAmbiguousLabel;
+  return error.stage === 'identity' ? strings.MailboxResolutionErrorLabel : strings.ExchangeDiscoveryErrorLabel;
+}
 
 export interface IExchangeCalendar {
   id: string;
@@ -51,11 +87,9 @@ interface IGraphEventAttendee {
 
 /**
  * Service to interact with Exchange calendars via Microsoft Graph API
- * Requires Calendars.Read and Calendars.Read.Shared permissions
+ * Requires Calendars.Read, Calendars.Read.Shared and User.ReadBasic.All for configured mailboxes
  */
 export class ExchangeCalendarService {
-  private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
-  private httpClient: HttpClient;
   private graphClient: MSGraphClientV3 | null = null;
 
   // Color mapping based on Outlook calendar colors
@@ -73,8 +107,7 @@ export class ExchangeCalendarService {
     'auto': '#0078D4' // Outlook blue for default calendar
   };
 
-  constructor(httpClient: HttpClient, graphClient?: MSGraphClientV3) {
-    this.httpClient = httpClient;
+  constructor(graphClient?: MSGraphClientV3) {
     this.graphClient = graphClient || null;
   }
 
@@ -112,7 +145,7 @@ export class ExchangeCalendarService {
 
   /**
    * Get all calendars for a specific mailbox
-   * @param mailbox - User email or UPN; undefined = current user
+   * @param mailbox - Object ID, UPN or primary SMTP; undefined = current user
    */
   public async getCalendars(mailbox?: string): Promise<IExchangeCalendar[]> {
     try {
@@ -122,8 +155,9 @@ export class ExchangeCalendarService {
 
       console.log('Fetching Exchange calendars...');
 
-      const endpoint = mailbox
-        ? `/users/${encodeURIComponent(mailbox)}/calendars`
+      const identity = mailbox === undefined ? undefined : await this.resolveMailbox(mailbox);
+      const endpoint = identity
+        ? `/users/${encodeURIComponent(identity.id)}/calendars`
         : '/me/calendars';
 
       const data = await this.graphClient
@@ -132,8 +166,6 @@ export class ExchangeCalendarService {
           $select: 'id,name,hexColor,isDefaultCalendar,color,canViewPrivateItems'
         })
         .get();
-
-      console.log('Exchange calendars response:', data);
 
       return (data.value || []).map((calendar: IGraphCalendar) => ({
         id: calendar.id,
@@ -145,14 +177,14 @@ export class ExchangeCalendarService {
       }));
     } catch (error) {
       console.error('Error fetching Exchange calendars:', error);
-      throw error;
+      throw asExchangeError('discovery', error);
     }
   }
 
   /**
    * Get events from a specific calendar
    * @param calendarId - Exchange calendar ID (e.g., 'calendar', or specific calendar id)
-   * @param mailbox - User email or UPN; undefined = current user
+   * @param mailbox - Object ID, UPN or primary SMTP; undefined = current user
    * @param startDate - Start of date range
    * @param endDate - End of date range
    */
@@ -167,9 +199,11 @@ export class ExchangeCalendarService {
         throw new Error('GraphClient not initialized');
       }
 
-      const endpoint = mailbox
-        ? `/users/${encodeURIComponent(mailbox)}/calendars/${calendarId}/calendarView`
-        : `/me/calendars/${calendarId}/calendarView`;
+      const identity = mailbox === undefined ? undefined : await this.resolveMailbox(mailbox);
+      const encodedCalendarId = encodeURIComponent(calendarId);
+      const endpoint = identity
+        ? `/users/${encodeURIComponent(identity.id)}/calendars/${encodedCalendarId}/calendarView`
+        : `/me/calendars/${encodedCalendarId}/calendarView`;
 
       // Filter by date range
       const startISO = startDate.toISOString();
@@ -192,7 +226,7 @@ export class ExchangeCalendarService {
       return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail, !mailbox));
     } catch (error) {
       console.error('Error fetching Exchange calendar events:', error);
-      throw error;
+      throw asExchangeError('events', error);
     }
   }
 
@@ -243,24 +277,37 @@ export class ExchangeCalendarService {
     };
   }
 
-  /**
-   * Resolve a mailbox by email or UPN to verify it exists
-   * @param mailbox - User email or UPN
-   */
-  public async resolveMailbox(mailbox: string): Promise<boolean> {
+  /** Resolve identity only; calendar discovery/retrieval still checks calendar access. */
+  public async resolveMailbox(mailbox: string): Promise<IResolvedMailbox> {
+    const normalized = mailbox.trim();
+    if (!normalized) throw new ExchangeRequestError('identity', 'empty');
     try {
-      // Try to fetch user profile to verify the mailbox exists
-      const endpoint = `/users/${mailbox}`;
-      
-      const user = await this.graphClient
-        .api(endpoint)
-        .select('id,userPrincipalName')
-        .get();
-
-      return true; // Only return true if no exception, hence user/shared mailbox exists
+      if (!this.graphClient) throw new Error('GraphClient not initialized');
+      const identities = new Map<string, IResolvedMailbox>();
+      const isObjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized);
+      if (isObjectId) {
+        const user = await this.graphClient.api(`/users/${encodeURIComponent(normalized)}`)
+          .select('id,userPrincipalName').get();
+        if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '' });
+      } else {
+        const escaped = normalized.replace(/'/g, "''");
+        let data = await this.graphClient.api('/users').query({
+          $select: 'id,userPrincipalName',
+          $filter: `userPrincipalName eq '${escaped}' or mail eq '${escaped}'`
+        }).get();
+        for (;;) {
+          (data.value || []).forEach((user: IResolvedMailbox) => {
+            if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '' });
+          });
+          if (identities.size > 1) throw new ExchangeRequestError('identity', 'ambiguous');
+          if (!data['@odata.nextLink']) break;
+          data = await this.graphClient.api(data['@odata.nextLink']).get();
+        }
+      }
+      if (identities.size === 0) throw new ExchangeRequestError('identity', 'notFound');
+      return Array.from(identities.values())[0];
     } catch (error) {
-      console.error('Error resolving mailbox:', error);
-      return false;
+      throw asExchangeError('identity', error);
     }
   }
 

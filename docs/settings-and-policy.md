@@ -163,14 +163,16 @@ The exact persisted schema, field names, default capability set, and migration r
 
 ### Current implementation
 
-- `AudienceService.getSecurityGroups` returns only `mailEnabled eq false and securityEnabled eq true` groups, at most 50 results.
+- `AudienceService.getSecurityGroups` returns only `mailEnabled eq false and securityEnabled eq true` groups. It requests pages of 50, follows every `@odata.nextLink` with `ConsistencyLevel: eventual`, deduplicates IDs and sorts the complete result locally by `displayName`, then ID. The query does not use `$orderby` or add `$count` solely for sorting.
+- Prefix searches trim text and escape apostrophes as OData literals. Discovery errors propagate to the panel rather than becoming an empty successful result.
+- Source/ICS audience initialization and search distinguish loading, successful empty results and errors. Results from old requests are ignored after a new query, edited input, navigation, dialog close or unmount. Selected IDs and names are independent of search results and survive successful empty searches and discovery failures.
 - The UI cannot create or retain an assignment with no groups; normalization drops such entries.
 - `/me/checkMemberGroups` evaluates up to 20 IDs per batch and supports transitive membership.
 - Positive and negative results use session storage for five minutes.
 - A failed batch contributes no matches and writes no result for those IDs, so the next evaluation can retry.
 - The cache key contains the group ID but not tenant or user identity.
 
-The first two items conflict with the confirmed target model. The cache-key scope is a current implementation risk and is not a confirmed policy change.
+The restricted group types and rejection of empty audiences conflict with the confirmed target model (DEV-002). The cache-key scope is a current implementation risk and is not a confirmed policy change.
 
 ## Storage and migration
 
@@ -287,6 +289,10 @@ SharePoint rows display site name separately from calendar name. Missing legacy 
 The panel deep-clones effective settings when opened. Unsaved changes are discarded on close. It emits `onSave` or `onReset`; it does not write storage.
 
 Day/Week/Month selection in the toolbar is also a personal setting and is persisted immediately.
+
+### Discovery feedback
+
+Both active panels **MUST** end mailbox discovery loading after success or failure, clear previous mailbox results/selection on new input or lookup, and ignore obsolete responses. They **MUST** show localized errors separately from successful empty results. The personal panel also shows failures of automatic current-user discovery and exposes manual mailbox input before the first successful lookup. Audience discovery feedback follows DEC-022 and preserves existing selected groups.
 
 ### Current interface gaps
 

@@ -40,6 +40,7 @@ All current runtime calls use delegated user context because the web part obtain
 | Requested permission | Current code paths | Required by current path | Notes |
 | --- | --- | --- | --- |
 | `Calendars.Read` | User/shared Exchange discovery and `calendarView`; `/me/calendar/getSchedule` | Yes | Covers event details and exceeds the documented `Calendars.ReadBasic` minimum for `getSchedule` |
+| `User.ReadBasic.All` | Configured Exchange identity lookup by object ID, UPN or primary SMTP (`mail`) | Yes for mailbox identity resolution | Reads only basic user fields; does not prove or grant calendar access |
 | `Calendars.Read.Shared` | `/users/{mailbox}/calendars` and shared/delegated mailbox calendar views | Yes for configured shared/delegated calendars | Does not grant access beyond the signed-in user's source permissions |
 | `MailboxSettings.Read` | No `/me/mailboxSettings` path | No verified consumer | Requested in both manifests; `UserHelper` gets working hours/time zone through `getSchedule` |
 | `Files.ReadWrite.AppFolder` | Create/read/write/delete under `/me/drive/special/approot` | Yes | Stores personal settings only; Microsoft labels delegated AppFolder permission as preview |
@@ -53,7 +54,7 @@ The requests are duplicated in `config/package-solution.json` and `MyCalendarsWe
 
 ### Pagination, retry, and throttling
 
-The code follows `@odata.nextLink` for Unified-group discovery, joined-Team discovery, and Shifts retrieval. It does not follow paging for Exchange calendars/events, SharePoint items, Planner group/plan/task discovery, or administrator audience search.
+The code follows `@odata.nextLink` for Unified-group discovery, joined-Team discovery, and Shifts retrieval. It does not follow paging for Exchange calendars/events, SharePoint items, Planner group/plan/task discovery. Audience search and configured Exchange identity resolution follow all returned `@odata.nextLink` pages.
 
 There is no explicit exponential backoff, `Retry-After` handling, or retry limit in a source service. Retry occurs indirectly when a failed month remains uncached and later navigation or manual refresh starts another load. Selected failed discovery promises are cleared so a later load can rediscover.
 
@@ -81,7 +82,10 @@ Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping.
 ### Discovery and retrieval
 
 - Current-user calendars are always discovered from `GET /me/calendars`.
-- A configured mailbox uses `GET /users/{mailbox}/calendars`.
+- A configured mailbox accepts a trimmed UPN, object ID or primary SMTP address. Secondary aliases are not resolved.
+- `resolveMailbox` returns `{ id, userPrincipalName }` or throws. Object IDs use `GET /users/{id}`; address input uses `GET /users` with exact `userPrincipalName`/`mail` equality and selects only `id,userPrincipalName`. OData literals are escaped, identity-query pages are followed, and zero/multiple distinct matches are rejected.
+- The resolved object ID is used for `GET /users/{id}/calendars` and `GET /users/{id}/calendars/{calendarId}/calendarView`. Identity resolution **MUST NOT** be presented as proof of calendar access.
+- Only an omitted mailbox argument selects `/me`; an explicitly empty/whitespace identifier is invalid. URL path identifiers are encoded separately. Existing stored primary SMTP addresses resolve during runtime without a schema migration.
 - Personal UI loads current-user calendars automatically and can discover a manually entered mailbox.
 - Administrator and personal source flows can select one calendar from a mailbox.
 
@@ -99,10 +103,14 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 - Configured sources use mailbox, calendar ID, name, color, enabled state, and optional per-source logo.
 - Event details can open Graph-provided `joinUrl` and `webLink`.
 - Calendar discovery is cached as a coordinator promise until reset; events use the successful source/month cache.
-- Individual automatic calendars and configured Exchange sources are isolated from each other.
+- Individual automatic calendars and configured Exchange sources are isolated from each other. Failure of current-user discovery does not prevent configured source loads. Only successful requests mark source/month results as loaded.
 - Calendar and event responses do not follow `@odata.nextLink`; discovery and retrieval can be incomplete beyond the returned page or 500 items.
 
-**Registered deviation:** mailbox existence is checked with SPFx `HttpClient` against `https://graph.microsoft.com/v1.0/users/...`, not the authenticated Graph client. A false response blocks mailbox selection even though the later Graph calendar call is authoritative. Do not silently treat this validation path as desired architecture.
+**Requirement (DEC-022):** mailbox identity, calendar discovery and event retrieval remain separate access steps. Discovery and event failures **MUST** retain their original diagnostic status/code and stage; an agenda-endpoint 404 **MUST NOT** be interpreted as proof that the mailbox does not exist. Panels show localized errors and successful empty results, finish current-request loading on both success and failure, and discard obsolete discovery responses.
+
+**Limitation:** LimitedDetails/Graph `limitedRead` permits only limited calendar information (availability, titles and locations), not full event details. The current discovery and `calendarView` endpoints and selected event fields are unchanged. A reported `404 ErrorItemNotFound` does not establish whether rights, address, calendar ID or endpoint behavior caused it. No reduced-field or availability fallback is implemented without tenant evidence and a confirmed design. Reviewer-only and LimitedDetails-only behavior remains subject to the [manual test matrix](shared-mailbox-audience-validation.md).
+
+**Resolved deviation:** DEV-007 no longer applies: all Exchange identity and calendar calls use the authenticated Graph client; there is no HTTP fallback.
 
 ## SharePoint list calendars
 

@@ -1,4 +1,6 @@
 import * as React from 'react';
+import { LatestDiscovery } from './latestDiscovery';
+import { updateAudienceDiscovery } from './audienceDiscoveryState';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
 import { TextField } from '@fluentui/react/lib/TextField';
 import { PrimaryButton, DefaultButton, IconButton } from '@fluentui/react/lib/Button';
@@ -24,7 +26,7 @@ import {
 } from '../models/ICalendarSettings';
 import { calendarSourceRegistry } from '../models/CalendarSourceRegistry';
 import * as strings from 'MyCalendarsWebPartStrings';
-import { ExchangeCalendarService, IExchangeCalendar } from '../services/ExchangeCalendarService';
+import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointList, ISharePointSite } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
@@ -83,6 +85,7 @@ interface IAdminSettingsPanelState {
   spSelectedList: ISharePointList | undefined;
   exchangeCalendars: IExchangeCalendar[];
   exchangeCalendarsLoading: boolean;
+  exchangeDiscoveryError?: string;
   exchangeMailbox: string;
   exchangeMailboxResolved: boolean;
   exchangeSelectedCalendarId: string | undefined;
@@ -110,6 +113,8 @@ interface IAdminSettingsPanelState {
   newCalendarName: string;
   securityGroups: IEntraSecurityGroup[];
   securityGroupsLoading: boolean;
+  securityGroupsError?: string;
+  securityGroupsLoaded?: boolean;
   securityGroupSearch: string;
   selectedAudienceGroups: Record<string, string>;
   pendingAdminSources: ICalendarSourceBase[];
@@ -124,12 +129,14 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private unifiedGroupService: UnifiedGroupCalendarService | null = null;
   private audienceService: AudienceService | null = null;
   private readonly SITES_PER_PAGE = 20;
+  private readonly mailboxDiscovery = new LatestDiscovery();
+  private readonly audienceDiscovery = new LatestDiscovery();
 
   constructor(props: IAdminSettingsPanelProps) {
     super(props);
 
-    if (props.httpClient) {
-      this.exchangeService = new ExchangeCalendarService(props.httpClient, props.graphClient);
+    if (props.httpClient || props.graphClient) {
+      this.exchangeService = new ExchangeCalendarService(props.graphClient);
       this.sharePointService = new SharePointCalendarService(props.graphClient);
       this.plannerService = new PlannerTaskService(props.graphClient);
       this.unifiedGroupService = new UnifiedGroupCalendarService(props.graphClient);
@@ -153,6 +160,10 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       this.initializeGraphClient(this.props.graphClient);
     }
 
+    if (prevProps.isOpen !== this.props.isOpen) {
+      this.invalidateDialogDiscovery();
+      this.setState({ exchangeCalendarsLoading: false, exchangeDiscoveryError: undefined });
+    }
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
       this.setState(this.createStateFromProps(this.props), () => {
         this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
@@ -198,6 +209,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       newCalendarName: '',
       securityGroups: [],
       securityGroupsLoading: false,
+      securityGroupsError: undefined, securityGroupsLoaded: false,
       securityGroupSearch: '',
       selectedAudienceGroups: {},
       pendingAdminSources: [],
@@ -206,8 +218,18 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     };
   }
 
+  private invalidateDialogDiscovery(): void {
+    this.mailboxDiscovery.invalidate();
+    this.audienceDiscovery.invalidate();
+  }
+
+  public componentWillUnmount(): void {
+    this.invalidateDialogDiscovery();
+  }
+
   private initializeGraphClient(client: MSGraphClientV3): void {
-    if (this.exchangeService) this.exchangeService.setGraphClient(client);
+    this.exchangeService = this.exchangeService || new ExchangeCalendarService(client);
+    this.exchangeService.setGraphClient(client);
     if (this.sharePointService) this.sharePointService.setGraphClient(client);
     if (this.plannerService) this.plannerService.setGraphClient(client);
     if (this.unifiedGroupService) this.unifiedGroupService.setGraphClient(client);
@@ -243,6 +265,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private handleCloseAddDialog = (): void => {
+    this.invalidateDialogDiscovery();
+    this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
     this.setState({
       showAddDialog: false,
       addingCalendarType: undefined,
@@ -277,6 +301,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       newCalendarName: '',
       securityGroups: [],
       securityGroupsLoading: false,
+      securityGroupsError: undefined, securityGroupsLoaded: false,
       securityGroupSearch: '',
       selectedAudienceGroups: {},
       pendingAdminSources: [],
@@ -287,6 +312,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
 
   private handleResetDraft = (): void => {
     if (confirm(strings.ResetAdminDraftConfirmationLabel)) {
+      this.invalidateDialogDiscovery();
       this.setState(this.createStateFromProps({
         ...this.props,
         settings: JSON.parse(JSON.stringify(defaultAdminWebPartSettings)) as IAdminWebPartSettings
@@ -349,6 +375,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private handleBackToTypeSelection = (): void => {
+    this.invalidateDialogDiscovery();
+    this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
     this.setState({
       addingCalendarStep: 'initial',
       spSites: [],
@@ -377,6 +405,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       unifiedGroupsSelection: {},
       securityGroups: [],
       securityGroupsLoading: false,
+      securityGroupsError: undefined, securityGroupsLoaded: false,
       securityGroupSearch: '',
       selectedAudienceGroups: {},
       pendingAdminSources: [],
@@ -388,6 +417,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private handleBackOneStep = (): void => {
+    this.audienceDiscovery.invalidate();
+    this.setState({ securityGroupsLoading: false, securityGroupsError: undefined, securityGroupsLoaded: false });
     if (this.state.addingCalendarStep === 'admin-audience-select') {
       if (this.state.audienceEditTarget) {
         this.setState({ showAddDialog: false, audienceEditTarget: undefined, selectedAudienceGroups: {} });
@@ -396,6 +427,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
           addingCalendarStep: this.state.pendingAdminIcs ? 'ics' : 'initial',
           securityGroups: [],
           securityGroupsLoading: false,
+          securityGroupsError: undefined, securityGroupsLoaded: false,
           securityGroupSearch: '',
           selectedAudienceGroups: {}
         });
@@ -533,29 +565,32 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   }
 
   private handleExchangeMailboxChange = (value?: string): void => {
-    this.setState({ exchangeMailbox: value || '' });
+    this.mailboxDiscovery.invalidate();
+    this.setState({
+      exchangeMailbox: value || '', exchangeCalendars: [], exchangeCalendarsLoading: false,
+      exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
+    });
   };
 
   private handleExchangeLookupMailbox = async (): Promise<void> => {
-    if (!this.state.exchangeMailbox.trim()) {
-      return;
-    }
-
-    this.setState({ exchangeCalendarsLoading: true });
-    const resolved = await this.exchangeService?.resolveMailbox(this.state.exchangeMailbox);
-
-    if (!resolved) {
-      this.setState({ exchangeCalendarsLoading: false, exchangeMailboxResolved: false });
-      alert(strings.MailboxUnavailableAlertLabel);
-      return;
-    }
-
-    const calendars = await this.exchangeService?.getCalendars(this.state.exchangeMailbox) || [];
-    this.setState({
-      exchangeCalendars: calendars,
-      exchangeCalendarsLoading: false,
-      exchangeMailboxResolved: true,
-      addingCalendarStep: 'exchange-calendar'
+    const mailbox = this.state.exchangeMailbox.trim();
+    await this.mailboxDiscovery.run(async () => {
+      if (!this.exchangeService) throw new Error('GraphClient not initialized');
+      return this.exchangeService.getCalendars(mailbox);
+    }, {
+      start: () => this.setState({
+        exchangeMailbox: mailbox, exchangeCalendarsLoading: true, exchangeCalendars: [],
+        exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
+      }),
+      success: calendars => this.setState({
+        exchangeCalendars: calendars, exchangeMailboxResolved: true,
+        addingCalendarStep: calendars.length ? 'exchange-calendar' : 'exchange-mailbox'
+      }),
+      error: error => {
+        console.error('Exchange mailbox discovery failed:', error);
+        this.setState({ exchangeDiscoveryError: getExchangeDiscoveryErrorMessage(error) });
+      },
+      finish: () => this.setState({ exchangeCalendarsLoading: false })
     });
   };
 
@@ -605,8 +640,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       securityGroupsLoading: true
     });
 
-    const securityGroups = await this.audienceService?.getSecurityGroups() || [];
-    this.setState({ securityGroups, securityGroupsLoading: false });
+    await this.loadSecurityGroups();
   };
 
   private beginAudienceSelectionForIcs = async (
@@ -630,8 +664,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       securityGroupsLoading: true
     });
 
-    const securityGroups = await this.audienceService?.getSecurityGroups() || [];
-    this.setState({ securityGroups, securityGroupsLoading: false });
+    await this.loadSecurityGroups();
   };
 
   private createSelectedAudienceGroups(): IAudienceGroup[] {
@@ -666,7 +699,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       name: this.state.newCalendarName,
       color: this.state.newCalendarColor,
       isEnabled: true,
-      exchangeMailbox: this.state.exchangeMailbox || undefined,
+      exchangeMailbox: this.state.exchangeMailbox.trim() || undefined,
       exchangeCalendarId: this.state.exchangeSelectedCalendarId || 'calendar'
     };
 
@@ -740,10 +773,28 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     });
   };
 
+  private loadSecurityGroups = async (searchText?: string): Promise<void> => {
+    await this.audienceDiscovery.run(async () => {
+      if (!this.audienceService) throw new Error('GraphClient not initialized');
+      return this.audienceService.getSecurityGroups(searchText);
+    }, {
+      start: () => this.setState(prev => updateAudienceDiscovery(prev, { type: 'start' })),
+      success: securityGroups => this.setState(prev => updateAudienceDiscovery(prev, { type: 'success', groups: securityGroups })),
+      error: error => {
+        console.error('Audience discovery failed:', error);
+        this.setState(prev => updateAudienceDiscovery(prev, { type: 'error', message: strings.SecurityGroupsLoadErrorLabel }));
+      },
+      finish: () => this.setState(prev => updateAudienceDiscovery(prev, { type: 'finish' }))
+    });
+  };
+
   private handleSecurityGroupSearch = async (): Promise<void> => {
-    this.setState({ securityGroupsLoading: true });
-    const securityGroups = await this.audienceService?.getSecurityGroups(this.state.securityGroupSearch) || [];
-    this.setState({ securityGroups, securityGroupsLoading: false });
+    await this.loadSecurityGroups(this.state.securityGroupSearch);
+  };
+
+  private handleSecurityGroupSearchChange = (value?: string): void => {
+    this.audienceDiscovery.invalidate();
+    this.setState(prev => ({ ...updateAudienceDiscovery(prev, { type: 'input' }), securityGroupSearch: value || '' }));
   };
 
   private handleToggleAudienceGroup = (group: IEntraSecurityGroup, checked?: boolean): void => {
@@ -1012,7 +1063,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>{strings.EnterMailboxEmailLabel}</Label>
-        <TextField placeholder={strings.MailboxPlaceholder} value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
+        <TextField description={strings.MailboxInputHelpLabel} placeholder={strings.MailboxPlaceholder} value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
         <PrimaryButton text={strings.LoadCalendarsLabel} onClick={() => this.handleExchangeLookupMailbox().catch(err => console.error(err))} />
       </Stack>
     );
@@ -1111,13 +1162,15 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>{strings.SelectAdminAudienceGroupsLabel}</Label>
-        <TextField placeholder={strings.SearchSecurityGroupsPlaceholder} value={this.state.securityGroupSearch} onChange={(_, value) => this.setState({ securityGroupSearch: value || '' })} />
+        <TextField placeholder={strings.SearchSecurityGroupsPlaceholder} value={this.state.securityGroupSearch} onChange={(_, value) => this.handleSecurityGroupSearchChange(value)} />
         <PrimaryButton text={strings.SearchLabel} onClick={() => this.handleSecurityGroupSearch().catch(err => console.error(err))} />
         {selectedCount > 0 && (
           <MessageBar messageBarType={MessageBarType.info}>
             {formatLocalizedString(strings.SelectedGroupsLabel, selectedGroupNames.join(', '))}
           </MessageBar>
         )}
+        {this.state.securityGroupsError && <MessageBar messageBarType={MessageBarType.error}>{this.state.securityGroupsError}</MessageBar>}
+        {this.state.securityGroupsLoaded && !this.state.securityGroupsLoading && !this.state.securityGroupsError && this.state.securityGroups.length === 0 && <MessageBar>{strings.NoSecurityGroupsLabel}</MessageBar>}
         {this.state.securityGroupsLoading ? (
           <Spinner size={SpinnerSize.medium} label={strings.LoadingSecurityGroupsLabel} />
         ) : (
@@ -1162,6 +1215,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
         {addingCalendarStep === 'admin-audience-select' && this.renderAudienceSelectionFlow()}
         {addingCalendarType === 'sharepoint' && addingCalendarStep !== 'admin-audience-select' && this.renderSharePointFlow()}
         {addingCalendarType === 'exchange' && addingCalendarStep !== 'admin-audience-select' && this.renderExchangeFlow()}
+        {addingCalendarType === 'exchange' && addingCalendarStep !== 'admin-audience-select' && this.state.exchangeDiscoveryError && <MessageBar messageBarType={MessageBarType.error}>{this.state.exchangeDiscoveryError}</MessageBar>}
+        {addingCalendarType === 'exchange' && addingCalendarStep !== 'admin-audience-select' && this.state.exchangeMailboxResolved && !this.state.exchangeCalendarsLoading && this.state.exchangeCalendars.length === 0 && <MessageBar>{strings.NoMailboxCalendarsLabel}</MessageBar>}
         {addingCalendarType === 'planner' && addingCalendarStep !== 'admin-audience-select' && this.renderPlannerFlow()}
         {addingCalendarType === 'unifiedGroup' && addingCalendarStep !== 'admin-audience-select' && this.renderUnifiedGroupsFlow()}
         {addingCalendarType === 'teamsShifts' && addingCalendarStep !== 'admin-audience-select' && this.renderTeamsShiftsFlow()}

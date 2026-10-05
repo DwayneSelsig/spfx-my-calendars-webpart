@@ -84,7 +84,7 @@ The coordinator exposes `loading`, `ready`, or `error` per service family, not p
 
 Independent successes are retained, but isolation inside a family varies:
 
-- Exchange isolates individual automatic calendars and manual sources.
+- Exchange isolates individual automatic calendars and manual sources. Automatic calendar discovery and configured sources load independently, so discovery failure does not skip stored sources.
 - SharePoint isolates configured list sources.
 - Planner isolates plan task loads; automatic plan-discovery failure fails that service family.
 - Unified Groups isolates group event loads; group or Team discovery failure affects automatic mode.
@@ -95,7 +95,7 @@ Independent successes are retained, but isolation inside a family varies:
 
 Focused unit tests cover cache-duration normalization, fresh/stale boundaries, versionless persistence, successful empty segment replacement, structural rejection, compatibility with an existing version field, best-effort removal, and recovery after browser-storage failures. Source orchestration and host storage behavior still require manual verification.
 
-There are no automated tests for successful-month caching, obsolete-load rejection, deduplication, partial failures, automatic versus explicit source selection, or retry eligibility. Until a test architecture is confirmed, `npm run build` is the production verification command.
+Pure Exchange orchestration tests cover failed automatic discovery alongside configured sources, individual event failures, retained successful results, and success-only completion callbacks. Settings-discovery helper tests cover failure completion and obsolete-response rejection. Full coordinator month caching, deduplication, other-family orchestration, UI wiring and host integration remain manual verification layers. `npm run build` is the production verification command.
 
 ## Rendering and interaction
 

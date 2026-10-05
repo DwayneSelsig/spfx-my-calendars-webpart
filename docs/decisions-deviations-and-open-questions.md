@@ -128,6 +128,15 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Teams Shifts includes all shifts returned for all Teams where the current user is a direct member.
 - It is not limited to shifts assigned to the current user.
 
+### DEC-022 — Mailbox identity and discovery feedback
+
+- **Status:** Decision
+- Configured Exchange mailboxes accept UPN, object ID and primary SMTP (`mail`). Secondary aliases remain outside scope; delegated `User.ReadBasic.All` supports the needed basic-field identity resolution.
+- Identity resolution is separate from calendar access. Zero/multiple identity matches and request failures are distinct; discovery/event 404 does not prove a missing mailbox.
+- Active settings discovery completes loading on success and failure, clears stale results, ignores obsolete requests and shows localized error/empty feedback. Audience selections survive discovery failures and changes to search results.
+- Audience discovery follows all result pages and sorts locally without Graph `$orderby`. Group-type restrictions and membership semantics are unchanged (DEV-002).
+- LimitedDetails support has no unverified fallback; existing event fields/endpoints remain in use and tenant validation is required.
+
 ### INT-001 — Mandatory-source failure records
 
 - **Status:** Intention
@@ -155,9 +164,10 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### DEV-007 — Exchange mailbox validation uses the generic HTTP client
 
-- **Current state:** mailbox validation calls Graph with SPFx `HttpClient`; calendar discovery uses the authenticated Graph client.
-- **Risk:** validation can reject an accessible mailbox before the authoritative Graph-client call.
-- **Desired state:** not confirmed; do not refactor without scope and verification.
+- **Status:** Resolved
+- PR #5 switched the original user lookup to authenticated Graph access.
+- DEC-022 replaces boolean existence validation with identity resolution for UPN, object ID and primary SMTP, followed by authoritative calendar discovery. Identity lookup, discovery and event errors remain distinguishable.
+- There is no generic HTTP fallback.
 
 ### DEV-008 — Some “all” source modes do not page all data
 
@@ -186,7 +196,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Resolved
 - Unused `HttpClient` dependencies were removed from Planner, SharePoint, Teams Shifts, and Unified Group services.
-- `ExchangeCalendarService` retains its active `HttpClient` fallback.
+- The unused Exchange `HttpClient` dependency and Graph base-URL constant were also removed; all Exchange calls use the authenticated Graph client.
 
 ### OQ-002 — Mandatory-source retry
 
@@ -326,7 +336,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Technical debt
 - Focused pure tests cover administrator settings normalization, property-persistence hand-off, and core browser-cache behavior.
-- React panel interaction, SPFx host integration, personal settings, migration breadth, policy, source mapping, orchestration, and failure contracts still lack automated regression protection.
+- React panel interaction, SPFx host integration, personal settings, migration breadth, policy, broader source mapping, full orchestration, and host failure contracts still lack complete automated regression protection. Pure Exchange orchestration, mailbox identity/discovery, audience discovery and obsolete-request handling have focused mock/helper tests.
 - `npm run build` remains the production test, build, and package verification command.
 
 ### ASM-001 — Release version source

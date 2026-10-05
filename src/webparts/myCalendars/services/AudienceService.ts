@@ -29,26 +29,23 @@ export class AudienceService {
     }
 
     try {
-      const data = await this.graphClient
+      let data = await this.graphClient
         .api('/groups')
         .header('ConsistencyLevel', 'eventual')
-        .query({
-          $select: 'id,displayName',
-          $filter: filterSegments.join(' and '),
-          // $orderby: 'displayName', // Not supported
-          $top: 50
-        })
+        .query({ $select: 'id,displayName', $filter: filterSegments.join(' and '), $top: 50 })
         .get();
-
-      return (data.value || [])
-        .map((item: { id?: string; displayName?: string }) => ({
-          id: item.id || '',
-          displayName: item.displayName || strings.UnnamedSecurityGroupLabel
-        }))
-        .filter((item: IEntraSecurityGroup) => !!item.id);
+      const groups = new Map<string, IEntraSecurityGroup>();
+      for (;;) {
+        (data.value || []).forEach((item: { id?: string; displayName?: string }) => {
+          if (item.id) groups.set(item.id, { id: item.id, displayName: item.displayName || strings.UnnamedSecurityGroupLabel });
+        });
+        if (!data['@odata.nextLink']) break;
+        data = await this.graphClient.api(data['@odata.nextLink']).header('ConsistencyLevel', 'eventual').get();
+      }
+      return Array.from(groups.values()).sort((a, b) => a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id));
     } catch (error) {
       console.error('Failed to load Entra security groups:', error);
-      return [];
+      throw error;
     }
   }
 

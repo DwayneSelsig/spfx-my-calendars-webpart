@@ -11,3 +11,14 @@ export const UnnamedListLabel = 'Unnamed List';
 export const ProgressLabel = 'Progress: {0}%';
 export const ChecklistLabel = 'Checklist: {0}/{1} completed';
 export const ActivitiesLabel = 'Activities: {0}';
+
+export const MailboxInputHelpLabel = "Enter a UPN, object ID or primary SMTP address. Secondary aliases are not supported.";
+export const MailboxRequiredLabel = "Enter a mailbox identifier.";
+export const MailboxNotFoundLabel = "No user was found for this UPN, object ID or primary SMTP address.";
+export const MailboxAmbiguousLabel = "This address matches multiple users. Enter the mailbox UPN or object ID.";
+export const MailboxResolutionErrorLabel = "The mailbox identity could not be resolved. Check Graph permission approval and try again.";
+export const ExchangeDiscoveryErrorLabel = "Calendars could not be loaded. Check the mailbox identifier and your calendar access, then try again. Limited calendar permissions may prevent discovery.";
+export const NoMailboxCalendarsLabel = "No calendars were returned for this mailbox.";
+export const SecurityGroupsLoadErrorLabel = "Security groups could not be loaded. Try searching again. Your selection has been retained.";
+export const NoSecurityGroupsLabel = "No security groups found.";
+export const UnnamedSecurityGroupLabel = 'Unnamed security group';
