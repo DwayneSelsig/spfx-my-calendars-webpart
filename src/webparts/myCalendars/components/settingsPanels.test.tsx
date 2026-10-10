@@ -551,16 +551,52 @@ describe('settings panels awaited lifecycle', () => {
     expect(panel.state.exchangeMailbox).toBe('shared@example.com');
     expect(pickerProps().selectedMailbox).toEqual(mailbox);
     expect(getCalendars).not.toHaveBeenCalled();
-    await act(async () => { click('LoadOtherMailboxLabel'); });
+    await act(async () => { click('LoadCalendarsLabel'); });
     expect(getCalendars).toHaveBeenCalledWith('shared@example.com');
     act(() => pickerProps().onInputChange('manual-object-id'));
     expect(panel.state.exchangeMailboxPerson).toBeUndefined();
     expect(panel.state.exchangeMailboxResolved).toBe(false);
-    await act(async () => { click('LoadOtherMailboxLabel'); });
+    await act(async () => { click('LoadCalendarsLabel'); });
     expect(getCalendars).toHaveBeenLastCalledWith('manual-object-id');
     act(() => pickerProps().onChange(undefined));
     expect(panel.state.exchangeMailbox).toBe('');
-    expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'LoadOtherMailboxLabel')?.disabled).toBe(true);
+    expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'LoadCalendarsLabel')?.disabled).toBe(true);
+  });
+
+  it('starts personal Exchange addition with Outlook guidance and shows loaded calendars below mailbox entry', async () => {
+    const { panel } = user();
+    const calendars = [{ id: 'cal-id', name: 'Shared calendar', hexColor: '#0078d4', isDefaultCalendar: true }];
+    const pending = resultDeferred<typeof calendars>();
+    const getCalendars = jest.fn(() => pending.promise);
+    const wizard = panel as unknown as {
+      exchangeService: { getCalendars: typeof getCalendars };
+      handleSelectAddType: (type: 'exchange') => Promise<void>;
+      handleExchangeMailboxInputChange: (query: string) => void;
+      handleBackOneStep: () => void;
+    };
+    wizard.exchangeService = { getCalendars };
+    act(() => panel.setState({ showAddDialog: true }));
+    await act(async () => { await wizard.handleSelectAddType('exchange'); });
+    expect(panel.state.addingCalendarStep).toBe('exchange-outlook');
+    expect(document.body.textContent).toContain('OutlookCalendarRecommendationLabel');
+    expect(document.querySelector('input[aria-label="EnterMailboxEmailLabel"]')).toBeNull();
+    expect(getCalendars).not.toHaveBeenCalled();
+    click('LoadOtherMailboxLabel');
+    expect(document.body.textContent).not.toContain('OutlookCalendarRecommendationLabel');
+    const input = document.querySelector('input[aria-label="EnterMailboxEmailLabel"]')!;
+    expect(input).not.toBeNull();
+    act(() => wizard.handleExchangeMailboxInputChange('shared@example.com'));
+    click('LoadCalendarsLabel');
+    expect(document.querySelector('input[aria-label="EnterMailboxEmailLabel"]')).not.toBeNull();
+    expect(panel.state.exchangeCalendarsLoading).toBe(true);
+    await act(async () => { pending.resolve(calendars); await pending.promise; });
+    const calendar = Array.from(document.querySelectorAll('strong')).find(item => item.textContent === 'Shared calendar')!;
+    expect(calendar).toBeDefined();
+    expect(input.compareDocumentPosition(calendar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(Array.from(document.querySelectorAll('button')).some(button => button.textContent === 'LoadOtherMailboxLabel')).toBe(false);
+    act(() => wizard.handleBackOneStep());
+    expect(panel.state.addingCalendarStep).toBe('exchange-outlook');
+    expect(panel.state.exchangeCalendars).toEqual([]);
   });
 
   it.each(['new input', 'cancel'])('discards personal mailbox suggestions after %s', async reason => {

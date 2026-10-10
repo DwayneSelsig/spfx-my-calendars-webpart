@@ -171,6 +171,7 @@ define([], function() {
     ,"OutlookCalendarLabel": "Outlook-agenda"
     ,"Microsoft365GroupTeamsLabel": "Microsoft 365-groep / Teams"
     ,"OutlookCalendarDescription": "Outlook-agenda's beheren (wordt in een nieuw venster geopend)"
+    ,"OutlookCalendarRecommendationLabel": "We raden aan de agenda in Outlook toe te voegen. Deze verschijnt dan automatisch in Outlook en in dit webonderdeel. Kies Ander postvak laden om een agenda alleen aan dit webonderdeel toe te voegen."
     ,"AddGroupAndTeamCalendarDescription": "Een agenda uit een Microsoft 365-groep of Team toevoegen"
     ,"TeamsShiftsDescription": "Diensten uit Teams Shifts weergeven"
     ,"PublishIcsCatalogItemDescription": "Deze ICS-feed publiceren als selecteerbaar catalogusitem"

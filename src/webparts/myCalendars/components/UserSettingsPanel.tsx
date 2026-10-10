@@ -51,7 +51,7 @@ interface IUserSettingsPanelState {
   userExchangeCalendarsError?: string;
   // Add calendar flow state
   addingCalendarType: CalendarSourceType | undefined;
-  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options' | 'teams-shifts' | 'unified-group-select';
+  addingCalendarStep: 'initial' | 'sharepoint-site' | 'sharepoint-list' | 'sharepoint-fields' | 'exchange-outlook' | 'exchange-calendar' | 'exchange-mailbox' | 'ics' | 'planner-plan' | 'planner-options' | 'teams-shifts' | 'unified-group-select';
   // SharePoint flow
   spSites: ISharePointSite[];
   spSitesLoading: boolean;
@@ -329,7 +329,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       if (!this.isCurrentSession(session)) return;
       this.setSessionState(session, { spSites: sites, spSitesLoading: false });
     } else if (type === 'exchange') {
-      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'exchange-mailbox' });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'exchange-outlook' });
     } else if (type === 'ics') {
       this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'ics' });
     } else if (type === 'planner') {
@@ -399,6 +399,9 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     } else if (addingCalendarType === 'exchange') {
       if (this.state.exchangeSelectedCalendarId) {
         this.setSessionState(this.editSession, { exchangeSelectedCalendarId: undefined });
+      } else if (addingCalendarStep !== 'exchange-outlook') {
+        this.handleExchangeMailboxChange('');
+        this.setSessionState(this.editSession, { addingCalendarStep: 'exchange-outlook' });
       } else {
         this.handleBackToTypeSelection();
       }
@@ -427,7 +430,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
 
     const showBackButton = addingCalendarType && (
       (addingCalendarType === 'sharepoint' && (this.state.spSelectedSite || this.state.spSelectedList)) ||
-      (addingCalendarType === 'exchange' && this.state.exchangeSelectedCalendarId)
+      (addingCalendarType === 'exchange' && addingCalendarStep !== 'exchange-outlook')
     );
 
     return (
@@ -1060,13 +1063,13 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       );
     }
 
-    if (exchangeCalendarsLoading) {
-      return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
-    }
-
-    if (exchangeMailboxResolved && exchangeCalendars.length > 0) {
+    if (this.state.addingCalendarStep !== 'exchange-outlook') {
       return (
         <Stack tokens={{ childrenGap: 12 }}>
+          {this.renderExchangeMailboxPicker()}
+          <PrimaryButton text={strings.LoadCalendarsLabel} disabled={!exchangeMailbox.trim() || exchangeCalendarsLoading} onClick={this.handleExchangeLookupMailbox} />
+          {exchangeCalendarsLoading && <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />}
+          {exchangeMailboxResolved && exchangeCalendars.length > 0 && <>
           <Label>{formatLocalizedString(strings.SelectCalendarFromMailboxLabel, exchangeMailbox || strings.YourMailboxLabel)}</Label>
           <Stack tokens={{ childrenGap: 8 }}>
             {exchangeCalendars.map(cal => (
@@ -1101,13 +1104,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
             ))}
           </Stack>
 
-          {/* Option to search another mailbox */}
-          <div style={{ borderTop: '1px solid #edebe9', paddingTop: 12, marginTop: 8 }}>
-            {this.renderExchangeMailboxPicker()}
-            <div style={{ marginTop: 8 }}>
-              <PrimaryButton text={strings.LoadOtherMailboxLabel} disabled={!exchangeMailbox.trim()} onClick={this.handleExchangeLookupMailbox} />
-            </div>
-          </div>
+          </>}
         </Stack>
       );
     }
@@ -1115,9 +1112,8 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     // Default: Show instructions to open Outlook
     return (
       <Stack tokens={{ childrenGap: 16 }}>
-        {this.renderExchangeMailboxPicker()}
-        <PrimaryButton text={strings.LoadOtherMailboxLabel} disabled={!exchangeMailbox.trim()} onClick={this.handleExchangeLookupMailbox} />
         <Label>{strings.OutlookCalendarDescription}</Label>
+        <div>{strings.OutlookCalendarRecommendationLabel}</div>
         <div style={{
           padding: '16px',
           backgroundColor: '#f3f2f1',
@@ -1157,6 +1153,10 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
             window.open('https://outlook.cloud.microsoft/calendar/addcalendar', '_blank', 'noopener,noreferrer');
             this.handleCloseAddDialog();
           }}
+        />
+        <DefaultButton
+          text={strings.LoadOtherMailboxLabel}
+          onClick={() => this.setSessionState(this.editSession, { addingCalendarStep: 'exchange-mailbox' })}
         />
       </Stack>
     );

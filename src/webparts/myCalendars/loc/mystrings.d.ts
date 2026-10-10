@@ -170,6 +170,7 @@ declare interface IMyCalendarsWebPartStrings {
   OutlookCalendarLabel: string;
   Microsoft365GroupTeamsLabel: string;
   OutlookCalendarDescription: string;
+  OutlookCalendarRecommendationLabel: string;
   AddGroupAndTeamCalendarDescription: string;
   TeamsShiftsDescription: string;
   PublishIcsCatalogItemDescription: string;
