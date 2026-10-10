@@ -41,7 +41,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Display Graph calendar availability in Day, Week, Month, Search, and Event Details while preserving the calendar color as source identity. Availability uses icons, outlines, and theme-aware patterns; the signed-in user's response is shown only for events loaded from their own mailbox.
 - Keep declined personal events visible with a response icon, muted presentation, and struck-through title.
 - Set a color for each configured source and optionally show source logos by service type.
-- Set a preferred timeline start, visible hours, weekends, and a 15, 30, or 60 minute grid.
+- Choose personal timeline start time, visible hours and weekends through three compact dropdowns, each with an option to follow the administrator default. Administrators set a 15, 30, or 60 minute grid.
 - Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
 - Use organization theme colors and support light and dark themes.
 - Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.

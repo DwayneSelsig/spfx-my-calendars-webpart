@@ -90,6 +90,11 @@ declare interface IMyCalendarsWebPartStrings {
   CancelLabel: string;
   ResetToDefaultsLabel: string;
   ResetCalendarSettingsTitle: string;
+  AdminDefaultValueLabel: string;
+  HourCountLabel: string;
+  WeekendPreferenceLabel: string;
+  ShowOptionLabel: string;
+  HideOptionLabel: string;
   TimelinePreferencesLabel: string;
   UsePersonalStartTimeLabel: string;
   PreferredStartTimeLabel: string;

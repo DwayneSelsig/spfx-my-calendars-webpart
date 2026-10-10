@@ -1843,13 +1843,19 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     const { isOpen } = this.props;
     const { settings, showAddDialog, userExchangeCalendars, userExchangeCalendarsLoading } = this.state;
     const effectiveVisibleHours = settings.userVisibleHourCount ?? settings.visibleHourCount;
-    const effectiveStartMinutes = settings.userPreferredStartMinutes ?? settings.preferredStartMinutes;
-    const startOptions: IDropdownOption[] = [];
+    const adminDefaultKey = 'admin-default';
+    const startOptions: IDropdownOption[] = [{
+      key: adminDefaultKey,
+      text: formatLocalizedString(strings.AdminDefaultValueLabel, formatCalendarTime(new Date(2000, 0, 1, 0, settings.preferredStartMinutes), this.props.locale))
+    }];
     const latestStart = Math.max(0, 24 * 60 - effectiveVisibleHours * 60);
     for (let minutes = 0; minutes <= latestStart; minutes += settings.slotDurationMinutes) {
       startOptions.push({ key: minutes, text: formatCalendarTime(new Date(2000, 0, 1, 0, minutes), this.props.locale) });
     }
-    const visibleHourOptions = Array.from({ length: 24 }, (_, index) => ({ key: index + 1, text: String(index + 1) }));
+    const visibleHourOptions: IDropdownOption[] = [
+      { key: adminDefaultKey, text: formatLocalizedString(strings.AdminDefaultValueLabel, formatLocalizedString(strings.HourCountLabel, settings.visibleHourCount)) },
+      ...Array.from({ length: 24 }, (_, index) => ({ key: index + 1, text: formatLocalizedString(strings.HourCountLabel, index + 1) }))
+    ];
 
     return (
       <Panel
@@ -1867,63 +1873,52 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
           this.renderAddCalendarFlow()
         ) : (
           <Stack tokens={{ childrenGap: 16 }}>
-            <div style={{ order: 3 }}>
+            <Stack tokens={{ childrenGap: 12 }} style={{ order: 3 }}>
               <Label>{strings.TimelinePreferencesLabel}</Label>
-              <Toggle
-                label={strings.UsePersonalStartTimeLabel}
-                checked={settings.userPreferredStartMinutes !== undefined}
-                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: { ...settings, userPreferredStartMinutes: checked ? settings.preferredStartMinutes : undefined } })}
-                onText={strings.OnLabel}
-                offText={strings.OffLabel}
-              />
               <Dropdown
                 label={strings.PreferredStartTimeLabel}
-                disabled={settings.userPreferredStartMinutes === undefined}
-                selectedKey={effectiveStartMinutes}
+                selectedKey={settings.userPreferredStartMinutes ?? adminDefaultKey}
                 options={startOptions}
-                onChange={(_, option) => this.setSessionState(this.editSession, { settings: { ...settings, userPreferredStartMinutes: Number(option?.key) } })}
-              />
-              <Toggle
-                label={strings.UsePersonalVisibleHoursLabel}
-                checked={settings.userVisibleHourCount !== undefined}
-                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: { ...settings, userVisibleHourCount: checked ? settings.visibleHourCount : undefined } })}
-                onText={strings.OnLabel}
-                offText={strings.OffLabel}
+                onChange={(_, option) => {
+                  if (!option) return;
+                  this.setSessionState(this.editSession, { settings: { ...settings,
+                    userPreferredStartMinutes: option.key === adminDefaultKey ? undefined : Number(option.key)
+                  } });
+                }}
               />
               <Dropdown
                 label={strings.VisibleHoursLabel}
-                disabled={settings.userVisibleHourCount === undefined}
-                selectedKey={effectiveVisibleHours}
+                selectedKey={settings.userVisibleHourCount ?? adminDefaultKey}
                 options={visibleHourOptions}
                 onChange={(_, option) => {
-                  const userVisibleHourCount = Number(option?.key);
-                  const userPreferredStartMinutes = Math.min(effectiveStartMinutes, 24 * 60 - userVisibleHourCount * 60);
-                  this.setSessionState(this.editSession, { settings: { ...settings, userVisibleHourCount, userPreferredStartMinutes: settings.userPreferredStartMinutes === undefined ? undefined : userPreferredStartMinutes } });
+                  if (!option) return;
+                  const userVisibleHourCount = option.key === adminDefaultKey ? undefined : Number(option.key);
+                  const visibleHours = userVisibleHourCount ?? settings.visibleHourCount;
+                  const userPreferredStartMinutes = settings.userPreferredStartMinutes === undefined ? undefined
+                    : Math.min(settings.userPreferredStartMinutes, 24 * 60 - visibleHours * 60);
+                  this.setSessionState(this.editSession, { settings: { ...settings, userVisibleHourCount, userPreferredStartMinutes } });
                 }}
               />
-              <Toggle
-                label={strings.UsePersonalWeekendPreferenceLabel}
-                checked={settings.userShowWeekends !== undefined}
-                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: {
-                  ...settings,
-                  showWeekends: checked ? settings.showWeekends : settings.adminShowWeekends,
-                  userShowWeekends: checked ? settings.showWeekends : undefined
-                } })}
-                onText={strings.OnLabel}
-                offText={strings.OffLabel}
+              <Dropdown
+                label={strings.WeekendPreferenceLabel}
+                selectedKey={settings.userShowWeekends === undefined ? adminDefaultKey : settings.userShowWeekends ? 'show' : 'hide'}
+                options={[
+                  { key: adminDefaultKey, text: formatLocalizedString(strings.AdminDefaultValueLabel, settings.adminShowWeekends ? strings.ShowOptionLabel : strings.HideOptionLabel) },
+                  { key: 'show', text: strings.ShowOptionLabel },
+                  { key: 'hide', text: strings.HideOptionLabel }
+                ]}
+                onChange={(_, option) => {
+                  if (!option) return;
+                  const userShowWeekends = option.key === adminDefaultKey ? undefined : option.key === 'show';
+                  this.setSessionState(this.editSession, { settings: { ...settings,
+                    userShowWeekends, showWeekends: userShowWeekends ?? settings.adminShowWeekends
+                  } });
+                }}
               />
-              <Toggle
-                label={strings.ShowWeekendsLabel}
-                disabled={settings.userShowWeekends === undefined}
-                checked={settings.showWeekends}
-                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: { ...settings, showWeekends: !!checked, userShowWeekends: !!checked } })}
-                onText={strings.OnLabel}
-                offText={strings.OffLabel}
-              />
-              <div style={{ marginTop: 6, fontSize: 12, color: '#605e5c' }}>
-                {formatLocalizedString(strings.GridSummaryLabel, settings.slotDurationMinutes, settings.showWeekends ? strings.WeekendsShownLabel : strings.WeekendsHiddenLabel)}
+              <div style={{ fontSize: 12, color: '#605e5c' }}>
+                {formatLocalizedString(strings.GridSummaryLabel, settings.slotDurationMinutes)}
               </div>
-            </div>
+            </Stack>
 
             {/* Add Calendar Button at Top */}
             <div style={{ order: 1 }}>

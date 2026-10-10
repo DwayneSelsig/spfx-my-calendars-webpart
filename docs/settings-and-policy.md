@@ -283,6 +283,8 @@ The current personal panel exposes:
 - applicable administrator ICS subscription links opening Outlook with one click, alongside manual title/URL entry; and
 - reset of current and legacy personal-settings files.
 
+The timeline preferences **MUST** use three vertically stacked dropdowns for start time, visible hours and weekends. Each offers an administrator-default option showing its current value and explicit personal choices. Selecting the administrator default removes only that preference override; choosing an equal personal value remains explicit. Changing or resetting visible hours clamps an existing personal start time to fit within the day without creating a start-time override. The summary shows only the administrator-controlled grid duration. See DEC-028.
+
 The Outlook and SharePoint section headers expose a tri-state bulk visibility control derived entirely from their individual states. Outlook combines `exchangeCalendarStates` with configured/effective Exchange `isEnabled`; SharePoint uses configured/effective `isEnabled`. Mixed or hidden groups become fully visible when activated, while fully visible groups hide only their optional calendars. Mandatory calendars remain enabled. The controls do not store group state and do not alter Planner, Unified Group, or Teams Shifts automatic-mode fields.
 
 SharePoint rows display site name separately from calendar name. Missing legacy names are resolved best-effort when a panel opens and are persisted only when the owning personal or administrator draft is explicitly saved.

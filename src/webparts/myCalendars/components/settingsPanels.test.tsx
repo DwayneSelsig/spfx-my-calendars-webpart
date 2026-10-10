@@ -89,6 +89,80 @@ describe('settings panels awaited lifecycle', () => {
     act(() => { Simulate.click(option); });
   }
 
+  function timelineDropdown(index: number): HTMLElement {
+    const label = Array.from(document.querySelectorAll('label')).find(item => item.textContent === 'TimelinePreferencesLabel')!;
+    return label.parentElement!.querySelectorAll<HTMLElement>('[role="combobox"]')[index];
+  }
+
+  function selectTimeline(index: number, optionIndex: number): void {
+    act(() => { Simulate.click(timelineDropdown(index)); });
+    const option = document.querySelectorAll<HTMLElement>('[role="option"]')[optionIndex];
+    expect(option).toBeDefined();
+    act(() => { Simulate.click(option); });
+  }
+
+  it('uses three labelled timeline dropdowns with independent defaults and explicit equal choices', () => {
+    const { panel, props } = user({ locale: 'nl-NL' });
+    for (let index = 0; index < 3; index++) {
+      expect(timelineDropdown(index).textContent).toContain('AdminDefaultValueLabel');
+      expect(timelineDropdown(index).getAttribute('aria-labelledby')).toBeTruthy();
+      expect(timelineDropdown(index).getAttribute('tabindex')).toBe('0');
+    }
+    expect(document.body.textContent).not.toContain('UsePersonalStartTimeLabel');
+    expect(document.body.textContent).not.toContain('UsePersonalVisibleHoursLabel');
+    expect(document.body.textContent).not.toContain('UsePersonalWeekendPreferenceLabel');
+    selectTimeline(0, 17); // 08:00 on the default 30-minute grid.
+    selectTimeline(1, 10);
+    selectTimeline(2, 1);
+    expect(panel.state.settings).toMatchObject({ userPreferredStartMinutes: 480, userVisibleHourCount: 10, userShowWeekends: true });
+    for (let index = 0; index < 3; index++) expect(timelineDropdown(index).textContent).not.toContain('AdminDefaultValueLabel');
+    selectTimeline(0, 0);
+    expect(panel.state.settings.userPreferredStartMinutes).toBeUndefined();
+    expect(panel.state.settings.userVisibleHourCount).toBe(10);
+    expect(panel.state.settings.userShowWeekends).toBe(true);
+    selectTimeline(1, 0);
+    selectTimeline(2, 2);
+    expect(panel.state.settings.showWeekends).toBe(false);
+    selectTimeline(2, 0);
+    expect(panel.state.settings.userShowWeekends).toBeUndefined();
+    expect(panel.state.settings.showWeekends).toBe(panel.state.settings.adminShowWeekends);
+    expect(props.onPreview).toHaveBeenLastCalledWith(panel.state.settings);
+    expect(props.onSave).not.toHaveBeenCalled();
+  });
+
+  it('clamps a personal start when visible hours change or reset without creating an inherited start override', () => {
+    const { panel } = user({ settings: { ...structuredClone(defaultCalendarSettings), userVisibleHourCount: 2, userPreferredStartMinutes: 1200 } });
+    selectTimeline(1, 4);
+    expect(panel.state.settings.userPreferredStartMinutes).toBe(1200);
+    selectTimeline(1, 0);
+    expect(panel.state.settings.userVisibleHourCount).toBeUndefined();
+    expect(panel.state.settings.userPreferredStartMinutes).toBe(840);
+    selectTimeline(1, 24);
+    expect(panel.state.settings.userPreferredStartMinutes).toBe(0);
+    selectTimeline(0, 0);
+    selectTimeline(1, 1);
+    selectTimeline(1, 0);
+    expect(panel.state.settings.userPreferredStartMinutes).toBeUndefined();
+  });
+
+  it('saves timeline dropdown edits and reloads the confirmed settings after cancel and reopen', async () => {
+    const { panel, props } = user();
+    selectTimeline(2, 2);
+    click('CancelLabel');
+    expect(props.onSave).not.toHaveBeenCalled();
+    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
+    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen />, host); });
+    expect(panel.state.settings.userShowWeekends).toBeUndefined();
+    selectTimeline(2, 2);
+    await act(async () => { click('SaveLabel'); });
+    expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ userShowWeekends: false, showWeekends: false }));
+    const saved = (props.onSave as jest.Mock).mock.calls[0][0];
+    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
+    act(() => { ReactDOM.render(<UserSettingsPanel {...props} settings={saved} isOpen />, host); });
+    expect(panel.state.settings.userShowWeekends).toBe(false);
+    expect(timelineDropdown(2).textContent).toContain('HideOptionLabel');
+  });
+
   function groupedSettings(): typeof defaultAdminWebPartSettings {
     const settings = structuredClone(defaultAdminWebPartSettings);
     const audiences = [{ groupId: 'hr', displayName: 'HR' }, { groupId: 'mt', displayName: 'MT' }];

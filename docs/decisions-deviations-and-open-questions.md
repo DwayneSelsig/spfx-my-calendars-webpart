@@ -48,6 +48,14 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - A user can store an explicit personal weekend preference or return to the administrator default.
 - Date and time labels use the current SharePoint page culture; there is no separate 12/24-hour setting.
 
+### DEC-028 — Compact personal timeline preferences
+
+- **Status:** Decision
+- Start time, visible hours and weekends each use one dropdown with an administrator-default option displaying the current base value, followed by personal choices.
+- Personal choices remain explicit even when equal to the administrator default; returning to the default removes only that override.
+- Changing or resetting visible hours clamps an existing personal start time without creating a new override. Settings precedence and persistence remain unchanged.
+- The block uses vertically stacked fields and a grid-duration summary without duplicate weekend information.
+
 ### DEC-011 — Supported hosts
 
 - **Status:** Decision
