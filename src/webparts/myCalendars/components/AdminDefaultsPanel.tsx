@@ -399,7 +399,8 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     this.savePending = true;
     const session = ++this.editSession;
     this.invalidateDialogDiscovery();
-    this.setState({ isSaving: true, saveError: undefined });
+    this.setState({ isSaving: true, saveError: undefined, spSitesLoading: false, spListsLoading: false,
+      plannerPlansLoading: false, unifiedGroupsLoading: false, exchangeCalendarsLoading: false, securityGroupsLoading: false });
     try {
       await this.props.onSave(structuredClone(this.state.settings));
       if (this.mounted && session === this.editSession) this.props.onDismiss();
@@ -480,6 +481,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
 
   private handleBackToTypeSelection = (): void => {
     if (!this.isCurrentSession(this.editSession)) return;
+    this.editSession++;
     this.setSessionState(this.editSession, { audienceFirst: false, audiencePreset: false, everyone: false, selectedExchangeCalendars: {}, exchangeAll: false, pendingSharePointSources: [], selectedSharePointLists: [] });
     this.invalidateDialogDiscovery();
     this.setSessionState(this.editSession, { exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
@@ -523,6 +525,10 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   };
 
   private handleBackOneStep = (): void => {
+    if (!this.isCurrentSession(this.editSession)) return;
+    this.editSession++;
+    this.setSessionState(this.editSession, { spSitesLoading: false, spListsLoading: false, plannerPlansLoading: false,
+      unifiedGroupsLoading: false, exchangeCalendarsLoading: false });
     this.sharePointFieldsGeneration++;
     this.audienceDiscovery.invalidate();
     this.setSessionState(this.editSession, { securityGroupsLoading: false, securityGroupsError: undefined, securityGroupsLoaded: false });
@@ -639,6 +645,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     this.setSessionState(session, { spSelectedSite: site, spListsLoading: true, spLists: [] });
     const lists = await this.sharePointService?.getCalendarLists(site.id) || [];
     if (!this.isCurrentSession(session)) return;
+    if (this.state.spSelectedSite?.id !== site.id) return;
     this.setSessionState(session, { spLists: lists, spListsLoading: false, addingCalendarStep: 'sharepoint-list' });
   };
 

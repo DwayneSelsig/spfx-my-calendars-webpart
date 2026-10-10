@@ -950,7 +950,6 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   private handleViewChange = async (view: CalendarViewType): Promise<void> => {
     if (view === 'search' || this.viewSavePending || this.props.isSettingsWritePending) return;
     this.viewSavePending = true;
-    const previousView = this.state.previousView;
     this.setState({ currentView: view, previousView: view, settingsWriteError: undefined }, () => {
       this.ensureVisibleRange(this.state.currentDate, view).catch(err => console.error('Failed to load visible range:', err));
     });
@@ -958,9 +957,10 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       await this.props.onDefaultViewChange(view);
     } catch (error) {
       console.error('Failed to save the personal default calendar view.', error);
+      const confirmedView = this.props.settings.defaultView;
       if (this.settingsUiMounted) this.setState(prev => ({
-        currentView: prev.currentView === 'search' ? 'search' : previousView,
-        previousView,
+        currentView: prev.currentView === 'search' ? 'search' : confirmedView,
+        previousView: confirmedView,
         settingsWriteError: strings.UserSettingsSaveErrorLabel
       }), () => { this.ensureVisibleRange().catch(err => console.error('Failed to restore visible range:', err)); });
     } finally {

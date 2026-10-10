@@ -111,6 +111,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   private mounted = false;
   private savePending = false;
   private editSession = 0;
+  private userCalendarSession = 0;
 
   private isCurrentSession(session: number): boolean {
     return this.mounted && this.props.isOpen && session === this.editSession && !this.savePending;
@@ -131,6 +132,13 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     if (!this.savePending) this.props.onDismiss();
   };
 
+  private setUserCalendarState<K extends 'userExchangeCalendars' | 'userExchangeCalendarsLoading' | 'userExchangeCalendarsError'>(
+    session: number, state: Pick<IUserSettingsPanelState, K>
+  ): void {
+    const isCurrent = (): boolean => this.mounted && this.props.isOpen && !this.savePending && session === this.userCalendarSession;
+    if (isCurrent()) this.setState(() => isCurrent() ? state : null);
+  }
+
   private readonly SITES_PER_PAGE = 20;
   private readonly mailboxDiscovery = new LatestDiscovery();
   private readonly userCalendarDiscovery = new LatestDiscovery();
@@ -145,7 +153,11 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       this.unifiedGroupService = new UnifiedGroupCalendarService(props.graphClient);
     }
 
-    this.state = {
+    this.state = this.createStateFromProps(props);
+  }
+
+  private createStateFromProps(props: IUserSettingsPanelProps): IUserSettingsPanelState {
+    return {
       settings: structuredClone(props.settings),
       isSaving: false, saveError: undefined,
       editingSourceId: undefined,
@@ -153,6 +165,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       // User Exchange calendars
       userExchangeCalendars: [],
       userExchangeCalendarsLoading: false,
+      userExchangeCalendarsError: undefined,
       addingCalendarType: undefined,
       addingCalendarStep: 'initial',
       // SharePoint
@@ -167,6 +180,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       // Exchange
       exchangeCalendars: [],
       exchangeCalendarsLoading: false,
+      exchangeDiscoveryError: undefined,
       exchangeMailbox: '',
       exchangeMailboxResolved: false,
       exchangeSelectedCalendarId: undefined,
@@ -206,16 +220,14 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       this.editSession++;
       this.invalidateDialogDiscovery();
       this.userCalendarDiscovery.invalidate();
+      this.userCalendarSession++;
       this.setState({ userExchangeCalendarsLoading: false, exchangeCalendarsLoading: false, exchangeDiscoveryError: undefined });
     }
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
-      this.setState({
-        settings: structuredClone(this.props.settings), isSaving: false, saveError: undefined, editingSourceId: undefined, showAddDialog: false,
-        addingCalendarType: undefined, addingCalendarStep: 'initial', spCurrentPage: 0
-      }, () => {
+      this.setState(this.createStateFromProps(this.props), () => {
         this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
+        this.loadUserExchangeCalendars().catch(err => console.error('Failed to reload Exchange calendars:', err));
       });
-      this.loadUserExchangeCalendars().catch(err => console.error('Failed to reload Exchange calendars:', err));
     }
   }
 
@@ -228,6 +240,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     this.editSession++;
     this.invalidateDialogDiscovery();
     this.userCalendarDiscovery.invalidate();
+    this.userCalendarSession++;
   }
 
   private initializeGraphClient(client: MSGraphClientV3): void {
@@ -263,21 +276,20 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   };
 
   private loadUserExchangeCalendars = async (): Promise<void> => {
-    const session = this.editSession;
-    if (!this.isCurrentSession(session)) return;
+    const session = this.userCalendarSession;
+    if (!this.mounted || !this.props.isOpen || this.savePending) return;
     await this.userCalendarDiscovery.run(async () => {
       if (!this.exchangeService) throw new Error('GraphClient not initialized');
       return this.exchangeService.getCalendars();
     }, {
-      start: () => this.setSessionState(session, { userExchangeCalendarsLoading: true, userExchangeCalendarsError: undefined, userExchangeCalendars: [] }),
-      success: calendars => this.setSessionState(session, { userExchangeCalendars: calendars }),
+      start: () => this.setUserCalendarState(session, { userExchangeCalendarsLoading: true, userExchangeCalendarsError: undefined, userExchangeCalendars: [] }),
+      success: calendars => this.setUserCalendarState(session, { userExchangeCalendars: calendars }),
       error: error => {
         console.error('Error loading user Exchange calendars:', error);
-        this.setSessionState(session, { userExchangeCalendarsError: getExchangeDiscoveryErrorMessage(error) });
+        this.setUserCalendarState(session, { userExchangeCalendarsError: getExchangeDiscoveryErrorMessage(error) });
       },
-      finish: () => this.setSessionState(session, { userExchangeCalendarsLoading: false })
+      finish: () => this.setUserCalendarState(session, { userExchangeCalendarsLoading: false })
     });
-    if (!this.isCurrentSession(session)) return;
   };
 
   private generateId(): string { return `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
@@ -362,6 +374,11 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   };
 
   private handleBackOneStep = (): void => {
+    if (!this.isCurrentSession(this.editSession)) return;
+    this.editSession++;
+    this.invalidateDialogDiscovery();
+    this.setSessionState(this.editSession, { spSitesLoading: false, spListsLoading: false, plannerPlansLoading: false,
+      unifiedGroupsLoading: false, exchangeCalendarsLoading: false });
     const { addingCalendarStep, addingCalendarType } = this.state;
 
     if (addingCalendarType === 'sharepoint') {
@@ -446,6 +463,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     this.setSessionState(session, { spSelectedSite: site, spListsLoading: true, spLists: [] });
     const lists = await this.sharePointService?.getCalendarLists(site.id) || [];
     if (!this.isCurrentSession(session)) return;
+    if (this.state.spSelectedSite?.id !== site.id) return;
     this.setSessionState(session, { spLists: lists, spListsLoading: false, addingCalendarStep: 'sharepoint-list' });
   };
 
@@ -453,6 +471,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     // Use organization primary color for first SharePoint calendar, or let user choose
     this.setSessionState(this.editSession, {
       spSelectedList: list,
+      spAvailableFields: [], spFieldMapping: {},
       newCalendarName: list.name,
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4'
     }, () => {
@@ -466,6 +485,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     const session = this.editSession;
     if (!this.isCurrentSession(session)) return;
     const { spSelectedSite } = this.state;
+    const isCurrentSelection = (): boolean => this.isCurrentSession(session) && this.state.spSelectedSite?.id === spSelectedSite?.id && this.state.spSelectedList?.id === list.id;
     if (!spSelectedSite || !this.sharePointService) {
       return;
     }
@@ -476,14 +496,14 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       if (!graphClient) return;
 
       const client = await Promise.resolve(graphClient);
-      if (!this.isCurrentSession(session)) return;
+      if (!isCurrentSelection()) return;
       if (!client) return;
 
       const columnsData = await client
         .api(`/sites/${spSelectedSite.id}/lists/${list.id}/columns`)
         .query({ $select: 'name,displayName,columnGroup' })
         .get();
-      if (!this.isCurrentSession(session)) return;
+      if (!isCurrentSelection()) return;
 
       const rawOptions: IDropdownOption[] = (columnsData.value || [])
         .filter((column: IGraphColumn) => column.name && !column.name.startsWith('_') && column.columnGroup !== '_Hidden')
@@ -509,7 +529,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
           .api(`/sites/${spSelectedSite.id}/lists/${list.id}/items`)
           .expand('fields')
           .get();
-        if (!this.isCurrentSession(session)) return;
+        if (!isCurrentSelection()) return;
 
         if (itemsData.value && itemsData.value.length > 0) {
           const fields = Object.keys(itemsData.value[0].fields || {});
@@ -544,6 +564,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
         });
       }
     } catch (error) {
+      if (!isCurrentSelection()) return;
       console.error('Failed to fetch SharePoint list fields:', error);
       // Fallback to next step anyway
       this.setSessionState(session, { addingCalendarStep: 'sharepoint-fields' });
@@ -710,7 +731,9 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     const session = ++this.editSession;
     this.invalidateDialogDiscovery();
     this.userCalendarDiscovery.invalidate();
-    this.setState({ isSaving: true, saveError: undefined });
+    this.userCalendarSession++;
+    this.setState({ isSaving: true, saveError: undefined, userExchangeCalendarsLoading: false, spSitesLoading: false,
+      spListsLoading: false, plannerPlansLoading: false, unifiedGroupsLoading: false, exchangeCalendarsLoading: false });
     try {
       await this.props.onSave(structuredClone(this.state.settings));
       if (this.mounted && session === this.editSession) this.props.onDismiss();
@@ -729,7 +752,9 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     const session = ++this.editSession;
     this.invalidateDialogDiscovery();
     this.userCalendarDiscovery.invalidate();
-    this.setState({ isSaving: true, saveError: undefined });
+    this.userCalendarSession++;
+    this.setState({ isSaving: true, saveError: undefined, userExchangeCalendarsLoading: false, spSitesLoading: false,
+      spListsLoading: false, plannerPlansLoading: false, unifiedGroupsLoading: false, exchangeCalendarsLoading: false });
     try {
       await this.props.onReset();
       if (this.mounted && session === this.editSession) this.props.onDismiss();
