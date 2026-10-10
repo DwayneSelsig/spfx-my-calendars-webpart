@@ -91,6 +91,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - Outlook and SharePoint have tri-state bulk visibility controls derived from individual calendar states; no separate group visibility state is stored.
+- The personal section headers place the bulk visibility eye icon at the far right, after the collapse indicator. Open, hidden and muted open eyes represent visible, hidden and mixed groups respectively; the button exposes its mixed state accessibly and operates independently of section expansion.
 - A fully visible group becomes hidden. A hidden or mixed group becomes fully visible.
 - Outlook bulk visibility updates current-user `exchangeCalendarStates` and configured/effective Exchange `isEnabled`; SharePoint updates configured/effective `isEnabled`.
 - Planner, Microsoft 365 Group/Team, and Teams Shifts discovery-mode settings are not visibility controls and receive no group visibility control in this scope.

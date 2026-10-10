@@ -287,6 +287,8 @@ The timeline preferences **MUST** use three vertically stacked dropdowns for sta
 
 The Outlook and SharePoint section headers expose a tri-state bulk visibility control derived entirely from their individual states. Outlook combines `exchangeCalendarStates` with configured/effective Exchange `isEnabled`; SharePoint uses configured/effective `isEnabled`. Mixed or hidden groups become fully visible when activated, while fully visible groups hide only their optional calendars. Mandatory calendars remain enabled. The controls do not store group state and do not alter Planner, Unified Group, or Teams Shifts automatic-mode fields.
 
+The bulk visibility control **MUST** be an eye icon at the far right of the section header, after the collapse indicator. Visible groups use an open eye, hidden groups use a muted hidden-eye icon, and mixed groups use a muted open eye with an accessible mixed pressed state. Activating the eye **MUST NOT** collapse or expand the section. See DEC-020.
+
 SharePoint rows display site name separately from calendar name. Missing legacy names are resolved best-effort when a panel opens and are persisted only when the owning personal or administrator draft is explicitly saved.
 
 The panel clones effective settings when opened, emits live `onPreview` changes, and awaits `onSave` or `onReset`. Cancel discards preview. It does not write storage.

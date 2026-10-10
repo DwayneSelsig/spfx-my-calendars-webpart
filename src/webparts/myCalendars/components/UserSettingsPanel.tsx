@@ -1641,17 +1641,6 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
               onClick={e => e.stopPropagation()}
             >
               {headerActions}
-              {visibilityState !== undefined && onVisibilityChange && (
-                <Checkbox
-                  checked={visibilityState === 'on'}
-                  indeterminate={visibilityState === 'mixed'}
-                  disabled={visibilityDisabled}
-                  ariaLabel={visibilityState === 'on' ? strings.HideAllCalendarsLabel : strings.ShowAllCalendarsLabel}
-                  title={visibilityState === 'on' ? strings.HideAllCalendarsLabel : strings.ShowAllCalendarsLabel}
-                  onChange={onVisibilityChange}
-                  styles={{ root: { margin: 0 } }}
-                />
-              )}
               {showLogoValue !== undefined && onShowLogoChange && (
                 <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.6 }}>{strings.ShowLogosLabel}</span>
@@ -1676,6 +1665,21 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
               flexShrink: 0
             }}
           />
+          {visibilityState !== undefined && onVisibilityChange && (
+            <IconButton
+              iconProps={{ iconName: visibilityState === 'off' ? 'Hide' : 'View' }}
+              disabled={visibilityDisabled}
+              aria-pressed={visibilityState === 'mixed' ? 'mixed' : visibilityState === 'on'}
+              ariaLabel={visibilityState === 'on' ? strings.HideAllCalendarsLabel : strings.ShowAllCalendarsLabel}
+              title={visibilityState === 'on' ? strings.HideAllCalendarsLabel : strings.ShowAllCalendarsLabel}
+              onClick={e => { e.stopPropagation(); onVisibilityChange(); }}
+              onKeyDown={e => e.stopPropagation()}
+              styles={{
+                root: { width: 28, height: 28, flexShrink: 0 },
+                icon: { fontSize: 16, opacity: visibilityState === 'mixed' ? 0.6 : 1, color: visibilityState === 'off' ? '#a19f9d' : 'inherit' }
+              }}
+            />
+          )}
         </div>
         {/* Expandable content */}
         {isExpanded && (
