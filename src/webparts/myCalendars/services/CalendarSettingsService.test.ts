@@ -45,8 +45,7 @@ describe('administrator settings normalization and loading', () => {
     };
 
     const loaded = loadAdminWebPartSettings({
-      current: JSON.stringify(persisted),
-      backup: JSON.stringify(defaultAdminWebPartSettings)
+      current: JSON.stringify(persisted)
     });
 
     expect(loaded.source).toBe('current');
@@ -128,17 +127,14 @@ describe('administrator settings normalization and loading', () => {
     expect(normalizeUserCalendarSettings({ ...defaultUserCalendarSettings, schemaVersion })).toBeUndefined();
   });
 
-  it('falls back from an unknown current administrator version to backup, legacy, and defaults', () => {
+  it('falls back from an unknown current administrator version to legacy and defaults', () => {
     const invalidCurrent = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 8 });
-    const backup = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 6, defaultView: 'day' });
+    expect(loadAdminWebPartSettings({ current: invalidCurrent }).source).toBe('defaults');
 
-    expect(loadAdminWebPartSettings({ current: invalidCurrent, backup })).toMatchObject({ source: 'backup', settings: { defaultView: 'day' } });
     expect(loadAdminWebPartSettings({
       current: invalidCurrent,
-      backup: invalidCurrent,
       legacy: JSON.stringify({ sources: [], defaultView: 'week' })
     })).toMatchObject({ source: 'legacy', settings: { defaultView: 'week' } });
-    expect(loadAdminWebPartSettings({ current: invalidCurrent, backup: invalidCurrent })).toMatchObject({ source: 'defaults' });
   });
 
   it('accepts unversioned personal data only through the explicit legacy migration path', () => {

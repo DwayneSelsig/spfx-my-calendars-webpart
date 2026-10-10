@@ -7,7 +7,7 @@ Read only the section selected by [AGENTS.md](../AGENTS.md). Requirements are no
 | Layer | Current representation | Persistence | Purpose |
 | --- | --- | --- | --- |
 | Hardcoded defaults | `defaultAdminWebPartSettings`, `defaultUserCalendarSettings`, `defaultCalendarSettings` | Source code | Complete fallback and normalization defaults |
-| Administrator settings | `IAdminWebPartSettings` | SPFx properties `adminSettings` and `adminSettingsBackup` | Web-part defaults, audience assignments, source catalog, ICS catalog |
+| Administrator settings | `IAdminWebPartSettings` | SPFx property `adminSettings` | Web-part defaults, audience assignments, source catalog, ICS catalog |
 | Legacy administrator input | `ILegacyCalendarSettings` in property `settings` | SPFx property | Migration input only |
 | Personal settings | `IUserCalendarSettings` | OneDrive App Folder JSON | Personal sources and minimal overrides |
 | Legacy personal input | `ILegacyCalendarSettings` | OneDrive App Folder legacy JSON | Migration input only |
@@ -27,7 +27,7 @@ Read only the section selected by [AGENTS.md](../AGENTS.md). Requirements are no
 The current implementation resolves settings in this order:
 
 1. Hardcoded defaults fill missing administrator and personal fields during normalization.
-2. Administrator settings load from current JSON, backup JSON, legacy administrator JSON, or defaults.
+2. Administrator settings load from current JSON, legacy administrator JSON, or defaults.
 3. Audience membership filters administrator-assigned sources and ICS catalog entries.
 4. Personal sources are appended after applicable administrator sources.
 5. Supported personal values replace administrator scalar defaults.
@@ -151,7 +151,7 @@ AudienceService owns discovery and membership; CalendarSettingsService owns thei
 
 ## Storage and migration
 
-**Read when:** changing administrator properties, current/backup recovery, OneDrive App Folder access, personal save/reset, schema normalization, or legacy migration. Related records: DEC-013, DEC-021, DEV-010, DEV-011, INT-001, OQ-003, OQ-004, and OQ-005.
+**Read when:** changing administrator properties, current/legacy/default loading, OneDrive App Folder access, personal save/reset, schema normalization, or legacy migration. Related records: DEC-013, DEC-021, DEC-025, DEC-026, DEV-010, INT-001, OQ-003 and OQ-004.
 
 ### Ownership
 
@@ -165,9 +165,8 @@ AudienceService owns discovery and membership; CalendarSettingsService owns thei
 | Input | Condition | Result |
 | --- | --- | --- |
 | `adminSettings` | Parses and normalizes | Used |
-| `adminSettingsBackup` | Current is invalid; backup parses and normalizes | Used with warning notice |
-| Legacy `settings` | Current forms unavailable/invalid; legacy shape parses | Migrated subset with notice |
-| Hardcoded defaults | No recoverable input | Used; notice shown after invalid current/backup data |
+| Legacy `settings` | Current unavailable/invalid; legacy shape parses | Migrated subset with notice |
+| Hardcoded defaults | No recoverable input | Used; notice shown after invalid current data |
 
 Administrator normalization drops malformed entries. The persisted schema separates sourceCatalog and audienceGroups from assignment records referencing their IDs. Runtime/editor assignments hydrate those references for the existing panels. Duplicate source/audience combinations and case-insensitive duplicate ICS URLs reject the payload; the same source may be assigned to different audiences. Mailbox rules persist stable mailbox identity, policy, default override capabilities and calendar-ID exceptions.
 
@@ -175,24 +174,31 @@ Current administrator and personal locations accept only integer schema versions
 
 ### Administrator save
 
-1. `AdminSettingsPanel` edits a deep-cloned draft.
-2. Saving calls `MyCalendarsWebPart.handleAdminSettingsSave`.
-3. The web part normalizes and serializes the draft. The custom property-field adapter reports that same JSON to SPFx for `adminSettings`, then `adminSettingsBackup`, before the helper synchronizes its local property bag. Each callback can therefore observe its own property transition.
-4. After the notifications succeed, the web part accepts the normalized in-memory administrator settings, reevaluates audiences and rebuilds effective settings. Only the latest administrator save refreshes the property pane and renders its completion.
+1. `AdminDefaultsPanel` opens an isolated complete draft from the latest accepted administrator settings. Incoming props never replace an open draft. Reset replaces only the draft with the complete defaults; Cancel persists nothing.
+2. The panel snapshots the draft and awaits its `Promise<void>` callback through `PropertyPaneAdminDefaultsManager` to `MyCalendarsWebPart`.
+3. The web part validates and serializes once. Its required SPFx commit callback hands the JSON to `adminSettings`. SPFx is the sole property writer; there is no additional local assignment or notification path.
+4. The web part accepts the configuration, then attempts audience/mailbox resolution and runtime rebuilding. Post-transfer failures are logged and exposed separately; they do not reject successful property transfer.
+5. Save closes the panel only after completion. The adapter reads current settings/notices through getters and updates its summary without `propertyPane.refresh()`.
 
-**Requirement:** accepted administrator changes **MUST** be reported through the SPFx property-pane callback before local synchronization overwrites both old property values. The final current and backup JSON **MUST** be identical. Existing assignment/source IDs and per-assignment policy **MUST** survive that hand-off. See DEC-025.
+**Requirements:** administrator settings **MUST** remain a complete `IAdminWebPartSettings`. Non-exposed fields, stable identities and policy **MUST** survive edits. UI-only wizard state **MUST NOT** be persisted. The panel and composition owner **MUST** prevent concurrent Save operations. A rejected transfer **MUST** retain the draft and restore controls; a partially changed property is restored through the same callback, with any restoration failure logged separately.
 
-**Fact:** backup is a same-save mirror, not a rotated previous revision. Accepted drafts are normalized before serialization. A thrown notification prevents accepting the draft in runtime settings. A completed callback is an SPFx hand-off, not proof that a SharePoint page was published; page save/publication and reload remain host verification.
+**SPFx caveat:** the custom field's `onRender` callback supplies the supported framework change bridge. A successful callback is an SPFx hand-off, not proof of SharePoint page publication. Save/publication/reload remains host verification. `onDispose` unmounts the adapter; async completions never update disposed controls. No timers or internal SPFx APIs are used.
 
-### Personal save and reset
+The former same-save administrator mirror has been removed. Loading uses current, explicit legacy input, then defaults. Existing mirror values are not promoted. Deserialization projects only the supported webpart properties so retired data is omitted from subsequent page serialization. See DEC-025 and OQ-005.
 
-1. `SettingsPanel` edits a deep clone of effective settings.
-2. `deriveUserCalendarSettings` produces personal values relative to applicable administrator settings. Explicit optional-source visibility choices are retained even when they equal the administrator default; other fields remain minimal permitted overrides.
-3. The web part resolves settings immediately and asks `SettingsStorageService` to save asynchronously.
-4. The UI renders the in-memory result before persistence success is known.
-5. Save failure is logged only; there is no user-visible error or rollback.
+### Personal preview, save and reset
 
-Reset deletes current and legacy personal files. In-memory reset occurs only after both deletions report success. A failure leaves current in-memory settings unchanged and is logged.
+`UserSettingsPanel` edits a clone of effective settings. Every draft change previews its consequences in the calendar through `MyCalendars`, the webpart preview callback and the existing derive/resolve policy model. Preview does not write OneDrive or administrator properties. Cancel discards preview; reopening uses the accepted configuration.
+
+**Requirement:** optimistic client updates are preferred when the desired outcome can be shown locally. The latest confirmed personal snapshot **MUST** stay separate from preview. A storage failure **MUST** restore that snapshot, resolved against current administrator policy, and show a localized error. Permitted overrides remain personal; administrator policy structures are never written to personal storage.
+
+Save derives personal settings, snapshots them, previews them and awaits `SettingsStorageService.saveUserSettings`. A false result rejects the callback. Success promotes the snapshot and closes the editor. Failure restores calendar state but retains the editable panel draft; editing again or retrying Save reactivates preview. Reset previews personal defaults and awaits deletion before accepting them. Legacy deletion occurs first, preserving the current file if legacy cleanup fails; current deletion completes reset. Reset failure restores calendar state and retains the original draft.
+
+Toolbar Day/Week/Month choices also update optimistically and await storage. Failure restores the confirmed view and displays a localized message. There is at most one personal write per webpart instance; Save/Reset, view selection and opening another draft are blocked during a write. Date and search navigation remain usable. Storage I/O remains exclusively in `SettingsStorageService`.
+
+Panels **MUST** await lifecycle-dependent writes, freeze draft editing and dismissal while saving, and close only after success. Edit-session and mount checks **MUST** reject obsolete discovery results, enrichment and save completions. Background draft changes **MUST NOT** alter a running save snapshot.
+
+Personal read failures continue to use the existing legacy/default fallback. Distinguishing absent files from unavailable storage remains open under OQ-004. Deleting two OneDrive files is not a server transaction; no retry/transaction framework is introduced.
 
 ### Administrator assignment migration
 
@@ -214,8 +220,7 @@ When the current file is absent, unreadable, or rejected for an unsupported sche
 
 | Mechanism/key | Data | Lifetime | Failure behavior |
 | --- | --- | --- | --- |
-| SPFx `adminSettings` | Current administrator JSON | Web-part persistence | Invalid value falls through to backup |
-| SPFx `adminSettingsBackup` | Same-save mirror | Web-part persistence | Used when current is invalid |
+| SPFx `adminSettings` | Current administrator JSON | Web-part persistence | Invalid value falls through to explicit legacy input or defaults |
 | SPFx `settings` | Legacy combined settings | Until externally removed | Migration input only |
 | OneDrive `Apps/SPFx-My-Calendar-Webpart/user-calendar-settings.json` | Personal settings | Until changed/reset | Read errors become unavailable; save returns false |
 | OneDrive `Apps/SPFx-My-Calendar-Webpart/calendar-settings.json` | Legacy personal settings | Until reset/external cleanup | Migration fallback only |
@@ -229,7 +234,7 @@ Personal settings are the only current product data written to OneDrive. When en
 
 ## Settings interfaces
 
-**Read when:** changing `SettingsPanel`, `AdminSettingsPanel`, property-pane integration, settings source-creation flows, exposed controls, or toolbar preference persistence. Related records: DEC-014, DEV-001, DEV-002, and DEV-003.
+**Read when:** changing `UserSettingsPanel`, `AdminDefaultsPanel`, property-pane integration, settings source-creation flows, exposed controls, or toolbar preference persistence. Related records: DEC-014, DEV-001, DEV-002, and DEV-003.
 
 ### Administrator interface
 
@@ -248,7 +253,7 @@ The current administrator panel exposes:
 
 Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
 
-`PropertyPaneAdminCalendarManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and reports the serialized current and backup values through the SPFx change callback.
+`PropertyPaneAdminDefaultsManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and provides the sole SPFx property writer to the webpart and reads current values through getters.
 
 ### Personal interface
 
@@ -268,9 +273,9 @@ The Outlook and SharePoint section headers expose a tri-state bulk visibility co
 
 SharePoint rows display site name separately from calendar name. Missing legacy names are resolved best-effort when a panel opens and are persisted only when the owning personal or administrator draft is explicitly saved.
 
-The panel deep-clones effective settings when opened. Unsaved changes are discarded on close. It emits `onSave` or `onReset`; it does not write storage.
+The panel clones effective settings when opened, emits live `onPreview` changes, and awaits `onSave` or `onReset`. Cancel discards preview. It does not write storage.
 
-Day/Week/Month selection in the toolbar is also a personal setting and is persisted immediately.
+Day/Week/Month selection is an optimistic personal preference with awaited persistence and rollback on failure.
 
 ### Discovery feedback
 
@@ -279,5 +284,5 @@ Both active panels **MUST** end mailbox discovery loading after success or failu
 ### Current interface gaps
 
 - Confirmed administrator fields listed above are absent from the panel.
-- Personal storage failure is not visible and does not roll back in-memory changes.
-- Administrator settings normalization and property-persistence hand-off have focused automated coverage; pure policy, personal derivation, migration, dynamic mailbox expansion and bulk visibility also have coverage; panel rendering and host integration remain manual.
+- Personal write failures restore confirmed runtime settings with visible feedback. Personal read failures still use the existing fallback and remain an open UX question.
+- Administrator settings normalization and composition callbacks have focused automated coverage; pure policy, personal derivation, migration, dynamic mailbox expansion and bulk visibility also have coverage; focused React lifecycle tests use the existing Heft/Jest runner; SPFx host integration remains manual.

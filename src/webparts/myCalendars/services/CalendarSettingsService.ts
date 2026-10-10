@@ -23,7 +23,7 @@ import {
 } from '../models/ICalendarSettings';
 import { normalizeCacheDuration } from './CalendarEventCache';
 
-export type AdminSettingsLoadSource = 'current' | 'backup' | 'defaults' | 'legacy';
+export type AdminSettingsLoadSource = 'current' | 'defaults' | 'legacy';
 
 export interface IAdminSettingsLoadResult {
   settings: IAdminWebPartSettings;
@@ -732,21 +732,11 @@ export function migrateLegacyUserSettings(value: unknown): IUserCalendarSettings
 
 export function loadAdminWebPartSettings(params: {
   current?: string;
-  backup?: string;
   legacy?: string;
 }): IAdminSettingsLoadResult {
   const current = parseAdminWebPartSettingsJson(params.current);
   if (current) {
     return { settings: current, source: 'current' };
-  }
-
-  const backup = parseAdminWebPartSettingsJson(params.backup);
-  if (backup) {
-    return {
-      settings: backup,
-      source: 'backup',
-      notice: 'Current admin settings were invalid. The last known good configuration was loaded from backup.'
-    };
   }
 
   if (params.legacy) {
@@ -767,8 +757,8 @@ export function loadAdminWebPartSettings(params: {
   return {
     settings: { ...defaultAdminWebPartSettings },
     source: 'defaults',
-    notice: params.current || params.backup
-      ? 'Admin settings could not be recovered from current or backup data. Hardcoded defaults were loaded.'
+    notice: params.current
+      ? 'Admin settings could not be recovered from current data. Hardcoded defaults were loaded.'
       : undefined
   };
 }

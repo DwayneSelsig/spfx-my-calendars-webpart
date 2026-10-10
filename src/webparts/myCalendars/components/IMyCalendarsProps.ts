@@ -9,9 +9,12 @@ export interface IMyCalendarsProps {
   userDisplayName: string;
   locale?: string;
   settings: ICalendarSettings;
-  onSettingsChange: (settings: ICalendarSettings) => void;
-  onDefaultViewChange: (view: CalendarViewType) => void;
-  onResetSettings?: () => void;
+  onSettingsChange: (settings: ICalendarSettings) => Promise<void>;
+  onPreviewSettings: (settings: ICalendarSettings) => void;
+  onCancelSettingsPreview: () => void;
+  isSettingsWritePending: boolean;
+  onDefaultViewChange: (view: CalendarViewType) => Promise<void>;
+  onResetSettings: () => Promise<void>;
   onRefreshAdminSources?: () => Promise<void>;
   context: WebPartContext;
   tenantId?: string;

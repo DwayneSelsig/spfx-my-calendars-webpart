@@ -3,9 +3,8 @@ import {
   type IAdminWebPartSettings, type ICalendarSourceBase, type IExchangeMailboxDiscovery,
   type IUserCalendarSettings
 } from '../models/ICalendarSettings';
-import { persistAdminWebPartSettings } from './AdminSettingsPropertyPersistence';
 import {
-  applyAdminSourceChanges, cleanAdminSourceOverrides, deriveUserCalendarSettings,
+  serializeAdminWebPartSettings, applyAdminSourceChanges, cleanAdminSourceOverrides, deriveUserCalendarSettings,
   loadAdminWebPartSettings, normalizeUserCalendarSettings, resolveCalendarSettings
 } from './CalendarSettingsService';
 
@@ -21,8 +20,7 @@ const sharePoint: ICalendarSourceBase = {
 };
 
 function reloadAdmin(settings: IAdminWebPartSettings): IAdminWebPartSettings {
-  const properties = {};
-  const serialized = persistAdminWebPartSettings(properties, settings, jest.fn());
+  const serialized = serializeAdminWebPartSettings(settings);
   const loaded = loadAdminWebPartSettings({ current: serialized });
   expect(loaded.source).toBe('current');
   return loaded.settings;

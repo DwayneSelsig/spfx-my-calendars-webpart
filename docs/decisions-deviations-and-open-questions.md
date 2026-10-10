@@ -260,8 +260,8 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - **Status:** Decision
 - Integer administrator/personal schema versions 2–7 normalize to version 7. Missing, non-integer, older unknown and future versions are rejected in current locations.
 - Versions 2–6 preserve administrator source IDs, user source IDs and permitted personal choices. Existing optional source visibility becomes defaultEnabled. Migration creates no automatic mailbox rules.
-- Unversioned data is accepted only through explicit legacy locations. Existing recovery order and same-save backup semantics remain.
-- Persistence-failure UX and historical backup rotation remain unresolved under OQ-004 and OQ-005.
+- Unversioned data is accepted only through explicit legacy locations. Schema compatibility remains unchanged; DEC-025 now defines current/legacy/default loading without an administrator mirror.
+- DEC-026 resolves write-failure UX; OQ-004 retains the read-failure question. OQ-005 is closed by mirror removal.
 
 ### DEC-024 — Grouped assignments and automatic Exchange mailbox rules
 
@@ -277,19 +277,29 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Cleanup follows observed changes in memory and the next successful personal save; no revision history covers missed policy intervals. Discovery failure is not confirmed absence.
 - Audience selection never grants or implies Exchange/SharePoint authorization. Mandatory failures remain visible.
 
-### DEC-025 — Administrator property change hand-off
+### DEC-025 — Settings persistence boundaries and lifecycle
+
+- **Status:** Decision; replaces the former two-property hand-off.
+- MyCalendarsWebPart owns accepted persistence callbacks. Administrator drafts are validated and serialized once, then one required SPFx change bridge writes adminSettings. No duplicate direct property writes are allowed.
+- The former administrator mirror is removed. Current -> explicit legacy -> defaults is the loading order. Deserialization retains only supported webpart properties; retired values are not promoted.
+- Complete isolated drafts preserve non-visible fields and stable IDs. Reset changes the administrator draft only; Cancel persists nothing.
+- Panels await Save/Reset, block concurrent operations and close only after success. The adapter reads current values and updates its summary without propertyPane.refresh. Mount/session guards ignore obsolete async results.
+- Runtime rebuilding follows successful persistence and reports failures independently. A successful SPFx callback is not proof of page publication; tenant reload verification remains required.
+
+### DEC-026 — Optimistic personal settings and awaited storage
 
 - **Status:** Decision
-- Normalize and serialize a draft, notify SPFx of current and backup property changes, then synchronize the local property bag and accept runtime settings.
-- Do not prewrite both properties before their callbacks: a freshly reset SPFx host snapshot can treat the already-complete state as its baseline and fail to deliver a changed state to the page.
-- Current and backup remain identical same-save mirrors. Schema, assignment/source IDs, recovery order and personal choices are unchanged.
-- Obsolete save completions do not refresh the administrator property pane over a newer accepted save.
+- Optimistic UI is preferred: every personal draft edit previews calendar consequences without storage. Cancel discards preview.
+- Save/Reset and toolbar preference changes await OneDrive. Failure restores the latest confirmed snapshot against current administrator policy and shows localized feedback. Failed Save retains the panel draft for editing/retry.
+- Reset previews defaults and deletes legacy before current. There is one pending personal write per instance; competing preference writes and opening another editor are blocked until it finishes.
+- User settings and administrator properties remain separate storage domains. Existing derive/resolve precedence and permissions remain authoritative.
+- Personal read failures still use the existing fallback; missing-file versus unavailable-storage UX remains open.
 
 ### DEV-014 — Administrator edits disappear after page reload
 
 - **Status:** Repair implemented; tenant verification pending
 - **Reported behavior:** an existing Exchange assignment changes from Default to Mandatory in the current session but reverts after republishing and reloading.
-- **Local evidence:** the policy JSON round-trip succeeds. Prewriting both properties reproduces lost host delivery in a focused model of the installed SPFx snapshot-reset behavior; notification-first delivery passes that regression.
+- **Local evidence:** the policy JSON round-trip succeeds. The earlier regression used a simplified two-property host snapshot model. DEC-025 replaces that implementation with a single SPFx writer; this does not establish tenant publication/reload success.
 - **Removal scenario evidence:** `MandatoryCalendarRestoration.test.ts` exercises Default assignment, personal removal, saved Mandatory promotion, old personal-file reload and subsequent cleanup. The current local policy implementation passes for explicit Exchange/SharePoint assignments, mailbox rules and supported older personal schemas. This verifies settings resolution and JSON round-trips, not the deployed bundle or published tenant page.
 - **Remaining verification:** confirm the active deployed bundle, compare accepted/callback/published assignment values and repeat the page publication/reload flow in SharePoint. The reported tenant failure's exact cause has not been observed directly.
 
@@ -310,17 +320,16 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - **Current effect:** hardcoded, migrated, or manually serialized values can apply and users can override supported fields.
 - **Desired state:** provide controls without silently changing confirmed precedence.
 
-### DEV-010 — Personal persistence failures are not visible
+### DEV-010 — Personal persistence failures
 
-- **Current state:** in-memory personal changes apply before OneDrive save completes; failure is logged without rollback or user feedback.
-- **Current state:** a read failure is treated like a missing file and can trigger legacy/default fallback.
-- **Desired failure UX:** open question.
+- **Status:** Save/reset/toolbar feedback resolved by DEC-026; read behavior remains a deviation.
+- Failed personal writes now roll back optimistic runtime state and show localized feedback. Editor drafts remain available.
+- A read failure is still treated like a missing file and can trigger legacy/default fallback; read-failure UX remains open under OQ-004.
 
 ### DEV-011 — Administrator backup is not historical
 
-- **Current state:** a save writes identical JSON to current and backup properties.
-- **Consequence:** backup can recover isolated current-property corruption but is not the previous known-good revision.
-- **Desired semantics:** open question.
+- **Status:** Retired by DEC-025
+- The former same-save mirror has been removed from active code; there is no administrator backup mechanism.
 
 ### OQ-001 — Persisted administrator source-policy schema
 
@@ -330,15 +339,14 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### OQ-004 — Personal persistence failure UX
 
-- **Status:** Open question
-- Should failed saves roll back, remain pending, or show retry state?
-- How does the product distinguish a missing file from unavailable storage?
+- **Status:** Save/reset UX resolved by DEC-026; read-failure UX remains open.
+- Save/reset failures retain the editor, restore confirmed runtime settings, clear busy state and show localized feedback. Retry is an explicit user action.
+- How should the product distinguish a missing file from unavailable storage? Existing read fallback remains unchanged.
 
 ### OQ-005 — Administrator backup semantics
 
-- **Status:** Open question
-- Should backup remain a same-save mirror or rotate the previous validated revision?
-- When is a recovered backup promoted to current?
+- **Status:** Resolved by removal under DEC-025
+- No mirror, rotation or backup-promotion behavior remains. Existing mirror data is ignored and omitted from subsequent page serialization.
 
 ## Project and delivery
 
@@ -346,7 +354,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - The existing SPFx Heft/Jest runner is the repository test framework; no second framework is introduced.
-- Regression coverage grows incrementally, starting with pure settings, property-persistence, and browser-cache behavior.
+- Regression coverage uses pure settings/cache tests plus focused React 17 interaction and composition callback tests in the same Heft/Jest runner. Narrow service/framework stubs are allowed; no second test framework is introduced.
 - SPFx host integration remains manually verified until a dedicated host-test harness is confirmed.
 
 ### DEC-010 — Documentation authority and progressive reading
@@ -368,8 +376,8 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 ### DEBT-004 — Partial automated project coverage
 
 - **Status:** Technical debt
-- Focused pure tests cover administrator settings normalization, property-persistence hand-off, and core browser-cache behavior.
-- React panel interaction, SPFx host integration, personal settings, migration breadth, policy, broader source mapping, full orchestration, and host failure contracts still lack complete automated regression protection. Pure Exchange orchestration, mailbox identity/discovery, audience discovery and obsolete-request handling have focused mock/helper tests.
+- Focused pure tests cover administrator settings normalization, settings composition callbacks, and core browser-cache behavior.
+- Broader React interaction, SPFx host integration, personal settings, migration breadth, policy, broader source mapping, full orchestration, and host failure contracts still lack complete automated regression protection. Pure Exchange orchestration, mailbox identity/discovery, audience discovery and obsolete-request handling have focused mock/helper tests.
 - `npm run build` remains the production test, build, and package verification command.
 
 ### ASM-001 — Release version source

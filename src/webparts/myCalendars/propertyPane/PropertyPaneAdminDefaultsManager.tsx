@@ -12,38 +12,32 @@ import { Stack } from '@fluentui/react/lib/Stack';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { WebPartContext } from '@microsoft/sp-webpart-base';
 import type { IAdminWebPartSettings } from '../models/ICalendarSettings';
-import {
-  notifyAdminSettingsPropertyChanges,
-  type AdminSettingsPropertyChangeNotifier,
-  type PropertyPaneChangeCallback
-} from '../services/AdminSettingsPropertyPersistence';
-import { AdminSettingsPanel } from '../components/AdminSettingsPanel';
+import { AdminDefaultsPanel } from '../components/AdminDefaultsPanel';
 import * as strings from 'MyCalendarsWebPartStrings';
 import { formatLocalizedString } from '../utils/localization';
 import { getCalendarLabels } from '../components/views/calendarLabels';
 
-export interface IPropertyPaneAdminCalendarManagerProps {
+export interface IPropertyPaneAdminDefaultsManagerProps {
   label: string;
-  adminSettings: IAdminWebPartSettings;
-  backupTargetProperty: string;
-  adminLoadNotice?: string;
+  getAdminSettings: () => IAdminWebPartSettings;
+  getAdminLoadNotice: () => string | undefined;
   context: WebPartContext;
-  onSave: (settings: IAdminWebPartSettings, notifyPropertyChange: AdminSettingsPropertyChangeNotifier) => Promise<void> | void;
+  onSave: (settings: IAdminWebPartSettings, commitProperty: (serialized: string | undefined) => void) => Promise<void>;
 }
 
-interface IAdminCalendarManagerControlProps extends IPropertyPaneAdminCalendarManagerProps {
+interface IAdminDefaultsManagerControlProps extends IPropertyPaneAdminDefaultsManagerProps {
   targetProperty: string;
-  changeCallback?: PropertyPaneChangeCallback;
+  changeCallback?: Parameters<IPropertyPaneCustomFieldProps['onRender']>[2];
 }
 
-interface IAdminCalendarManagerControlState {
+interface IAdminDefaultsManagerControlState {
   isPanelOpen: boolean;
   isSaving: boolean;
   graphClient: MSGraphClientV3 | undefined;
 }
 
-class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerControlProps, IAdminCalendarManagerControlState> {
-  constructor(props: IAdminCalendarManagerControlProps) {
+class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerControlProps, IAdminDefaultsManagerControlState> {
+  constructor(props: IAdminDefaultsManagerControlProps) {
     super(props);
     this.state = {
       isPanelOpen: false,
@@ -52,37 +46,36 @@ class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerC
     };
   }
 
+  private mounted = false;
+  private savePending = false;
+
+  public componentWillUnmount(): void { this.mounted = false; }
+
   public componentDidMount(): void {
+    this.mounted = true;
     this.props.context.msGraphClientFactory.getClient('3')
-      .then(client => this.setState({ graphClient: client }))
+      .then(client => { if (this.mounted) this.setState({ graphClient: client }); })
       .catch(error => console.error('Failed to create graph client for admin property pane:', error));
   }
 
   private handleSave = async (settings: IAdminWebPartSettings): Promise<void> => {
+    if (this.savePending) throw new Error('An administrator save is already in progress.');
+    this.savePending = true;
     this.setState({ isSaving: true });
     try {
-      if (!this.props.changeCallback) {
-        throw new Error('The SPFx property pane change callback is unavailable.');
-      }
-
       const changeCallback = this.props.changeCallback;
-      await this.props.onSave(settings, serialized => {
-        notifyAdminSettingsPropertyChanges(
-          changeCallback,
-          this.props.targetProperty,
-          this.props.backupTargetProperty,
-          serialized
-        );
-      });
-      this.setState({ isPanelOpen: false, isSaving: false });
-    } catch (error) {
-      console.error('Failed to persist admin settings:', error);
-      this.setState({ isSaving: false });
+      if (!changeCallback) throw new Error('The SPFx property pane change callback is unavailable.');
+      await this.props.onSave(settings, serialized => changeCallback(this.props.targetProperty, serialized, true));
+    } finally {
+      this.savePending = false;
+      if (this.mounted) this.setState({ isSaving: false });
     }
   };
 
   public render(): React.ReactElement {
-    const { adminSettings, adminLoadNotice, label, context } = this.props;
+    const { label, context } = this.props;
+    const adminSettings = this.props.getAdminSettings();
+    const adminLoadNotice = this.props.getAdminLoadNotice();
     const { isPanelOpen, graphClient, isSaving } = this.state;
     const calendarLabels = getCalendarLabels();
     const defaultViewLabel = adminSettings.defaultView === 'day'
@@ -108,9 +101,9 @@ class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerC
           />
         </Stack>
 
-        <AdminSettingsPanel
+        <AdminDefaultsPanel
           isOpen={isPanelOpen}
-          onDismiss={() => this.setState({ isPanelOpen: false })}
+          onDismiss={() => { if (!this.savePending) this.setState({ isPanelOpen: false }); }}
           settings={adminSettings}
           onSave={this.handleSave}
           httpClient={context.httpClient}
@@ -123,18 +116,18 @@ class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerC
   }
 }
 
-export function PropertyPaneAdminCalendarManager(
+export function PropertyPaneAdminDefaultsManager(
   targetProperty: string,
-  properties: IPropertyPaneAdminCalendarManagerProps
+  properties: IPropertyPaneAdminDefaultsManagerProps
 ): IPropertyPaneField<IPropertyPaneCustomFieldProps> {
   return {
     type: PropertyPaneFieldType.Custom,
     targetProperty,
     properties: {
       key: targetProperty,
-      onRender: (elem: HTMLElement, _context?: unknown, changeCallback?: PropertyPaneChangeCallback): void => {
+      onRender: (elem, _context, changeCallback): void => {
         ReactDOM.render(
-          <AdminCalendarManagerControl
+          <AdminDefaultsManagerControl
             {...properties}
             targetProperty={targetProperty}
             changeCallback={changeCallback}

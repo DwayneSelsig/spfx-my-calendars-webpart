@@ -21,7 +21,7 @@ import {
   defaultCalendarSettings,
   defaultUserCalendarSettings
 } from './models/ICalendarSettings';
-import { PropertyPaneAdminCalendarManager } from './propertyPane/PropertyPaneAdminCalendarManager';
+import { PropertyPaneAdminDefaultsManager } from './propertyPane/PropertyPaneAdminDefaultsManager';
 import { AudienceService } from './services/AudienceService';
 import {
   deriveUserCalendarSettings,
@@ -29,21 +29,17 @@ import {
   canonicalizeExchangeSourceIdentities,
   cleanAdminSourceOverrides,
   normalizeAdminWebPartSettings,
+  serializeAdminWebPartSettings,
   loadAdminWebPartSettings,
   migrateLegacyUserSettings,
   resolveCalendarSettings
 } from './services/CalendarSettingsService';
 import { SettingsStorageService } from './services/SettingsStorageService';
-import {
-  persistAdminWebPartSettings,
-  type AdminSettingsPropertyChangeNotifier
-} from './services/AdminSettingsPropertyPersistence';
 import * as strings from 'MyCalendarsWebPartStrings';
 
 export interface IMyCalendarsWebPartProps {
   settings?: string;
   adminSettings?: string;
-  adminSettingsBackup?: string;
 }
 
 export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalendarsWebPartProps> {
@@ -60,9 +56,13 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   private _adminLoadNotice: string | undefined;
   private _mailboxDiscoveries: IExchangeMailboxDiscovery[] = [];
   private _settingsGeneration = 0;
-  private _adminSaveGeneration = 0;
+  private _adminSavePending = false;
+  private _userSavePending = false;
+  private _userPreview: IUserCalendarSettings | undefined;
+  private _disposed = false;
 
   public render(): void {
+    if (this._disposed) return;
     const element: React.ReactElement<IMyCalendarsProps> = React.createElement(
       MyCalendars,
       {
@@ -74,6 +74,9 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         locale: this.context.pageContext.cultureInfo.currentCultureName,
         settings: this._resolvedSettings,
         onSettingsChange: this.handleUserSettingsChange,
+        onPreviewSettings: this.handleUserSettingsPreview,
+        onCancelSettingsPreview: this.handleCancelUserSettingsPreview,
+        isSettingsWritePending: this._userSavePending,
         onDefaultViewChange: this.handleDefaultViewChange,
         onResetSettings: this.handleResetUserSettings,
         onRefreshAdminSources: this.handleRefreshAdminSources,
@@ -98,7 +101,6 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
 
     const adminLoadResult = loadAdminWebPartSettings({
       current: this.properties.adminSettings,
-      backup: this.properties.adminSettingsBackup,
       legacy: this.properties.settings
     });
     this._adminSettings = adminLoadResult.settings;
@@ -141,7 +143,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
 
     this._resolvedSettings = resolveCalendarSettings({
       adminSettings: this._adminSettings,
-      userSettings: this._userSettings,
+      userSettings: this._userPreview || this._userSettings,
       matchedGroupIds: this._matchedGroupIds,
       mailboxDiscoveries: this._mailboxDiscoveries,
       currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
@@ -151,7 +153,13 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     // during framework initialization, before onInit has completed.
   }
 
+  protected onAfterDeserialize(properties: IMyCalendarsWebPartProps): IMyCalendarsWebPartProps {
+    return { settings: properties.settings, adminSettings: properties.adminSettings };
+  }
+
   protected onDispose(): void {
+    this._disposed = true;
+    this._settingsGeneration++;
     ReactDom.unmountComponentAtNode(this.domElement);
   }
 
@@ -170,11 +178,10 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
             {
               groupName: strings.AdminDefaultsGroupName,
               groupFields: [
-                PropertyPaneAdminCalendarManager('adminSettings', {
+                PropertyPaneAdminDefaultsManager('adminSettings', {
                   label: strings.AdminCalendarManagerLabel,
-                  adminSettings: this._adminSettings,
-                  backupTargetProperty: 'adminSettingsBackup',
-                  adminLoadNotice: this._adminLoadNotice,
+                  getAdminSettings: () => this._adminSettings,
+                  getAdminLoadNotice: () => this._adminLoadNotice,
                   context: this.context,
                   onSave: this.handleAdminSettingsSave
                 })
@@ -212,7 +219,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     this._mailboxDiscoveries = discoveries;
     this._resolvedSettings = resolveCalendarSettings({
       adminSettings: this._adminSettings,
-      userSettings: this._userSettings,
+      userSettings: this._userPreview || this._userSettings,
       matchedGroupIds: this._matchedGroupIds,
       mailboxDiscoveries: this._mailboxDiscoveries,
       currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
@@ -247,8 +254,19 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     return this._audienceService.getMatchingGroupIds(Array.from(groupIds));
   }
 
-  private handleUserSettingsChange = (settings: ICalendarSettings): void => {
-    this._userSettings = deriveUserCalendarSettings({
+  private resolveUserSettings(): void {
+    this._resolvedSettings = resolveCalendarSettings({
+      adminSettings: this._adminSettings,
+      userSettings: this._userPreview || this._userSettings,
+      matchedGroupIds: this._matchedGroupIds,
+      mailboxDiscoveries: this._mailboxDiscoveries,
+      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
+      organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
+    });
+  }
+
+  private deriveUserSettings(settings: ICalendarSettings): IUserCalendarSettings {
+    return deriveUserCalendarSettings({
       nextResolvedSettings: settings,
       adminSettings: this._adminSettings,
       matchedGroupIds: this._matchedGroupIds,
@@ -256,97 +274,104 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       mailboxDiscoveries: this._mailboxDiscoveries,
       currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId)
     });
+  }
 
-    this._resolvedSettings = resolveCalendarSettings({
-      adminSettings: this._adminSettings,
-      userSettings: this._userSettings,
-      matchedGroupIds: this._matchedGroupIds,
-      mailboxDiscoveries: this._mailboxDiscoveries,
-      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
-      organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
-    });
-
-    this._userSettings = cleanAdminSourceOverrides(this._userSettings, this._resolvedSettings.applicableAdminSources || [], this._resolvedSettings.unresolvedAdminSourceIds);
-
-    if (this._storageService) {
-      this._storageService.saveUserSettings(this._userSettings).then(success => {
-        if (!success) {
-          console.error('Failed to persist user settings.');
-        }
-      }).catch(error => console.error('Error saving user settings:', error));
-    }
-
+  private handleUserSettingsPreview = (settings: ICalendarSettings): void => {
+    if (this._userSavePending || this._disposed) return;
+    this._userPreview = this.deriveUserSettings(settings);
+    this.resolveUserSettings();
     this.render();
   };
+
+  private handleCancelUserSettingsPreview = (): void => {
+    if (this._userSavePending) return;
+    this._userPreview = undefined;
+    this.resolveUserSettings();
+    this.render();
+  };
+
+  private handleUserSettingsChange = async (settings: ICalendarSettings): Promise<void> => {
+    await this.persistUserSettings(this.deriveUserSettings(structuredClone(settings)), false);
+  };
+
+  private handleDefaultViewChange = async (defaultView: CalendarViewType): Promise<void> => {
+    await this.persistUserSettings({
+      ...cleanAdminSourceOverrides(this._userSettings, this._resolvedSettings.applicableAdminSources || [], this._resolvedSettings.unresolvedAdminSourceIds),
+      defaultView
+    }, false);
+  };
+
+  private handleResetUserSettings = async (): Promise<void> => {
+    await this.persistUserSettings(structuredClone(defaultUserCalendarSettings), true);
+  };
+
+  private async persistUserSettings(snapshot: IUserCalendarSettings, reset: boolean): Promise<void> {
+    if (this._userSavePending) throw new Error('A personal settings write is already in progress.');
+    this._userSavePending = true;
+    this._userPreview = snapshot;
+    try {
+      this.resolveUserSettings();
+      this.render();
+      if (!this._storageService) throw new Error('Personal settings storage is unavailable.');
+      const success = reset
+        ? await this._storageService.deleteUserSettings()
+        : await this._storageService.saveUserSettings(snapshot);
+      if (!success) throw new Error(reset ? 'Failed to reset personal settings.' : 'Failed to save personal settings.');
+      this._userSettings = snapshot;
+    } catch (error) {
+      console.error(reset ? 'Failed to reset personal settings.' : 'Failed to save personal settings.', error);
+      throw error;
+    } finally {
+      this._userPreview = undefined;
+      this._userSavePending = false;
+      if (!this._disposed) {
+        try { this.resolveUserSettings(); this.render(); }
+        catch (error) { console.error('Personal settings storage completed, but runtime settings could not be refreshed.', error); }
+      }
+    }
+  }
 
   private handleRefreshAdminSources = async (): Promise<void> => {
     await this.rebuildResolvedSettings();
     this.render();
   };
 
-  private handleDefaultViewChange = (defaultView: CalendarViewType): void => {
-    this._userSettings = {
-      ...cleanAdminSourceOverrides(this._userSettings, this._resolvedSettings.applicableAdminSources || [], this._resolvedSettings.unresolvedAdminSourceIds),
-      defaultView
-    };
-
-    this._resolvedSettings = resolveCalendarSettings({
-      adminSettings: this._adminSettings,
-      userSettings: this._userSettings,
-      matchedGroupIds: this._matchedGroupIds,
-      mailboxDiscoveries: this._mailboxDiscoveries,
-      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
-      organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
-    });
-
-    if (this._storageService) {
-      this._storageService.saveUserSettings(this._userSettings).then(success => {
-        if (!success) {
-          console.error('Failed to persist the personal default calendar view.');
-        }
-      }).catch(error => console.error('Error saving the personal default calendar view:', error));
-    }
-
-    this.render();
-  };
-
-  private handleResetUserSettings = (): void => {
-    if (this._storageService) {
-      this._storageService.deleteUserSettings().then(success => {
-        if (!success) {
-          console.error('Failed to delete user settings.');
-          return;
-        }
-
-        this._userSettings = { ...defaultUserCalendarSettings };
-        this._resolvedSettings = resolveCalendarSettings({
-          adminSettings: this._adminSettings,
-          userSettings: this._userSettings,
-          matchedGroupIds: this._matchedGroupIds,
-          mailboxDiscoveries: this._mailboxDiscoveries,
-          currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
-          organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
-        });
-        this.render();
-      }).catch(error => console.error('Error deleting user settings:', error));
-    }
-  };
-
   private handleAdminSettingsSave = async (
     settings: IAdminWebPartSettings,
-    notifyPropertyChange: AdminSettingsPropertyChangeNotifier
+    commitProperty: (serialized: string | undefined) => void
   ): Promise<void> => {
-    const normalized = normalizeAdminWebPartSettings(settings);
-    if (!normalized) throw new Error('Invalid administrator settings.');
-    const generation = ++this._adminSaveGeneration;
-    persistAdminWebPartSettings(this.properties, normalized, notifyPropertyChange);
-    this._adminSettings = normalized;
-    this._adminLoadNotice = undefined;
-
-    await this.rebuildResolvedSettings();
-    if (generation !== this._adminSaveGeneration) return;
-    this.context.propertyPane.refresh();
-    this.render();
+    if (this._adminSavePending) throw new Error('An administrator save is already in progress.');
+    this._adminSavePending = true;
+    try {
+      const normalized = normalizeAdminWebPartSettings(settings);
+      if (!normalized) throw new Error('Invalid administrator defaults.');
+      const serialized = serializeAdminWebPartSettings(normalized);
+      const previous = this.properties.adminSettings;
+      try {
+        commitProperty(serialized);
+      } catch (error) {
+        if (this.properties.adminSettings !== previous) {
+          try { commitProperty(previous); }
+          catch (restoreError) {
+            console.error('Could not restore administrator properties after a rejected save.', restoreError);
+            this._adminLoadNotice = strings.AdminSettingsRestoreErrorLabel;
+          }
+        }
+        throw error;
+      }
+      this._adminSettings = normalized;
+      this._adminLoadNotice = undefined;
+      // The SPFx hand-off succeeded. Runtime failures must not reject this save.
+      try {
+        await this.rebuildResolvedSettings();
+        this.render();
+      } catch (error) {
+        console.error('Administrator defaults were saved, but resolved settings could not be rebuilt.', error);
+        this._adminLoadNotice = strings.AdminRuntimeRebuildErrorLabel;
+      }
+    } finally {
+      this._adminSavePending = false;
+    }
   };
 
   private async _getEnvironmentMessage(): Promise<string> {

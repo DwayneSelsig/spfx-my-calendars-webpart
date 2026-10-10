@@ -21,6 +21,7 @@ import { MonthView } from './views/MonthView';
 import { SearchResultsView } from './views/SearchResultsView';
 import { CalendarToolbar } from './CalendarToolbar';
 import { TooltipHost } from '@fluentui/react/lib/Tooltip';
+import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { Callout } from '@fluentui/react/lib/Callout';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
@@ -28,7 +29,7 @@ import { Text } from '@fluentui/react/lib/Text';
 import { CommandBarButton } from '@fluentui/react/lib/Button';
 import { SearchBox } from '@fluentui/react/lib/SearchBox';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
-import { SettingsPanel } from './SettingsPanel';
+import { UserSettingsPanel } from './UserSettingsPanel';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 import { formatCalendarDate } from './views/calendarFormatting';
@@ -140,6 +141,7 @@ interface IMyCalendarsState {
   previousView: CalendarViewType;
   isLoading: boolean;
   isSettingsPanelOpen: boolean;
+  settingsWriteError?: string;
   searchQuery: string;
   appliedSearchQuery: string;
   toolbarLayout: ToolbarLayout;
@@ -194,6 +196,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   public componentDidMount(): void {
+    this.settingsUiMounted = true;
     if (this.topToolbarRef.current) {
       this.toolbarResizeObserver = new ResizeObserver(entries => {
         const width = entries[0]?.contentRect.width;
@@ -204,9 +207,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       this.toolbarResizeObserver.observe(this.topToolbarRef.current);
     }
     this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
-    // Resolve and store graphClient for use in SettingsPanel
+    // Resolve and store graphClient for use in UserSettingsPanel
     this.props.context.msGraphClientFactory.getClient('3')
-      .then(client => this.setState({ graphClient: client }))
+      .then(client => { if (this.settingsUiMounted) this.setState({ graphClient: client }); })
       .catch(err => console.error('Failed to initialize graph client:', err));
   }
 
@@ -268,6 +271,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   public componentWillUnmount(): void {
+    this.settingsUiMounted = false;
     this.toolbarResizeObserver?.disconnect();
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer);
@@ -940,13 +944,34 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     });
   };
 
-  private handleViewChange = (view: CalendarViewType): void => {
-    if (view !== 'search') {
-      this.setState({ currentView: view, previousView: view }, () => {
-        this.ensureVisibleRange(this.state.currentDate, view).catch(err => console.error('Failed to load visible range:', err));
-      });
-      this.props.onDefaultViewChange(view);
+  private settingsUiMounted = false;
+  private viewSavePending = false;
+
+  private handleViewChange = async (view: CalendarViewType): Promise<void> => {
+    if (view === 'search' || this.viewSavePending || this.props.isSettingsWritePending) return;
+    this.viewSavePending = true;
+    const previousView = this.state.previousView;
+    this.setState({ currentView: view, previousView: view, settingsWriteError: undefined }, () => {
+      this.ensureVisibleRange(this.state.currentDate, view).catch(err => console.error('Failed to load visible range:', err));
+    });
+    try {
+      await this.props.onDefaultViewChange(view);
+    } catch (error) {
+      console.error('Failed to save the personal default calendar view.', error);
+      if (this.settingsUiMounted) this.setState(prev => ({
+        currentView: prev.currentView === 'search' ? 'search' : previousView,
+        previousView,
+        settingsWriteError: strings.UserSettingsSaveErrorLabel
+      }), () => { this.ensureVisibleRange().catch(err => console.error('Failed to restore visible range:', err)); });
+    } finally {
+      this.viewSavePending = false;
     }
+  };
+
+  private handleSettingsDismiss = (): void => {
+    if (this.props.isSettingsWritePending) return;
+    this.props.onCancelSettingsPreview();
+    this.setState({ isSettingsPanelOpen: false });
   };
 
   private handleManualRefresh = async (): Promise<void> => {
@@ -989,7 +1014,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     this.handleDateChange(newDate);
   };
 
-  private renderToolbarButton(iconName: string, label: string, onClick: () => void): React.ReactElement {
+  private renderToolbarButton(iconName: string, label: string, onClick: () => void, disabled = false): React.ReactElement {
     const iconOnly = this.state.toolbarLayout !== 'wide';
     return (
       <TooltipHost content={iconOnly ? label : undefined} setAriaDescribedBy={false}>
@@ -997,13 +1022,14 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           text={iconOnly ? undefined : label}
           ariaLabel={label}
           iconProps={{ iconName }}
-          onClick={onClick}
+          onClick={onClick} disabled={disabled}
         />
       </TooltipHost>
     );
   }
 
   private openSettingsPanel = (): void => {
+    if (this.props.isSettingsWritePending || this.viewSavePending) return;
     if (this.props.context.propertyPane.isPropertyPaneOpen()) {
       this.props.context.propertyPane.close();
     }
@@ -1267,7 +1293,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             className={styles.toolbarActions}
             style={toolbarLayout === 'stacked' ? { alignSelf: 'flex-end' } : undefined}
           >
-            {this.renderToolbarButton('Settings', strings.SettingsLabel, this.openSettingsPanel)}
+            {this.renderToolbarButton('Settings', strings.SettingsLabel, this.openSettingsPanel, this.props.isSettingsWritePending)}
             {showRefreshButton
               ? this.renderToolbarButton('Refresh', strings.RefreshLabel, () => {
                 this.handleManualRefresh().catch(err => console.error('Failed to refresh appointments:', err));
@@ -1277,6 +1303,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         </div>
         {!isSearchMode && (
           <CalendarToolbar
+            isViewChangeDisabled={this.props.isSettingsWritePending}
             currentDate={this.state.currentDate}
             currentView={this.state.previousView}
             dateRangeText={this.getDateRangeText()}
@@ -1286,6 +1313,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             onViewChange={this.handleViewChange}
           />
         )}
+        {this.state.settingsWriteError && <MessageBar messageBarType={MessageBarType.error}>{this.state.settingsWriteError}</MessageBar>}
         <div className={styles.calendarContainer}>
           {/*
             Keep the calendar mounted at all times (hidden via CSS when searching).
@@ -1304,19 +1332,13 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
             />
           )}
         </div>
-        <SettingsPanel
+        <UserSettingsPanel
           isOpen={this.state.isSettingsPanelOpen}
-          onDismiss={() => this.setState({ isSettingsPanelOpen: false })}
+          onDismiss={this.handleSettingsDismiss}
           settings={this.props.settings}
-          onSave={(settings) => {
-            this.props.onSettingsChange(settings);
-            this.setState({ isSettingsPanelOpen: false });
-          }}
-          onReset={() => {
-            if (this.props.onResetSettings) {
-              this.props.onResetSettings();
-            }
-          }}
+          onPreview={this.props.onPreviewSettings}
+          onSave={this.props.onSettingsChange}
+          onReset={this.props.onResetSettings}
           httpClient={this.props.context.httpClient}
           graphClient={this.state.graphClient}
           locale={this.props.locale}

@@ -1,3 +1,4 @@
+/* eslint max-lines: ["warn", { "max": 2000, "skipBlankLines": true, "skipComments": true }] -- Keep the established panel intact during the settings lifecycle correction. */
 import { AssignmentGroup, assignmentPolicyLabel } from './AssignmentControls';
 import { applyAdminSourceChanges, isAutomaticExchangeCalendarAssigned } from '../services/CalendarSettingsService';
 import * as React from 'react';
@@ -25,18 +26,21 @@ import { formatCalendarTime } from './views/calendarFormatting';
 import { getBulkVisibilityTarget, getGroupVisibilityState, type GroupVisibilityState, setOutlookVisibility, setSharePointVisibility } from './calendarVisibility';
 import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
-export interface ISettingsPanelProps {
+export interface IUserSettingsPanelProps {
   isOpen: boolean;
   onDismiss: () => void;
   settings: ICalendarSettings;
-  onSave: (settings: ICalendarSettings) => void;
-  onReset?: () => void;
+  onSave: (settings: ICalendarSettings) => Promise<void>;
+  onPreview: (settings: ICalendarSettings) => void;
+  onReset: () => Promise<void>;
   httpClient?: HttpClient;
   graphClient?: MSGraphClientV3;
   locale?: string;
 }
-interface ISettingsPanelState {
+interface IUserSettingsPanelState {
   settings: ICalendarSettings;
+  isSaving: boolean;
+  saveError?: string;
   editingSourceId: string | undefined;
   showAddDialog: boolean;
   // Exchange calendars (auto-loaded)
@@ -99,16 +103,39 @@ interface IGraphColumn {
   columnGroup?: string;
 }
 
-export class SettingsPanel extends React.Component<ISettingsPanelProps, ISettingsPanelState> {
+export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, IUserSettingsPanelState> {
   private exchangeService: ExchangeCalendarService | null = null;
   private sharePointService: SharePointCalendarService | null = null;
   private plannerService: PlannerTaskService | null = null;
   private unifiedGroupService: UnifiedGroupCalendarService | null = null;
+  private mounted = false;
+  private savePending = false;
+  private editSession = 0;
+
+  private isCurrentSession(session: number): boolean {
+    return this.mounted && this.props.isOpen && session === this.editSession && !this.savePending;
+  }
+
+  private setSessionState<K extends keyof IUserSettingsPanelState>(
+    session: number,
+    state: Pick<IUserSettingsPanelState, K> | IUserSettingsPanelState | null | ((previous: Readonly<IUserSettingsPanelState>, props: Readonly<IUserSettingsPanelProps>) => Pick<IUserSettingsPanelState, K> | IUserSettingsPanelState | null),
+    callback?: () => void
+  ): void {
+    if (!this.isCurrentSession(session)) return;
+    this.setState((previous, props) => this.isCurrentSession(session)
+      ? (typeof state === 'function' ? state(previous, props) : state) : null,
+    () => { if (this.isCurrentSession(session)) callback?.(); });
+  }
+
+  private handleDismiss = (): void => {
+    if (!this.savePending) this.props.onDismiss();
+  };
+
   private readonly SITES_PER_PAGE = 20;
   private readonly mailboxDiscovery = new LatestDiscovery();
   private readonly userCalendarDiscovery = new LatestDiscovery();
 
-  constructor(props: ISettingsPanelProps) {
+  constructor(props: IUserSettingsPanelProps) {
     super(props);
 
     if (props.httpClient || props.graphClient) {
@@ -119,7 +146,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     }
 
     this.state = {
-      settings: JSON.parse(JSON.stringify(props.settings)),
+      settings: structuredClone(props.settings),
+      isSaving: false, saveError: undefined,
       editingSourceId: undefined,
       showAddDialog: false,
       // User Exchange calendars
@@ -165,19 +193,24 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     };
   }
   public componentDidMount(): void {
+    this.mounted = true;
     if (this.props.graphClient) this.initializeGraphClient(this.props.graphClient);
   }
 
-  public componentDidUpdate(prevProps: ISettingsPanelProps): void {
+  public componentDidUpdate(prevProps: IUserSettingsPanelProps, prevState: IUserSettingsPanelState): void {
+    if (this.props.isOpen && prevProps.isOpen && !this.savePending && prevState.settings !== this.state.settings) {
+      this.props.onPreview(this.state.settings);
+    }
     if (this.props.graphClient && !prevProps.graphClient) this.initializeGraphClient(this.props.graphClient);
     if (prevProps.isOpen !== this.props.isOpen) {
+      this.editSession++;
       this.invalidateDialogDiscovery();
       this.userCalendarDiscovery.invalidate();
       this.setState({ userExchangeCalendarsLoading: false, exchangeCalendarsLoading: false, exchangeDiscoveryError: undefined });
     }
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
       this.setState({
-        settings: JSON.parse(JSON.stringify(this.props.settings)), editingSourceId: undefined, showAddDialog: false,
+        settings: structuredClone(this.props.settings), isSaving: false, saveError: undefined, editingSourceId: undefined, showAddDialog: false,
         addingCalendarType: undefined, addingCalendarStep: 'initial', spCurrentPage: 0
       }, () => {
         this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
@@ -191,6 +224,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   }
 
   public componentWillUnmount(): void {
+    this.mounted = false;
+    this.editSession++;
     this.invalidateDialogDiscovery();
     this.userCalendarDiscovery.invalidate();
   }
@@ -206,15 +241,18 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   }
 
   private enrichSharePointSiteNames = async (): Promise<void> => {
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
     if (!this.sharePointService) return;
     const missingSiteIds = Array.from(new Set(this.state.settings.sources
       .filter(source => source.sourceType === 'sharepoint' && source.sharePointSiteId && !source.sharePointSiteName)
       .map(source => source.sharePointSiteId as string)));
     if (missingSiteIds.length === 0) return;
     const resolved = await Promise.all(missingSiteIds.map(async siteId => ({ siteId, site: await this.sharePointService?.getSite(siteId) })));
+    if (!this.isCurrentSession(session)) return;
     const names = new Map(resolved.filter(item => item.site?.name).map(item => [item.siteId, item.site?.name as string]));
     if (names.size === 0) return;
-    this.setState(prev => ({
+    this.setSessionState(session, prev => ({
       settings: {
         ...prev.settings,
         sources: prev.settings.sources.map(source => source.sourceType === 'sharepoint' && source.sharePointSiteId && !source.sharePointSiteName && names.has(source.sharePointSiteId)
@@ -225,27 +263,35 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private loadUserExchangeCalendars = async (): Promise<void> => {
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
     await this.userCalendarDiscovery.run(async () => {
       if (!this.exchangeService) throw new Error('GraphClient not initialized');
       return this.exchangeService.getCalendars();
     }, {
-      start: () => this.setState({ userExchangeCalendarsLoading: true, userExchangeCalendarsError: undefined, userExchangeCalendars: [] }),
-      success: calendars => this.setState({ userExchangeCalendars: calendars }),
+      start: () => this.setSessionState(session, { userExchangeCalendarsLoading: true, userExchangeCalendarsError: undefined, userExchangeCalendars: [] }),
+      success: calendars => this.setSessionState(session, { userExchangeCalendars: calendars }),
       error: error => {
         console.error('Error loading user Exchange calendars:', error);
-        this.setState({ userExchangeCalendarsError: getExchangeDiscoveryErrorMessage(error) });
+        this.setSessionState(session, { userExchangeCalendarsError: getExchangeDiscoveryErrorMessage(error) });
       },
-      finish: () => this.setState({ userExchangeCalendarsLoading: false })
+      finish: () => this.setSessionState(session, { userExchangeCalendarsLoading: false })
     });
+    if (!this.isCurrentSession(session)) return;
   };
 
   private generateId(): string { return `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; }
 
-  private handleOpenAddDialog = (): void => { this.setState({ showAddDialog: true }); };
+  private handleOpenAddDialog = (): void => {
+    if (!this.isCurrentSession(this.editSession)) return;
+    this.setSessionState(this.editSession, { showAddDialog: true });
+  };
   private handleCloseAddDialog = (): void => {
+    if (!this.isCurrentSession(this.editSession)) return;
+    this.editSession++;
     this.invalidateDialogDiscovery();
-    this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
-    this.setState({
+    this.setSessionState(this.editSession, { exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
+    this.setSessionState(this.editSession, {
       showAddDialog: false, addingCalendarType: undefined, addingCalendarStep: 'initial',
       spSites: [], spSiteFilter: '', spCurrentPage: 0, spSelectedSite: undefined,
       spLists: [], spSelectedList: undefined, exchangeCalendars: [], exchangeMailbox: '',
@@ -256,45 +302,55 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleSelectAddType = async (type: CalendarSourceType): Promise<void> => {
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
     if (type === 'sharepoint') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'sharepoint-site', spSitesLoading: true });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'sharepoint-site', spSitesLoading: true });
       const sites = await this.sharePointService?.getAccessibleSites() || [];
-      this.setState({ spSites: sites, spSitesLoading: false });
+      if (!this.isCurrentSession(session)) return;
+      this.setSessionState(session, { spSites: sites, spSitesLoading: false });
     } else if (type === 'exchange') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'exchange-mailbox' });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'exchange-mailbox' });
     } else if (type === 'ics') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'ics' });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'ics' });
     } else if (type === 'planner') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'planner-plan', plannerPlansLoading: true });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'planner-plan', plannerPlansLoading: true });
       const plans = await this.plannerService?.getUserPlans() || [];
-      this.setState({ plannerPlans: plans, plannerPlansLoading: false });
+      if (!this.isCurrentSession(session)) return;
+      this.setSessionState(session, { plannerPlans: plans, plannerPlansLoading: false });
     } else if (type === 'unifiedGroup') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'unified-group-select', unifiedGroupsLoading: true, unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4' });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'unified-group-select', unifiedGroupsLoading: true, unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4' });
       await this.loadUnifiedGroups();
+      if (!this.isCurrentSession(session)) return;
     } else if (type === 'teamsShifts') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'teams-shifts', newCalendarName: strings.TeamsShiftsLabel, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', teamsShiftsShowLogo: true });
+      this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'teams-shifts', newCalendarName: strings.TeamsShiftsLabel, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', teamsShiftsShowLogo: true });
     }
   };
 
   private loadUnifiedGroups = async (): Promise<void> => {
-    if (!this.unifiedGroupService) { this.setState({ unifiedGroupsLoading: false }); return; }
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
+    if (!this.unifiedGroupService) { this.setSessionState(session, { unifiedGroupsLoading: false }); return; }
     try {
       const [groups, joinedTeamIds] = await Promise.all([
         this.unifiedGroupService.getUnifiedGroups(),
         this.unifiedGroupService.getJoinedTeamIds()
       ]);
+      if (!this.isCurrentSession(session)) return;
       const mappedGroups = groups.map(group => ({ ...group, isTeam: joinedTeamIds.has(group.id) })).sort((a, b) => a.displayName.localeCompare(b.displayName));
-      this.setState({ unifiedGroups: mappedGroups, unifiedGroupsLoading: false });
+      this.setSessionState(session, { unifiedGroups: mappedGroups, unifiedGroupsLoading: false });
     } catch (error) {
       console.error('Failed to load unified groups:', error);
-      this.setState({ unifiedGroups: [], unifiedGroupsLoading: false });
+      this.setSessionState(session, { unifiedGroups: [], unifiedGroupsLoading: false });
     }
   };
 
   private handleBackToTypeSelection = (): void => {
+    if (!this.isCurrentSession(this.editSession)) return;
+    this.editSession++;
     this.invalidateDialogDiscovery();
-    this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
-    this.setState({
+    this.setSessionState(this.editSession, { exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
+    this.setSessionState(this.editSession, {
       addingCalendarStep: 'initial', spSites: [], spSitesLoading: false, spSiteFilter: '', spCurrentPage: 0,
       spSelectedSite: undefined, spLists: [], spListsLoading: false, spSelectedList: undefined,
       exchangeCalendars: [], exchangeCalendarsLoading: false, exchangeMailbox: '', exchangeMailboxResolved: false,
@@ -310,15 +366,15 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
     if (addingCalendarType === 'sharepoint') {
       if (addingCalendarStep === 'sharepoint-fields') {
-        this.setState({ spSelectedList: undefined, addingCalendarStep: 'sharepoint-list' });
+        this.setSessionState(this.editSession, { spSelectedList: undefined, addingCalendarStep: 'sharepoint-list' });
       } else if (addingCalendarStep === 'sharepoint-list') {
-        this.setState({ spSelectedSite: undefined, spLists: [], addingCalendarStep: 'sharepoint-site' });
+        this.setSessionState(this.editSession, { spSelectedSite: undefined, spLists: [], addingCalendarStep: 'sharepoint-site' });
       } else if (addingCalendarStep === 'sharepoint-site') {
         this.handleBackToTypeSelection();
       }
     } else if (addingCalendarType === 'exchange') {
       if (this.state.exchangeSelectedCalendarId) {
-        this.setState({ exchangeSelectedCalendarId: undefined });
+        this.setSessionState(this.editSession, { exchangeSelectedCalendarId: undefined });
       } else {
         this.handleBackToTypeSelection();
       }
@@ -326,7 +382,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       this.handleBackToTypeSelection();
     } else if (addingCalendarType === 'planner') {
       if (addingCalendarStep === 'planner-options') {
-        this.setState({ addingCalendarStep: 'planner-plan' });
+        this.setSessionState(this.editSession, { addingCalendarStep: 'planner-plan' });
       } else if (addingCalendarStep === 'planner-plan') {
         this.handleBackToTypeSelection();
       }
@@ -373,23 +429,29 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   // SharePoint flow
-  private handleSharePointFilterChange = (value?: string): void => { this.setState({ spSiteFilter: value || '', spCurrentPage: 0 }); };
+  private handleSharePointFilterChange = (value?: string): void => { this.setSessionState(this.editSession, { spSiteFilter: value || '', spCurrentPage: 0 }); };
 
   private handleSharePointSearch = async (): Promise<void> => {
-    this.setState({ spSitesLoading: true, spCurrentPage: 0 });
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
+    this.setSessionState(session, { spSitesLoading: true, spCurrentPage: 0 });
     const sites = await this.sharePointService?.searchSites(this.state.spSiteFilter) || [];
-    this.setState({ spSites: sites, spSitesLoading: false });
+    if (!this.isCurrentSession(session)) return;
+    this.setSessionState(session, { spSites: sites, spSitesLoading: false });
   };
 
   private handleSelectSharePointSite = async (site: ISharePointSite): Promise<void> => {
-    this.setState({ spSelectedSite: site, spListsLoading: true, spLists: [] });
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
+    this.setSessionState(session, { spSelectedSite: site, spListsLoading: true, spLists: [] });
     const lists = await this.sharePointService?.getCalendarLists(site.id) || [];
-    this.setState({ spLists: lists, spListsLoading: false, addingCalendarStep: 'sharepoint-list' });
+    if (!this.isCurrentSession(session)) return;
+    this.setSessionState(session, { spLists: lists, spListsLoading: false, addingCalendarStep: 'sharepoint-list' });
   };
 
   private handleSelectSharePointList = (list: ISharePointList): void => {
     // Use organization primary color for first SharePoint calendar, or let user choose
-    this.setState({
+    this.setSessionState(this.editSession, {
       spSelectedList: list,
       newCalendarName: list.name,
       newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4'
@@ -401,6 +463,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private fetchSharePointListFields = async (list: ISharePointList): Promise<void> => {
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
     const { spSelectedSite } = this.state;
     if (!spSelectedSite || !this.sharePointService) {
       return;
@@ -412,12 +476,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       if (!graphClient) return;
 
       const client = await Promise.resolve(graphClient);
+      if (!this.isCurrentSession(session)) return;
       if (!client) return;
 
       const columnsData = await client
         .api(`/sites/${spSelectedSite.id}/lists/${list.id}/columns`)
         .query({ $select: 'name,displayName,columnGroup' })
         .get();
+      if (!this.isCurrentSession(session)) return;
 
       const rawOptions: IDropdownOption[] = (columnsData.value || [])
         .filter((column: IGraphColumn) => column.name && !column.name.startsWith('_') && column.columnGroup !== '_Hidden')
@@ -443,6 +509,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           .api(`/sites/${spSelectedSite.id}/lists/${list.id}/items`)
           .expand('fields')
           .get();
+        if (!this.isCurrentSession(session)) return;
 
         if (itemsData.value && itemsData.value.length > 0) {
           const fields = Object.keys(itemsData.value[0].fields || {});
@@ -470,7 +537,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           guessedMapping.endDateField = findBestMatchingFieldKey(fieldOptions, candidateLists.end) as string | undefined;
         }
 
-        this.setState({
+        this.setSessionState(session, {
           spAvailableFields: fieldOptions,
           addingCalendarStep: 'sharepoint-fields',
           spFieldMapping: guessedMapping
@@ -479,7 +546,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     } catch (error) {
       console.error('Failed to fetch SharePoint list fields:', error);
       // Fallback to next step anyway
-      this.setState({ addingCalendarStep: 'sharepoint-fields' });
+      this.setSessionState(session, { addingCalendarStep: 'sharepoint-fields' });
     }
   };
 
@@ -508,42 +575,45 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       sources: [...this.state.settings.sources, newSource]
     };
 
-    this.setState({ settings }, () => this.handleCloseAddDialog());
+    this.setSessionState(this.editSession, { settings }, () => this.handleCloseAddDialog());
   };
 
   // Exchange flow
   private handleExchangeMailboxChange = (value?: string): void => {
     this.mailboxDiscovery.invalidate();
-    this.setState({
+    this.setSessionState(this.editSession, {
       exchangeMailbox: value || '', exchangeCalendars: [], exchangeCalendarsLoading: false,
       exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
     });
   };
 
   private handleExchangeLookupMailbox = async (): Promise<void> => {
+    const session = this.editSession;
+    if (!this.isCurrentSession(session)) return;
     const mailbox = this.state.exchangeMailbox.trim();
     await this.mailboxDiscovery.run(async () => {
       if (!this.exchangeService) throw new Error('GraphClient not initialized');
       return this.exchangeService.getCalendars(mailbox);
     }, {
-      start: () => this.setState({
+      start: () => this.setSessionState(session, {
         exchangeMailbox: mailbox, exchangeCalendarsLoading: true, exchangeCalendars: [],
         exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
       }),
-      success: calendars => this.setState({
+      success: calendars => this.setSessionState(session, {
         exchangeCalendars: calendars, exchangeMailboxResolved: true,
         addingCalendarStep: calendars.length ? 'exchange-calendar' : 'exchange-mailbox'
       }),
       error: error => {
         console.error('Exchange mailbox discovery failed:', error);
-        this.setState({ exchangeDiscoveryError: getExchangeDiscoveryErrorMessage(error) });
+        this.setSessionState(session, { exchangeDiscoveryError: getExchangeDiscoveryErrorMessage(error) });
       },
-      finish: () => this.setState({ exchangeCalendarsLoading: false })
+      finish: () => this.setSessionState(session, { exchangeCalendarsLoading: false })
     });
+    if (!this.isCurrentSession(session)) return;
   };
 
   private handleSelectExchangeCalendar = (calendar: IExchangeCalendar): void => {
-    this.setState({ exchangeSelectedCalendarId: calendar.id, newCalendarName: calendar.name, newCalendarColor: calendar.hexColor });
+    this.setSessionState(this.editSession, { exchangeSelectedCalendarId: calendar.id, newCalendarName: calendar.name, newCalendarColor: calendar.hexColor });
   };
 
   private handleConfirmExchangeCalendar = (): void => {
@@ -565,7 +635,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       sources: [...this.state.settings.sources, newSource]
     };
 
-    this.setState({ settings }, () => this.handleCloseAddDialog());
+    this.setSessionState(this.editSession, { settings }, () => this.handleCloseAddDialog());
   };
 
   // ICS flow
@@ -592,18 +662,18 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   private handleUpdateSource = (id: string, updates: Partial<ICalendarSource>): void => {
     const settings = { ...this.state.settings, sources: this.state.settings.sources.map(s => s.id === id ? applyAdminSourceChanges(s, updates) : s) };
-    this.setState({ settings });
+    this.setSessionState(this.editSession, { settings });
   };
 
   private handleToggleExchangeCalendar = (calendarId: string, isEnabled: boolean): void => {
     const settings = { ...this.state.settings, exchangeCalendarStates: { ...(this.state.settings.exchangeCalendarStates || {}), [calendarId]: isEnabled } };
-    this.setState({ settings });
+    this.setSessionState(this.editSession, { settings });
   };
 
-  private handleTogglePlannerShowAll = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, plannerShowAllCalendars: checked } })); };
-  private handleTogglePlannerAssignedToMeOnly = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, plannerShowAllAssignedToMeOnly: checked } })); };
-  private handleToggleUnifiedGroupShowAll = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, unifiedGroupShowAllCalendars: checked } })); };
-  private handleToggleTeamsShiftsShowAll = (checked: boolean): void => { this.setState(prev => ({ settings: { ...prev.settings, teamsShiftsShowAllCalendars: checked } })); };
+  private handleTogglePlannerShowAll = (checked: boolean): void => { this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, plannerShowAllCalendars: checked } })); };
+  private handleTogglePlannerAssignedToMeOnly = (checked: boolean): void => { this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, plannerShowAllAssignedToMeOnly: checked } })); };
+  private handleToggleUnifiedGroupShowAll = (checked: boolean): void => { this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, unifiedGroupShowAllCalendars: checked } })); };
+  private handleToggleTeamsShiftsShowAll = (checked: boolean): void => { this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, teamsShiftsShowAllCalendars: checked } })); };
 
   private isExchangeCalendarEnabled = (calendarId: string): boolean => {
     const states = this.state.settings.exchangeCalendarStates || {};
@@ -611,7 +681,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleToggleOutlookGroupVisibility = (): void => {
-    this.setState(prev => {
+    this.setSessionState(this.editSession, prev => {
       const configured = prev.settings.sources.filter(source => source.sourceType === 'exchange' && !source.isMandatory).map(source => source.isEnabled);
       const discovered = prev.userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(prev.settings, calendar.id)).map(calendar => (prev.settings.exchangeCalendarStates || {})[calendar.id] !== false);
       const target = getBulkVisibilityTarget(getGroupVisibilityState([...discovered, ...configured]));
@@ -620,7 +690,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleToggleSharePointGroupVisibility = (): void => {
-    this.setState(prev => {
+    this.setSessionState(this.editSession, prev => {
       const values = prev.settings.sources.filter(source => source.sourceType === 'sharepoint' && !source.isMandatory).map(source => source.isEnabled);
       const target = getBulkVisibilityTarget(getGroupVisibilityState(values));
       return { settings: setSharePointVisibility(prev.settings, target) };
@@ -629,27 +699,57 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   private handleDeleteSource = (id: string): void => {
     const settings = { ...this.state.settings, sources: this.state.settings.sources.filter(s => s.id !== id || s.isMandatory) };
-    this.setState({ settings });
+    this.setSessionState(this.editSession, { settings });
   };
 
-  private toggleEdit = (id: string | undefined): void => { this.setState({ editingSourceId: id }); };
+  private toggleEdit = (id: string | undefined): void => { this.setSessionState(this.editSession, { editingSourceId: id }); };
 
-  private handleSave = (): void => { this.props.onSave(this.state.settings); this.props.onDismiss(); };
+  private handleSave = async (): Promise<void> => {
+    if (this.savePending) return;
+    this.savePending = true;
+    const session = ++this.editSession;
+    this.invalidateDialogDiscovery();
+    this.userCalendarDiscovery.invalidate();
+    this.setState({ isSaving: true, saveError: undefined });
+    try {
+      await this.props.onSave(structuredClone(this.state.settings));
+      if (this.mounted && session === this.editSession) this.props.onDismiss();
+    } catch (error) {
+      console.error('Failed to save personal settings draft.', error);
+      if (this.mounted && session === this.editSession) this.setState({ saveError: strings.UserSettingsSaveErrorLabel });
+    } finally {
+      this.savePending = false;
+      if (this.mounted && session === this.editSession) this.setState({ isSaving: false });
+    }
+  };
 
-  private handleReset = (): void => {
-    if (confirm(strings.ResetSettingsConfirmationLabel)) {
-      if (this.props.onReset) this.props.onReset();
-      this.props.onDismiss();
+  private handleReset = async (): Promise<void> => {
+    if (this.savePending || !confirm(strings.ResetSettingsConfirmationLabel)) return;
+    this.savePending = true;
+    const session = ++this.editSession;
+    this.invalidateDialogDiscovery();
+    this.userCalendarDiscovery.invalidate();
+    this.setState({ isSaving: true, saveError: undefined });
+    try {
+      await this.props.onReset();
+      if (this.mounted && session === this.editSession) this.props.onDismiss();
+    } catch (error) {
+      console.error('Failed to reset personal settings.', error);
+      if (this.mounted && session === this.editSession) this.setState({ saveError: strings.UserSettingsResetErrorLabel });
+    } finally {
+      this.savePending = false;
+      if (this.mounted && session === this.editSession) this.setState({ isSaving: false });
     }
   };
 
   private onRenderFooterContent = (): React.ReactElement => {
     return (
       <Stack horizontal tokens={{ childrenGap: 8 }}>
-        <PrimaryButton onClick={this.handleSave} text={strings.SaveLabel} />
-        <DefaultButton onClick={this.props.onDismiss} text={strings.CancelLabel} />
+        <PrimaryButton onClick={this.handleSave} disabled={this.state.isSaving} text={this.state.isSaving ? strings.SavingLabel : strings.SaveLabel} />
+        <DefaultButton onClick={this.handleDismiss} disabled={this.state.isSaving} text={strings.CancelLabel} />
         <DefaultButton
           onClick={this.handleReset}
+          disabled={this.state.isSaving}
           text={strings.ResetToDefaultsLabel}
           title={strings.ResetCalendarSettingsTitle}
         />
@@ -669,7 +769,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.TitleSubjectFieldLabel}
             options={spAvailableFields}
             selectedKey={spFieldMapping.titleField || ''}
-            onChange={(_, option) => this.setState({
+            onChange={(_, option) => this.setSessionState(this.editSession, {
               spFieldMapping: { ...spFieldMapping, titleField: option?.key as string }
             })}
           />
@@ -677,7 +777,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.StartDateFieldLabel}
             options={spAvailableFields}
             selectedKey={spFieldMapping.startDateField || ''}
-            onChange={(_, option) => this.setState({
+            onChange={(_, option) => this.setSessionState(this.editSession, {
               spFieldMapping: { ...spFieldMapping, startDateField: option?.key as string }
             })}
           />
@@ -685,7 +785,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.EndDateFieldLabel}
             options={spAvailableFields}
             selectedKey={spFieldMapping.endDateField || ''}
-            onChange={(_, option) => this.setState({
+            onChange={(_, option) => this.setSessionState(this.editSession, {
               spFieldMapping: { ...spFieldMapping, endDateField: option?.key as string }
             })}
           />
@@ -693,7 +793,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.LocationFieldOptionalLabel}
             options={[{ key: '', text: strings.NoneLabel }, ...spAvailableFields]}
             selectedKey={spFieldMapping.locationField || ''}
-            onChange={(_, option) => this.setState({
+            onChange={(_, option) => this.setSessionState(this.editSession, {
               spFieldMapping: { ...spFieldMapping, locationField: option?.key as string }
             })}
           />
@@ -701,20 +801,20 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             label={strings.DescriptionFieldOptionalLabel}
             options={[{ key: '', text: strings.NoneLabel }, ...spAvailableFields]}
             selectedKey={spFieldMapping.descriptionField || ''}
-            onChange={(_, option) => this.setState({
+            onChange={(_, option) => this.setSessionState(this.editSession, {
               spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string }
             })}
           />
           <TextField
             label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
-            onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+            onChange={(_, value) => this.setSessionState(this.editSession, { newCalendarName: value || '' })}
           />
           <div>
             <Label>{strings.ColorLabel}</Label>
             <ColorPicker
               color={this.state.newCalendarColor}
-              onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+              onChange={(_, color) => this.setSessionState(this.editSession, { newCalendarColor: `#${color.hex}` })}
               alphaType="none"
             />
           </div>
@@ -832,7 +932,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 <DefaultButton
                   text={strings.PreviousLabel}
                   disabled={this.state.spCurrentPage === 0}
-                  onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage - 1 })}
+                  onClick={() => this.setSessionState(this.editSession, { spCurrentPage: this.state.spCurrentPage - 1 })}
                 />
                 <Label style={{ margin: 0 }}>
                   {formatLocalizedString(strings.PageOfLabel, this.state.spCurrentPage + 1, totalPages)}
@@ -840,7 +940,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 <DefaultButton
                   text={strings.NextLabel}
                   disabled={this.state.spCurrentPage >= totalPages - 1}
-                  onClick={() => this.setState({ spCurrentPage: this.state.spCurrentPage + 1 })}
+                  onClick={() => this.setSessionState(this.editSession, { spCurrentPage: this.state.spCurrentPage + 1 })}
                 />
               </Stack>
             )}
@@ -863,13 +963,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <TextField
             label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
-            onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+            onChange={(_, value) => this.setSessionState(this.editSession, { newCalendarName: value || '' })}
           />
           <div>
             <Label>{strings.ColorLabel}</Label>
             <ColorPicker
               color={this.state.newCalendarColor}
-              onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+              onChange={(_, color) => this.setSessionState(this.editSession, { newCalendarColor: `#${color.hex}` })}
               alphaType="none"
             />
           </div>
@@ -1000,7 +1100,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               <DefaultButton
                 key={item.adminIcsId}
                 text={item.displayName}
-                onClick={() => this.setState({
+                onClick={() => this.setSessionState(this.editSession, {
                   newCalendarName: item.displayName,
                   icsUrl: item.icsUrl
                 })}
@@ -1012,13 +1112,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         <TextField
           label={strings.CalendarNameLabel}
           value={this.state.newCalendarName}
-          onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+          onChange={(_, value) => this.setSessionState(this.editSession, { newCalendarName: value || '' })}
           placeholder={strings.IcsNamePlaceholder}
         />
         <TextField
           label={strings.IcsUrlLabel}
           value={icsUrl}
-          onChange={(_, value) => this.setState({ icsUrl: value || '' })}
+          onChange={(_, value) => this.setSessionState(this.editSession, { icsUrl: value || '' })}
           placeholder={strings.IcsUrlPlaceholder}
         />
 
@@ -1037,7 +1137,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   // Planner flow
   private handleSelectPlannerPlan = (planId: string, planTitle: string): void => {
-    this.setState({
+    this.setSessionState(this.editSession, {
       plannerSelectedPlanId: planId,
       addingCalendarStep: 'planner-options',
       newCalendarName: planTitle
@@ -1071,7 +1171,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       sources: [...this.state.settings.sources, newSource]
     };
 
-    this.setState({ settings }, () => this.handleCloseAddDialog());
+    this.setSessionState(this.editSession, { settings }, () => this.handleCloseAddDialog());
   };
 
   private handleConfirmTeamsShifts = (): void => {
@@ -1096,11 +1196,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       sources: [...this.state.settings.sources, newSource]
     };
 
-    this.setState({ settings }, () => this.handleCloseAddDialog());
+    this.setSessionState(this.editSession, { settings }, () => this.handleCloseAddDialog());
   };
 
   private handleToggleUnifiedGroupSelection = (groupId: string, checked?: boolean): void => {
-    this.setState(prev => ({
+    this.setSessionState(this.editSession, prev => ({
       unifiedGroupsSelection: {
         ...prev.unifiedGroupsSelection,
         [groupId]: !!checked
@@ -1137,7 +1237,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       sources: [...this.state.settings.sources, ...newSources]
     };
 
-    this.setState({ settings }, () => this.handleCloseAddDialog());
+    this.setSessionState(this.editSession, { settings }, () => this.handleCloseAddDialog());
   };
 
   private renderUnifiedGroupsFlow = (): React.ReactElement => {
@@ -1193,7 +1293,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Label>{strings.ColorLabel}</Label>
           <ColorPicker
             color={this.state.newCalendarColor}
-            onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+            onChange={(_, color) => this.setSessionState(this.editSession, { newCalendarColor: `#${color.hex}` })}
             alphaType="none"
           />
         </div>
@@ -1218,7 +1318,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         <TextField
           label={strings.CalendarNameLabel}
           value={this.state.newCalendarName}
-          onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+          onChange={(_, value) => this.setSessionState(this.editSession, { newCalendarName: value || '' })}
           placeholder={strings.TeamsShiftsLabel}
           required
         />
@@ -1226,14 +1326,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
         <Toggle
           label={strings.SourceLogoLabel}
           checked={this.state.teamsShiftsShowLogo}
-          onChange={(_, checked) => this.setState({ teamsShiftsShowLogo: checked || false })}
+          onChange={(_, checked) => this.setSessionState(this.editSession, { teamsShiftsShowLogo: checked || false })}
           onText={strings.OnLabel}
           offText={strings.OffLabel}
         />
 
         <ColorPicker
           color={this.state.newCalendarColor}
-          onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+          onChange={(_, color) => this.setSessionState(this.editSession, { newCalendarColor: `#${color.hex}` })}
           alphaType="none"
           showPreview={true}
         />
@@ -1318,7 +1418,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <TextField
             label={strings.CalendarNameLabel}
             value={this.state.newCalendarName}
-            onChange={(_, value) => this.setState({ newCalendarName: value || '' })}
+            onChange={(_, value) => this.setSessionState(this.editSession, { newCalendarName: value || '' })}
             placeholder={strings.ProjectTasksPlaceholder}
             required
           />
@@ -1326,7 +1426,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Toggle
             label={strings.AssignedToMeOnlyLabel}
             checked={this.state.plannerAssignedToMeOnly}
-            onChange={(_, checked) => this.setState({ plannerAssignedToMeOnly: checked || false })}
+            onChange={(_, checked) => this.setSessionState(this.editSession, { plannerAssignedToMeOnly: checked || false })}
             onText={strings.OnLabel}
             offText={strings.OffLabel}
           />
@@ -1334,7 +1434,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Toggle
             label={strings.ShowCompletedTasksLabel}
             checked={this.state.plannerShowCompleted}
-            onChange={(_, checked) => this.setState({ plannerShowCompleted: checked || false })}
+            onChange={(_, checked) => this.setSessionState(this.editSession, { plannerShowCompleted: checked || false })}
             onText={strings.OnLabel}
             offText={strings.OffLabel}
           />
@@ -1342,14 +1442,14 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
           <Toggle
             label={strings.SourceLogoLabel}
             checked={this.state.plannerShowLogo}
-            onChange={(_, checked) => this.setState({ plannerShowLogo: checked || false })}
+            onChange={(_, checked) => this.setSessionState(this.editSession, { plannerShowLogo: checked || false })}
             onText={strings.OnLabel}
             offText={strings.OffLabel}
           />
 
           <ColorPicker
             color={this.state.newCalendarColor}
-            onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })}
+            onChange={(_, color) => this.setSessionState(this.editSession, { newCalendarColor: `#${color.hex}` })}
             alphaType="none"
             showPreview={true}
           />
@@ -1473,7 +1573,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     const { sectionKey, icon, iconBg, iconColor, title, subtitle, showLogoValue, onShowLogoChange, visibilityState, visibilityDisabled, onVisibilityChange, headerActions, children } = params;
     const isExpanded = this.state.expandedSections[sectionKey] !== false;
     const toggleExpanded = (): void => {
-      this.setState(prev => ({
+      this.setSessionState(this.editSession, prev => ({
         expandedSections: { ...prev.expandedSections, [sectionKey]: !isExpanded }
       }));
     };
@@ -1714,7 +1814,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   public render(): React.ReactElement {
-    const { isOpen, onDismiss } = this.props;
+    const { isOpen } = this.props;
     const { settings, showAddDialog, userExchangeCalendars, userExchangeCalendarsLoading } = this.state;
     const effectiveVisibleHours = settings.userVisibleHourCount ?? settings.visibleHourCount;
     const effectiveStartMinutes = settings.userPreferredStartMinutes ?? settings.preferredStartMinutes;
@@ -1728,12 +1828,15 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     return (
       <Panel
         isOpen={isOpen}
-        onDismiss={onDismiss}
+        onDismiss={this.handleDismiss} isBlocking={this.state.isSaving} isLightDismiss={false} hasCloseButton={!this.state.isSaving}
         type={PanelType.medium}
         headerText={showAddDialog ? strings.AddCalendarLabel : strings.CalendarSettingsTitle}
         onRenderFooterContent={!showAddDialog ? this.onRenderFooterContent : undefined}
         isFooterAtBottom={true}
       >
+        {this.state.saveError && <MessageBar messageBarType={MessageBarType.error}>{this.state.saveError}</MessageBar>}
+        <fieldset disabled={this.state.isSaving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+
         {showAddDialog ? (
           this.renderAddCalendarFlow()
         ) : (
@@ -1743,7 +1846,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               <Toggle
                 label={strings.UsePersonalStartTimeLabel}
                 checked={settings.userPreferredStartMinutes !== undefined}
-                onChange={(_, checked) => this.setState({ settings: { ...settings, userPreferredStartMinutes: checked ? settings.preferredStartMinutes : undefined } })}
+                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: { ...settings, userPreferredStartMinutes: checked ? settings.preferredStartMinutes : undefined } })}
                 onText={strings.OnLabel}
                 offText={strings.OffLabel}
               />
@@ -1752,12 +1855,12 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 disabled={settings.userPreferredStartMinutes === undefined}
                 selectedKey={effectiveStartMinutes}
                 options={startOptions}
-                onChange={(_, option) => this.setState({ settings: { ...settings, userPreferredStartMinutes: Number(option?.key) } })}
+                onChange={(_, option) => this.setSessionState(this.editSession, { settings: { ...settings, userPreferredStartMinutes: Number(option?.key) } })}
               />
               <Toggle
                 label={strings.UsePersonalVisibleHoursLabel}
                 checked={settings.userVisibleHourCount !== undefined}
-                onChange={(_, checked) => this.setState({ settings: { ...settings, userVisibleHourCount: checked ? settings.visibleHourCount : undefined } })}
+                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: { ...settings, userVisibleHourCount: checked ? settings.visibleHourCount : undefined } })}
                 onText={strings.OnLabel}
                 offText={strings.OffLabel}
               />
@@ -1769,13 +1872,13 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 onChange={(_, option) => {
                   const userVisibleHourCount = Number(option?.key);
                   const userPreferredStartMinutes = Math.min(effectiveStartMinutes, 24 * 60 - userVisibleHourCount * 60);
-                  this.setState({ settings: { ...settings, userVisibleHourCount, userPreferredStartMinutes: settings.userPreferredStartMinutes === undefined ? undefined : userPreferredStartMinutes } });
+                  this.setSessionState(this.editSession, { settings: { ...settings, userVisibleHourCount, userPreferredStartMinutes: settings.userPreferredStartMinutes === undefined ? undefined : userPreferredStartMinutes } });
                 }}
               />
               <Toggle
                 label={strings.UsePersonalWeekendPreferenceLabel}
                 checked={settings.userShowWeekends !== undefined}
-                onChange={(_, checked) => this.setState({ settings: {
+                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: {
                   ...settings,
                   showWeekends: checked ? settings.showWeekends : settings.adminShowWeekends,
                   userShowWeekends: checked ? settings.showWeekends : undefined
@@ -1787,7 +1890,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 label={strings.ShowWeekendsLabel}
                 disabled={settings.userShowWeekends === undefined}
                 checked={settings.showWeekends}
-                onChange={(_, checked) => this.setState({ settings: { ...settings, showWeekends: !!checked, userShowWeekends: !!checked } })}
+                onChange={(_, checked) => this.setSessionState(this.editSession, { settings: { ...settings, showWeekends: !!checked, userShowWeekends: !!checked } })}
                 onText={strings.OnLabel}
                 offText={strings.OffLabel}
               />
@@ -1819,7 +1922,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   title: strings.OutlookLabel,
                   subtitle: strings.OutlookSectionSubtitle,
                   showLogoValue: settings.exchangeShowSourceLogo ?? true,
-                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, exchangeShowSourceLogo: checked } }),
+                  onShowLogoChange: (checked) => this.setSessionState(this.editSession, { settings: { ...settings, exchangeShowSourceLogo: checked } }),
                   visibilityState: getGroupVisibilityState([
                     ...userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(settings, calendar.id)).map(calendar => this.isExchangeCalendarEnabled(calendar.id)),
                     ...settings.sources.filter(source => source.sourceType === 'exchange').map(source => source.isEnabled)
@@ -1853,7 +1956,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   title: strings.SharePointLabel,
                   subtitle: strings.SharePointSectionSubtitle,
                   showLogoValue: settings.sharePointShowSourceLogo ?? true,
-                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, sharePointShowSourceLogo: checked } }),
+                  onShowLogoChange: (checked) => this.setSessionState(this.editSession, { settings: { ...settings, sharePointShowSourceLogo: checked } }),
                   visibilityState: getGroupVisibilityState(settings.sources.filter(source => source.sourceType === 'sharepoint').map(source => source.isEnabled)),
                   visibilityDisabled: !settings.sources.some(source => source.sourceType === 'sharepoint' && !source.isMandatory),
                   onVisibilityChange: this.handleToggleSharePointGroupVisibility,
@@ -1869,7 +1972,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   title: strings.PlannerLabel,
                   subtitle: strings.PlannerSectionSubtitle,
                   showLogoValue: settings.plannerShowSourceLogo ?? true,
-                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, plannerShowSourceLogo: checked } }),
+                  onShowLogoChange: (checked) => this.setSessionState(this.editSession, { settings: { ...settings, plannerShowSourceLogo: checked } }),
                   children: (() => {
                     const plannerSources = settings.sources.filter(s => s.sourceType === 'planner');
                     const showAllPlanner = settings.plannerShowAllCalendars ?? false;
@@ -1916,7 +2019,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   title: strings.GroupsAndTeamsLabel,
                   subtitle: strings.GroupsAndTeamsSectionSubtitle,
                   showLogoValue: settings.unifiedGroupShowSourceLogo ?? true,
-                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, unifiedGroupShowSourceLogo: checked } }),
+                  onShowLogoChange: (checked) => this.setSessionState(this.editSession, { settings: { ...settings, unifiedGroupShowSourceLogo: checked } }),
                   children: (() => {
                     const unifiedGroupSources = settings.sources.filter(s => s.sourceType === 'unifiedGroup');
                     const showAllUnifiedGroups = settings.unifiedGroupShowAllCalendars ?? false;
@@ -1954,7 +2057,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   title: strings.TeamsShiftsLabel,
                   subtitle: strings.TeamsShiftsSectionSubtitle,
                   showLogoValue: settings.teamsShiftsShowSourceLogo ?? true,
-                  onShowLogoChange: (checked) => this.setState({ settings: { ...settings, teamsShiftsShowSourceLogo: checked } }),
+                  onShowLogoChange: (checked) => this.setSessionState(this.editSession, { settings: { ...settings, teamsShiftsShowSourceLogo: checked } }),
                   children: (() => {
                     const teamsShiftsSources = settings.sources.filter(s => s.sourceType === 'teamsShifts');
                     const showAllTeamsShifts = settings.teamsShiftsShowAllCalendars ?? false;
@@ -1993,6 +2096,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             </div>
           </Stack>
         )}
+        </fieldset>
       </Panel>
     );
   }

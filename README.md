@@ -46,7 +46,8 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Use organization theme colors and support light and dark themes.
 - Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.
 - Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation.
-- Store personal settings and per-source visibility choices in the OneDrive App Folder.
+- Preview personal settings live in the calendar before saving. Cancel restores saved settings; failed Save retains your draft and restores the calendar with an error message.
+- Store personal settings and per-source visibility choices in the OneDrive App Folder. Save and Reset wait for storage; toolbar view preferences update optimistically and roll back on failure.
 - Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
 - Open exact Outlook and Microsoft 365 Group calendar events, SharePoint list events, and Planner tasks from Event Details. Sources without a reliable exact item link, including Teams Shifts, do not receive a general application fallback.
 
@@ -99,7 +100,7 @@ Personal settings include:
 
 Date and time labels follow the current SharePoint page culture. This includes the regional 12- or 24-hour time format.
 
-Administrator assignments use Mandatory (always enabled), Default (initially enabled) or Available (initially disabled). Edits to existing assignments are passed to SPFx before synchronizing current and backup properties; save and republish the SharePoint page to persist them for readers. Mandatory sources cannot be disabled or removed. Personal name, color, logo and supported source-option permissions are configured separately. Explicit optional-calendar visibility choices persist until reset or an observed policy disallows them. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
+Administrator assignments use Mandatory (always enabled), Default (initially enabled) or Available (initially disabled). Complete administrator drafts are handed to SPFx through one callback writing one property; save and republish the SharePoint page to persist them for readers. Mandatory sources cannot be disabled or removed. Personal name, color, logo and supported source-option permissions are configured separately. Explicit optional-calendar visibility choices persist until reset or an observed policy disallows them. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
 
 ## Documentation
 

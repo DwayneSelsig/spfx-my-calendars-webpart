@@ -108,11 +108,8 @@ export class SettingsStorageService {
   }
 
   public async deleteUserSettings(): Promise<boolean> {
-    const [deletedCurrent, deletedLegacy] = await Promise.all([
-      this.deleteJsonFile(this.USER_SETTINGS_FILE),
-      this.deleteJsonFile(this.LEGACY_SETTINGS_FILE)
-    ]);
-
-    return deletedCurrent && deletedLegacy;
+    // Keep the current file intact if legacy cleanup fails.
+    if (!await this.deleteJsonFile(this.LEGACY_SETTINGS_FILE)) return false;
+    return this.deleteJsonFile(this.USER_SETTINGS_FILE);
   }
 }

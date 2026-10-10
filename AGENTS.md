@@ -64,6 +64,15 @@ Documentation-only changes still require a targeted check of relevant source. Co
 - The final response for a completed feature implementation **MUST** end with `Commit message: <short imperative summary>`.
 - Do not remove legacy or inactive code unless the task explicitly requires it.
 
+## Settings lifecycle guardrails
+
+- Keep one persistence owner per domain: the webpart owns callbacks, SPFx writes administrator properties, and SettingsStorageService performs personal OneDrive I/O.
+- Do not combine direct webpart-property writes with callbacks for the same change. Preserve the required SPFx bridge, not duplicate persistence wrappers.
+- Await lifecycle-dependent writes, prevent concurrent Save operations, and do not refresh/unmount controls during unfinished saves.
+- Persist complete administrator drafts, preserving non-visible fields and excluding wizard state.
+- Prefer optimistic personal preview; Cancel/failure restores confirmed effective settings, while failed Save retains the editable draft and shows a localized error.
+- Classify runtime failures after successful storage separately. See [Settings and policy](docs/settings-and-policy.md#storage-and-migration).
+
 ## Graphify
 
 This project has a knowledge graph at `graphify-out/`. It is a navigation and code-analysis aid, not product authority.

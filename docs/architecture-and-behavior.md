@@ -50,7 +50,8 @@ An intention, deviation, technical-debt item, assumption, open question, or inac
 - A source service **MUST** own external access and conversion to `ICalendarEvent`. It **MUST NOT** decide policy, persistence, or rendering.
 - `MyCalendars` **MUST** coordinate loading, range state, deduplication, service status, search state, renderer selection, and the optional administrator-controlled appointment cache.
 - A renderer **MUST** display prepared local events and **MUST NOT** access storage or source APIs.
-- Administrator and personal settings panels **MAY** edit isolated drafts. The web part **MUST** own accepted persistence.
+- Administrator and personal settings panels **MAY** edit isolated drafts. The web part **MUST** own accepted persistence callbacks. SPFx is the sole administrator property writer; SettingsStorageService owns personal OneDrive I/O.
+- Lifecycle-dependent writes **MUST** be awaited. Personal edits **SHOULD** preview optimistically; failed storage **MUST** restore confirmed settings with visible feedback. Runtime failures after successful storage **MUST NOT** be labelled persistence failures.
 - Source display metadata **SHOULD** come from the shared registry unless a source supplies an explicit runtime override.
 
 See [Components and data flow](components-and-data-flow.md) for the component map and focused flow routes.
@@ -81,7 +82,7 @@ See [Components and data flow](components-and-data-flow.md) for the component ma
 
 **Fact:** the repository uses the SPFx rig's existing Heft/Jest runner for focused pure regression tests. `npm run build` runs those tests before production packaging.
 
-Pure settings, persistence-helper, and cache behavior **SHOULD** be covered without SPFx host mocks. Host integration remains a manual verification layer until a dedicated host-test harness is confirmed.
+Pure settings and cache behavior **SHOULD** be covered without SPFx host mocks. Focused React interaction and composition callback tests use the existing Jest runner with narrow service/framework stubs. Host integration remains a manual verification layer until a dedicated host-test harness is confirmed.
 
 ## Focused documentation
 

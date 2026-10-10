@@ -22,3 +22,16 @@ export const NoMailboxCalendarsLabel = "No calendars were returned for this mail
 export const SecurityGroupsLoadErrorLabel = "Security groups could not be loaded. Try searching again. Your selection has been retained.";
 export const NoSecurityGroupsLabel = "No security groups found.";
 export const UnnamedSecurityGroupLabel = 'Unnamed security group';
+
+export const SaveLabel = 'Save';
+export const SavingLabel = 'Saving...';
+export const CancelLabel = 'Cancel';
+export const ResetDraftToDefaultsLabel = 'Reset draft';
+export const ResetToDefaultsLabel = 'Reset';
+export const CalendarSettingsTitle = 'Personal settings';
+export const AdminCalendarDefaultsTitle = 'Administrator defaults';
+export const UserSettingsSaveErrorLabel = 'Save failed; saved settings restored.';
+export const UserSettingsResetErrorLabel = 'Reset failed; saved settings restored.';
+export const AdminSettingsSaveErrorLabel = 'Administrator save failed.';
+export const AdminRuntimeRebuildErrorLabel = 'Saved, but runtime rebuild failed.';
+export const AdminSettingsRestoreErrorLabel = 'Previous administrator defaults could not be restored.';

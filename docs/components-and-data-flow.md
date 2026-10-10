@@ -14,9 +14,9 @@ This document describes verified current responsibilities. Normative cross-cutti
 | `SettingsStorageService` | Current/legacy personal JSON in OneDrive App Folder | Graph I/O; no policy resolution |
 | `AudienceService` | Typed group discovery and current-user membership | Five-minute session cache; no policy effects |
 | `MyCalendars` | Source coordination, visible range, event merge, status, search, renderer selection | Runtime state plus optional administrator-controlled browser cache |
-| `SettingsPanel` | Personal draft and source discovery | `onSave`, `onReset`, deep links; no persistence writes |
-| `AdminSettingsPanel` | Administrator draft, group-first calendar discovery, mailbox rules, policy and shared presentation, ICS catalog | `onSave`; no property writes |
-| `PropertyPaneAdminCalendarManager` | Property-pane adapter for administrator panel | Separate Graph client and React mount lifecycle |
+| `UserSettingsPanel` | Personal draft, live preview and source discovery | Awaited `onSave`/`onReset`, preview/cancel, deep links; no persistence writes |
+| `AdminDefaultsPanel` | Administrator draft, group-first calendar discovery, mailbox rules, policy and shared presentation, ICS catalog | `onSave`; no property writes |
+| `PropertyPaneAdminDefaultsManager` | Property-pane adapter for administrator panel | Required SPFx change bridge, current-value getters, Graph client and React mount lifecycle |
 | Source services | External access and `ICalendarEvent` mapping | Graph/HTTP requests; no policy or rendering |
 | `CalendarSourceRegistry` | Source-type display metadata | Static definitions |
 | `sourceIconHelper` | Explicit/registry icon and name fallbacks | Pure derived metadata |
@@ -43,7 +43,7 @@ This document describes verified current responsibilities. Normative cross-cutti
 - `onThemeChanged` can update CSS variables and effective theme-derived settings without mounting React.
 - `onInit` initializes storage and Graph access before the framework `render` mounts React.
 - `onDispose` unmounts the React subtree.
-- Accepted administrator and personal changes return to the web part before persistence. Administrator JSON is handed to SPFx callbacks before local property synchronization; runtime acceptance follows that hand-off. Older administrator save completions cannot refresh the property pane over a newer save.
+- The webpart owns accepted settings callbacks. Administrator saves use one SPFx callback writer and one property; personal writes use OneDrive. Panels await completion before closing; the adapter does not refresh itself during a save.
 - The web part discovers applicable automatic Exchange mailbox rules using the Exchange service before pure settings resolution, on initialization, administrator changes and manual refresh. Generation checks discard obsolete results.
 - AssignmentControls supplies reusable policy, capability and grouping presentation; CalendarSettingsService retains all policy decisions.
 
@@ -53,3 +53,19 @@ This document describes verified current responsibilities. Normative cross-cutti
 | --- | --- | --- |
 | `ics` source shape | Legacy/inert runtime type | No adapter; coordinator marks ready |
 | PnP Calendar history/comments | Historical | No active renderer dependency |
+
+## Settings flows
+
+```text
+UserSettingsPanel -> MyCalendars -> MyCalendarsWebPart
+  preview -> derive/resolve -> runtime only
+  cancel  -> discard preview -> confirmed runtime
+  save/reset -> await SettingsStorageService -> accept or rollback
+
+SPFx Property Pane -> PropertyPaneAdminDefaultsManager -> AdminDefaultsPanel
+  complete draft -> MyCalendarsWebPart -> SPFx change bridge -> adminSettings
+  accepted configuration -> runtime rebuild -> close -> local summary update
+
+Administrator defaults + confirmed personal settings (or preview) + matched audiences
+  -> resolveCalendarSettings() -> MyCalendars
+```

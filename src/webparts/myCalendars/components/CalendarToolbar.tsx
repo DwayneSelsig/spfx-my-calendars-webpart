@@ -70,6 +70,7 @@ const renderSelectedView = (options?: IDropdownOption[]): JSX.Element => {
 };
 
 export interface ICalendarToolbarProps {
+  isViewChangeDisabled?: boolean;
   currentDate: Date;
   currentView: CalendarViewType;
   dateRangeText: string;
@@ -79,7 +80,7 @@ export interface ICalendarToolbarProps {
   onViewChange: (view: CalendarViewType) => void;
 }
 
-export const CalendarToolbar: React.FC<ICalendarToolbarProps> = ({ currentDate, currentView, dateRangeText, onToday, onNavigate, onDateChange, onViewChange }) => {
+export const CalendarToolbar: React.FC<ICalendarToolbarProps> = ({ isViewChangeDisabled, currentDate, currentView, dateRangeText, onToday, onNavigate, onDateChange, onViewChange }) => {
   const labels = getCalendarLabels();
   const viewOptions: IDropdownOption<ICalendarViewOptionData>[] = [
     { key: 'day', text: labels.day, data: { iconName: 'CalendarAgenda' } },
@@ -108,6 +109,7 @@ export const CalendarToolbar: React.FC<ICalendarToolbarProps> = ({ currentDate, 
       </label>
       <strong style={{ flex: '1 1 180px', minWidth: 140, padding: '0 6px', textTransform: 'capitalize' }}>{dateRangeText}</strong>
       <Dropdown
+        disabled={isViewChangeDisabled}
         ariaLabel={`${labels.view}: ${selectedViewLabel}`}
         className={toolbarClassNames.viewDropdown}
         selectedKey={currentView}

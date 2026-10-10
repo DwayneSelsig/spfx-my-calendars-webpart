@@ -222,6 +222,11 @@ declare interface IMyCalendarsWebPartStrings {
   AdminCalendarManagerLabel: string;
   AdminPropertyPaneSummaryLabel: string;
   ManageAdminDefaultsLabel: string;
+  AdminSettingsSaveErrorLabel: string;
+  AdminRuntimeRebuildErrorLabel: string;
+  AdminSettingsRestoreErrorLabel: string;
+  UserSettingsSaveErrorLabel: string;
+  UserSettingsResetErrorLabel: string;
   SavingLabel: string;
   ServiceExchangeLabel: string;
   ServiceIcsLabel: string;

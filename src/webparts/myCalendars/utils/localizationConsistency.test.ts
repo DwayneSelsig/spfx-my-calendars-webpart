@@ -39,6 +39,14 @@ function getSourceFiles(directory: string): string[] {
 }
 
 describe('localization resource consistency', () => {
+  it.each(['en-us.js', 'nl-nl.js'])('loads %s as valid AMD JavaScript', fileName => {
+    const source = fs.readFileSync(path.join(sourceRoot, 'loc', fileName), 'utf8');
+    const vm = require('vm') as { runInNewContext(source: string, context: object): unknown };
+    let resources: Record<string, string> | undefined;
+    vm.runInNewContext(source, { define: (_dependencies: string[], factory: () => Record<string, string>) => { resources = factory(); } });
+    expect(resources?.UserSettingsSaveErrorLabel).toBeTruthy();
+    expect(resources?.AdminSettingsSaveErrorLabel).toBeTruthy();
+  });
   it('keeps the declaration and locale resource keys synchronized', () => {
     const declarationKeys = readKeys('mystrings.d.ts', /^\s{2}([A-Za-z0-9_]+): string;/gm);
     const englishKeys = readKeys('en-us.js', /["']([A-Za-z0-9_]+)["']\s*:/g);
