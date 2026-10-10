@@ -1607,6 +1607,14 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       ics: { title: strings.AdminIcsCatalogLabel, subtitle: strings.AdminIcsSectionSubtitle, background: 'rgba(0, 120, 212, 0.12)' }
     };
     const { title, subtitle, background } = presentation[type];
+    const containerLabels: Record<CalendarSourceType, string> = {
+      exchange: strings.AdminGroupByMailboxLabel,
+      sharepoint: strings.AdminGroupBySiteLabel,
+      planner: strings.AdminGroupByPlanLabel,
+      unifiedGroup: strings.AdminGroupByGroupTeamLabel,
+      teamsShifts: strings.AdminGroupByTeamLabel,
+      ics: strings.AdminGroupBySubscriptionUrlLabel
+    };
     const expanded = this.state.expandedSections[type] !== false;
     const contentId = `${this.sectionId}-${type}`;
     return <div key={type} data-admin-section={type} style={{ border: '1px solid #edebe9', overflow: 'hidden', minWidth: 0 }}>
@@ -1624,8 +1632,9 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
           <Icon iconName="ChevronDown" style={{ fontSize: 14, opacity: 0.55, transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }} />
         </button>
         <div style={{ flex: '0 1 210px', minWidth: 0, maxWidth: '100%' }}>
-          <Dropdown ariaLabel={`${strings.AdminGroupingLabel}: ${title}`} selectedKey={this.state.groupingModes[type] || 'audience'}
-            options={[{ key: 'audience', text: strings.AdminGroupByAudienceLabel }, { key: 'container', text: strings.AdminGroupByAccountLabel }]}
+          <Dropdown label={strings.AdminGroupingLabel} ariaLabel={`${strings.AdminGroupingLabel}: ${title}`} selectedKey={this.state.groupingModes[type] || 'audience'}
+            styles={{ label: { fontSize: 11, paddingTop: 0 } }}
+            options={[{ key: 'audience', text: strings.AdminGroupByAudienceLabel }, { key: 'container', text: containerLabels[type] }]}
             onChange={(_, option) => {
               if (option?.key === 'audience' || option?.key === 'container') {
                 const mode = option.key;
@@ -1663,7 +1672,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     };
     const audienceGroup = (group: IAudienceGroup, content: React.ReactNode): React.ReactElement =>
       <AssignmentGroup key={group.groupId} title={group.displayName} description={audienceTypeLabel(group)}>
-        {content}{type !== 'ics' && this.renderAddForAudience(type, group)}
+        {content}{type !== 'ics' && type !== 'exchange' && type !== 'sharepoint' && this.renderAddForAudience(type, group)}
       </AssignmentGroup>;
     // ICS URL groups deliberately have no separate border.
     const containerGroup = (id: string, items: typeof entries, content: React.ReactNode): React.ReactElement => type === 'ics'
@@ -1911,11 +1920,11 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
                   ? this.renderGroupedAssignments()
                   : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminDefaultCalendarsLabel}</div>}
               </Stack>
-              <div>
+              {settings.icsCatalog.length > 0 && <div>
                 <Stack tokens={{ childrenGap: 8 }}>
                   {this.renderIcsCatalog()}
                 </Stack>
-              </div>
+              </div>}
             </Stack>
           </Stack>
         )}

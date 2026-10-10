@@ -376,10 +376,12 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 ### DEC-027 — Shared administrator calendar container
 
 - **Status:** Decision
-- One bordered area groups all administrator calendars beneath **Admin default calendars**, including the **Add Admin Default** button and the ICS catalog with its own subheading.
-- All source sections, including ICS, use personal-panel-style icon/gray headers with independent audience-first or account/container-first grouping and collapse controls. Empty sections remain within the shared area.
-- Default grouping is audience/security group; every new panel session resets grouping and expands sections. Mailboxes, sites, plans, groups/teams and case-insensitive ICS URLs supply container identities.
+- One bordered area groups all administrator calendars beneath **Admin default calendars**, including the **Add calendar** button and the ICS catalog with its own subheading.
+- All source sections, including ICS, use personal-panel-style icon/gray headers with independent audience-first or account/container-first grouping and collapse controls. The empty default-calendar message remains within the shared area; an empty ICS catalog is hidden.
+- The dropdown is visibly labeled **Group by** / **Groeperen op**, with **Audience** / **Doelgroep** and a source-specific second option: Mailbox, SharePoint site, Plan, Group / team, Team or Subscription URL.
+- Default grouping is audience; every new panel session resets grouping and expands sections. Mailboxes, sites, plans, groups/teams and case-insensitive ICS URLs supply container identities.
 - This replaces fixed ICS URL-first presentation. ICS audience actions and independently editable entries remain; URL groups have no separate borders. Presentation switches preserve all assignments, rules, exceptions and active edits, and do not enter the saved settings draft.
+- Exchange and SharePoint use the central **Add calendar** button rather than audience-scoped **Add more calendars** buttons. Other source sections retain their audience-scoped addition actions.
 - This is a presentation change; settings contracts and persistence remain unchanged.
 
 ## Project and delivery

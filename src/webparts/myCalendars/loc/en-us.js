@@ -1,7 +1,14 @@
 define([], function() {
   return {
-    "AdminGroupingLabel": "Group calendars by",
-    "AdminGroupByAudienceLabel": "Audience / security group",
+    "AdminGroupByMailboxLabel": "Mailbox",
+    "AdminGroupBySiteLabel": "SharePoint site",
+    "AdminGroupByPlanLabel": "Plan",
+    "AdminGroupByGroupTeamLabel": "Group / team",
+    "AdminGroupByTeamLabel": "Team",
+    "AdminGroupBySubscriptionUrlLabel": "Subscription URL",
+
+    "AdminGroupingLabel": "Group by",
+    "AdminGroupByAudienceLabel": "Audience",
     "AdminGroupByAccountLabel": "Account / URL",
     "AdminIcsSectionSubtitle": "Manage ICS subscriptions",
 
@@ -91,7 +98,7 @@ define([], function() {
     ,"UsePersonalVisibleHoursLabel": "Use a personal number of visible hours"
     ,"VisibleHoursLabel": "Visible hours"
     ,"ResetDraftToDefaultsLabel": "Reset Draft to Defaults"
-    ,"AddAdminDefaultLabel": "Add Admin Default"
+    ,"AddAdminDefaultLabel": "Add calendar"
     ,"AdminCalendarDefaultsTitle": "Admin Calendar Defaults"
     ,"DefaultViewLabel": "Default View"
     ,"TimelineDefaultsLabel": "Timeline defaults"

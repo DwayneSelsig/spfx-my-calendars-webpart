@@ -1,4 +1,11 @@
 declare interface IMyCalendarsWebPartStrings {
+  AdminGroupByMailboxLabel: string;
+  AdminGroupBySiteLabel: string;
+  AdminGroupByPlanLabel: string;
+  AdminGroupByGroupTeamLabel: string;
+  AdminGroupByTeamLabel: string;
+  AdminGroupBySubscriptionUrlLabel: string;
+
   AdminGroupingLabel: string;
   AdminGroupByAudienceLabel: string;
   AdminGroupByAccountLabel: string;

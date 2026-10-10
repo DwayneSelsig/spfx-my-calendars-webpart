@@ -79,7 +79,7 @@ https://learn.microsoft.com/sharepoint/use-app-catalog
 
 Web part editors can set administrator defaults in the property pane. Users can set personal preferences in the settings panel.
 
-The administrator panel groups its calendar assignments, Add Admin Default button, and ICS catalog in one bordered area under **Admin default calendars**. Each calendar section, including ICS, has a colored icon, gray collapsible header and its own **Audience / security group** or **Account / URL** grouping dropdown. Every opening starts expanded and grouped by audience. Account grouping uses mailboxes, sites, plans or groups/teams; ICS uses URL groups without separate borders. Grouping only changes the display. Edit an entry and choose **Groups** to change its audiences.
+The administrator panel groups its calendar assignments, **Add calendar** button, and ICS catalog in one bordered area under **Admin default calendars**. Each calendar section, including ICS, has a colored icon, gray collapsible header and its own dropdown visibly labeled **Group by**, offering **Audience** or the source-specific **Mailbox**, **SharePoint site**, **Plan**, **Group / team**, **Team** or **Subscription URL**. Every opening starts expanded and grouped by audience. Account grouping uses mailboxes, sites, plans or groups/teams; ICS uses URL groups without separate borders. Grouping only changes the display. Exchange and SharePoint calendars are added through the central **Add calendar** button. The ICS section is hidden until its catalog contains an entry. Edit an entry and choose **Groups** to change its audiences.
 
 The administrator settings model includes:
 

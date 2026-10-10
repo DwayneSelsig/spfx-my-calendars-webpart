@@ -1,7 +1,14 @@
 define([], function() {
   return {
-    "AdminGroupingLabel": "Agenda’s groeperen op",
-    "AdminGroupByAudienceLabel": "Doelgroep / securitygroep",
+    "AdminGroupByMailboxLabel": "Mailbox",
+    "AdminGroupBySiteLabel": "SharePoint-site",
+    "AdminGroupByPlanLabel": "Plan",
+    "AdminGroupByGroupTeamLabel": "Groep / team",
+    "AdminGroupByTeamLabel": "Team",
+    "AdminGroupBySubscriptionUrlLabel": "Abonnements-URL",
+
+    "AdminGroupingLabel": "Groeperen op",
+    "AdminGroupByAudienceLabel": "Doelgroep",
     "AdminGroupByAccountLabel": "Account / URL",
     "AdminIcsSectionSubtitle": "ICS-abonnementen beheren",
 
@@ -90,7 +97,7 @@ define([], function() {
     ,"UsePersonalVisibleHoursLabel": "Persoonlijk aantal zichtbare uren gebruiken"
     ,"VisibleHoursLabel": "Zichtbare uren"
     ,"ResetDraftToDefaultsLabel": "Concept terugzetten naar standaardwaarden"
-    ,"AddAdminDefaultLabel": "Beheerderstandaard toevoegen"
+    ,"AddAdminDefaultLabel": "Agenda toevoegen"
     ,"AdminCalendarDefaultsTitle": "Beheerderstandaarden voor agenda's"
     ,"DefaultViewLabel": "Standaardweergave"
     ,"TimelineDefaultsLabel": "Tijdlijnstandaarden"

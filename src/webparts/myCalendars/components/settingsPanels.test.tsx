@@ -74,11 +74,17 @@ describe('settings panels awaited lifecycle', () => {
     return { panel, props };
   }
 
-  function setGrouping(type: string, mode: string): void {
+  function setGrouping(type: string, mode: 'audience' | 'container'): void {
+    const containerLabels: Record<string, string> = {
+      exchange: 'AdminGroupByMailboxLabel', sharepoint: 'AdminGroupBySiteLabel', planner: 'AdminGroupByPlanLabel',
+      unifiedGroup: 'AdminGroupByGroupTeamLabel', teamsShifts: 'AdminGroupByTeamLabel', ics: 'AdminGroupBySubscriptionUrlLabel'
+    };
+    const optionText = mode === 'audience' ? 'AdminGroupByAudienceLabel' : containerLabels[type];
     const section = document.querySelector(`[data-admin-section="${type}"]`)!;
+    expect(section.querySelector('label')?.textContent).toBe('AdminGroupingLabel');
     const dropdown = section.querySelector('[role="combobox"]')!;
     act(() => { Simulate.click(dropdown); });
-    const option = Array.from(document.querySelectorAll('[role="option"]')).find(item => item.textContent === mode)!;
+    const option = Array.from(document.querySelectorAll('[role="option"]')).find(item => item.textContent === optionText)!;
     expect(option).toBeDefined();
     act(() => { Simulate.click(option); });
   }
@@ -101,6 +107,34 @@ describe('settings panels awaited lifecycle', () => {
     return settings;
   }
 
+  it.each(['exchange', 'sharepoint'] as const)('uses the central add action without audience add buttons for %s', type => {
+    const settings = groupedSettings();
+    settings.exchangeMailboxAssignments = [];
+    settings.assignedSources = settings.assignedSources.map(item => ({ ...item, source: { ...item.source,
+      sourceType: type, sharePointSiteId: 'site', sharePointSiteName: 'Site' } }));
+    admin({ settings });
+    const section = document.querySelector(`[data-admin-section="${type}"]`)!;
+    expect(section.textContent).not.toContain('AddMoreCalendarsLabel');
+    setGrouping(type, 'container');
+    expect(section.textContent).not.toContain('AddMoreCalendarsLabel');
+    click('AddAdminDefaultLabel');
+    expect(document.body.textContent).toContain('SelectAdminItemTypeLabel');
+  });
+
+  it('hides an empty ICS section and hides it again when its final draft entry is deleted', () => {
+    const { panel } = admin();
+    expect(document.querySelector('[data-admin-section="ics"]')).toBeNull();
+    expect(document.body.textContent).not.toContain('NoAdminIcsCatalogItemsLabel');
+    act(() => { panel.setState({ settings: { ...panel.state.settings, icsCatalog: [{
+      adminIcsId: 'only', displayName: 'Only subscription', icsUrl: 'https://example.com/feed', audienceGroups: []
+    }] } }); });
+    expect(document.querySelector('[data-admin-section="ics"]')).not.toBeNull();
+    act(() => { Simulate.click(document.querySelector('button[aria-label="EditLabel"]')!); });
+    click('DeleteLabel');
+    expect(panel.state.settings.icsCatalog).toEqual([]);
+    expect(document.querySelector('[data-admin-section="ics"]')).toBeNull();
+  });
+
   it('switches independent section hierarchies without changing drafts, active edits or Save snapshots', async () => {
     const { panel, props } = admin({ settings: groupedSettings() });
     const snapshot = structuredClone(panel.state.settings);
@@ -111,13 +145,13 @@ describe('settings panels awaited lifecycle', () => {
     expect(section.querySelectorAll('button')).not.toHaveLength(0);
     act(() => { Simulate.click(section.querySelector('button[aria-label="EditLabel"]')!); });
     expect(panel.state.editingSourceId).toBe('a');
-    setGrouping('exchange', 'AdminGroupByAccountLabel');
+    setGrouping('exchange', 'container');
     expect(topTitles()).toEqual(['mailbox']);
     expect(panel.state.editingSourceId).toBe('a');
     expect(panel.state.groupingModes.ics).toBeUndefined();
     expect(section.textContent?.match(/AllMailboxCalendarsLabel/g)).toHaveLength(2);
     expect(panel.state.settings).toEqual(snapshot);
-    setGrouping('ics', 'AdminGroupByAccountLabel');
+    setGrouping('ics', 'container');
     const ics = document.querySelector('[data-admin-section="ics"]')!;
     expect(Array.from(ics.querySelectorAll('div')).filter(item => item.textContent === 'https://example.com/feed')).toHaveLength(1);
     expect(ics.textContent).toContain('EveryoneAudienceLabel');
@@ -138,7 +172,7 @@ describe('settings panels awaited lifecycle', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     act(() => { Simulate.click(toggle); });
     expect(content.hidden).toBe(true);
-    setGrouping('exchange', 'AdminGroupByAccountLabel');
+    setGrouping('exchange', 'container');
     expect(content.hidden).toBe(true);
     act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={false} />, host); });
     act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={true} />, host); });
@@ -156,7 +190,7 @@ describe('settings panels awaited lifecycle', () => {
     }));
     const { panel } = admin({ settings });
     const snapshot = structuredClone(panel.state.settings);
-    setGrouping(type, 'AdminGroupByAccountLabel');
+    setGrouping(type, 'container');
     const section = document.querySelector(`[data-admin-section="${type}"]`)!;
     expect(Array.from(section.querySelectorAll('details')).filter(item => !item.parentElement?.closest('details'))).toHaveLength(2);
     expect(panel.state.settings).toEqual(snapshot);
