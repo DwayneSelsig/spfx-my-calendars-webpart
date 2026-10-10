@@ -1,4 +1,9 @@
 declare interface IMyCalendarsWebPartStrings {
+  AdminGroupingLabel: string;
+  AdminGroupByAudienceLabel: string;
+  AdminGroupByAccountLabel: string;
+  AdminIcsSectionSubtitle: string;
+
   MandatoryPolicyLabel: string;
   DefaultPolicyLabel: string;
   AvailablePolicyLabel: string;

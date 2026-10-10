@@ -1,5 +1,10 @@
 define([], function() {
   return {
+    "AdminGroupingLabel": "Agenda’s groeperen op",
+    "AdminGroupByAudienceLabel": "Doelgroep / securitygroep",
+    "AdminGroupByAccountLabel": "Account / URL",
+    "AdminIcsSectionSubtitle": "ICS-abonnementen beheren",
+
     "MandatoryPolicyLabel": "Verplicht",
     "DefaultPolicyLabel": "Standaard",
     "AvailablePolicyLabel": "Beschikbaar",

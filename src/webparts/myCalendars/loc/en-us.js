@@ -1,5 +1,10 @@
 define([], function() {
   return {
+    "AdminGroupingLabel": "Group calendars by",
+    "AdminGroupByAudienceLabel": "Audience / security group",
+    "AdminGroupByAccountLabel": "Account / URL",
+    "AdminIcsSectionSubtitle": "Manage ICS subscriptions",
+
     "MandatoryPolicyLabel": "Mandatory",
     "DefaultPolicyLabel": "Default",
     "AvailablePolicyLabel": "Available",

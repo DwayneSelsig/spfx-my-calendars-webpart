@@ -74,6 +74,104 @@ describe('settings panels awaited lifecycle', () => {
     return { panel, props };
   }
 
+  function setGrouping(type: string, mode: string): void {
+    const section = document.querySelector(`[data-admin-section="${type}"]`)!;
+    const dropdown = section.querySelector('[role="combobox"]')!;
+    act(() => { Simulate.click(dropdown); });
+    const option = Array.from(document.querySelectorAll('[role="option"]')).find(item => item.textContent === mode)!;
+    expect(option).toBeDefined();
+    act(() => { Simulate.click(option); });
+  }
+
+  function groupedSettings(): typeof defaultAdminWebPartSettings {
+    const settings = structuredClone(defaultAdminWebPartSettings);
+    const audiences = [{ groupId: 'hr', displayName: 'HR' }, { groupId: 'mt', displayName: 'MT' }];
+    settings.assignedSources = [
+      { assignmentId: 'a', adminSourceId: 'shared', audienceGroups: audiences, isMandatory: false, defaultEnabled: true,
+        source: { sourceType: 'exchange', name: 'Calendar A', color: '#0078d4', isEnabled: true, exchangeMailbox: 'mailbox', exchangeCalendarId: 'a' } },
+      { assignmentId: 'b', adminSourceId: 'other', audienceGroups: [], isMandatory: false, defaultEnabled: true,
+        source: { sourceType: 'exchange', name: 'Calendar B', color: '#0078d4', isEnabled: true, exchangeMailbox: 'mailbox', exchangeCalendarId: 'b' } }
+    ];
+    settings.exchangeMailboxAssignments = [{ assignmentId: 'rule', mailboxId: 'mailbox', mailboxDisplayName: 'mailbox',
+      audienceGroups: audiences, isMandatory: false, defaultEnabled: true, allowedOverrides: defaultAllowedOverrides, exceptions: [] }];
+    settings.icsCatalog = [
+      { adminIcsId: 'all', displayName: 'All holidays', icsUrl: 'https://example.com/feed', audienceGroups: [] },
+      { adminIcsId: 'targeted', displayName: 'Targeted holidays', icsUrl: 'HTTPS://EXAMPLE.COM/FEED', audienceGroups: audiences }
+    ];
+    return settings;
+  }
+
+  it('switches independent section hierarchies without changing drafts, active edits or Save snapshots', async () => {
+    const { panel, props } = admin({ settings: groupedSettings() });
+    const snapshot = structuredClone(panel.state.settings);
+    const section = document.querySelector('[data-admin-section="exchange"]')!;
+    const topTitles = (): Array<string | null> => Array.from(section.querySelectorAll('details'))
+      .filter(item => !item.parentElement?.closest('details')).map(item => item.querySelector('summary strong')!.textContent);
+    expect(topTitles()).toEqual(['HR', 'MT', 'EveryoneAudienceLabel']);
+    expect(section.querySelectorAll('button')).not.toHaveLength(0);
+    act(() => { Simulate.click(section.querySelector('button[aria-label="EditLabel"]')!); });
+    expect(panel.state.editingSourceId).toBe('a');
+    setGrouping('exchange', 'AdminGroupByAccountLabel');
+    expect(topTitles()).toEqual(['mailbox']);
+    expect(panel.state.editingSourceId).toBe('a');
+    expect(panel.state.groupingModes.ics).toBeUndefined();
+    expect(section.textContent?.match(/AllMailboxCalendarsLabel/g)).toHaveLength(2);
+    expect(panel.state.settings).toEqual(snapshot);
+    setGrouping('ics', 'AdminGroupByAccountLabel');
+    const ics = document.querySelector('[data-admin-section="ics"]')!;
+    expect(Array.from(ics.querySelectorAll('div')).filter(item => item.textContent === 'https://example.com/feed')).toHaveLength(1);
+    expect(ics.textContent).toContain('EveryoneAudienceLabel');
+    expect(ics.textContent).toContain('HR');
+    expect(ics.textContent).toContain('MT');
+    await act(async () => { click('SaveLabel'); });
+    expect(props.onSave).toHaveBeenCalledWith(snapshot);
+  });
+
+  it('keeps dropdown and collapse controls independent and resets presentation when reopened', () => {
+    const { panel, props } = admin({ settings: groupedSettings() });
+    const section = document.querySelector('[data-admin-section="exchange"]')!;
+    const toggle = section.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+    const content = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    // Native buttons support Enter and Space without a separate bubbling key handler.
+    act(() => { Simulate.keyDown(section.querySelector('[role="combobox"]')!, { key: 'Enter' }); });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    act(() => { Simulate.click(toggle); });
+    expect(content.hidden).toBe(true);
+    setGrouping('exchange', 'AdminGroupByAccountLabel');
+    expect(content.hidden).toBe(true);
+    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={false} />, host); });
+    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={true} />, host); });
+    expect(panel.state.groupingModes).toEqual({});
+    expect(panel.state.expandedSections).toEqual({});
+    expect(document.querySelector('[data-admin-section="exchange"] button[aria-expanded]')?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it.each(['sharepoint', 'planner', 'unifiedGroup', 'teamsShifts'] as const)('groups %s by stable source container identity', type => {
+    const settings = structuredClone(defaultAdminWebPartSettings);
+    settings.assignedSources = ['one', 'two'].map(id => ({ assignmentId: id, adminSourceId: id,
+      audienceGroups: [{ groupId: 'hr', displayName: 'HR' }], isMandatory: false, defaultEnabled: true,
+      source: { sourceType: type, name: 'Same display name', color: '#0078d4', isEnabled: true,
+        sharePointSiteId: id, sharePointSiteName: 'Same site name', plannerPlanId: id, plannerPlanTitle: 'Same plan name', groupId: id }
+    }));
+    const { panel } = admin({ settings });
+    const snapshot = structuredClone(panel.state.settings);
+    setGrouping(type, 'AdminGroupByAccountLabel');
+    const section = document.querySelector(`[data-admin-section="${type}"]`)!;
+    expect(Array.from(section.querySelectorAll('details')).filter(item => !item.parentElement?.closest('details'))).toHaveLength(2);
+    expect(panel.state.settings).toEqual(snapshot);
+  });
+
+  it('ignores presentation changes while administrator Save is pending', async () => {
+    const pending = deferred();
+    const { panel } = admin({ settings: groupedSettings(), onSave: () => pending.promise });
+    act(() => { click('SaveLabel'); });
+    act(() => { Simulate.click(document.querySelector('[data-admin-section="exchange"] button[aria-expanded]')!); });
+    expect(panel.state.expandedSections).toEqual({});
+    expect(document.querySelector('fieldset')?.disabled).toBe(true);
+    await act(async () => { pending.resolve(); await pending.promise; });
+  });
+
   it('selects an ICS audience first, preserves input on Back and adds only a complete item', async () => {
     const { panel } = admin();
     const wizard = panel as unknown as {
@@ -113,14 +211,14 @@ describe('settings panels awaited lifecycle', () => {
     expect(panel.state.settings.icsCatalog).toEqual([]);
   });
 
-  it('shows a shared ICS URL once and edits audiences through Groups without an Add audience button', async () => {
+  it('groups a shared ICS URL by audience and edits audiences through Groups without an Add audience button', async () => {
     const url = 'https://example.com/holidays';
     const catalog = [
       { adminIcsId: 'all', displayName: 'Holidays', icsUrl: url, audienceGroups: [] },
       { adminIcsId: 'mt', displayName: 'MT holidays', icsUrl: url, audienceGroups: [{ groupId: 'mt', displayName: 'MT' }] }
     ];
     const { panel } = admin({ settings: { ...structuredClone(defaultAdminWebPartSettings), icsCatalog: catalog } });
-    expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(1);
+    expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(2);
     expect(document.body.textContent).toContain('AudiencesLabel: EveryoneAudienceLabel');
     expect(document.body.textContent).toContain('AudiencesLabel: MT');
     expect(document.querySelectorAll('button[aria-label="EditLabel"]')).toHaveLength(2);
@@ -133,7 +231,7 @@ describe('settings panels awaited lifecycle', () => {
     click('ApplyGroupsLabel');
     expect(panel.state.settings.icsCatalog).toEqual([catalog[0], { ...catalog[1], audienceGroups: [{ groupId: 'hr', displayName: 'HR' }] }]);
     expect(panel.state.showAddDialog).toBe(false);
-    expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(1);
+    expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(2);
   });
 
   it.each(['admin', 'manual'])('opens the %s ICS subscription once without saving a personal source', kind => {

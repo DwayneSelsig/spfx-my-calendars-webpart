@@ -377,7 +377,9 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - One bordered area groups all administrator calendars beneath **Admin default calendars**, including the **Add Admin Default** button and the ICS catalog with its own subheading.
-- ICS entries retain their URL grouping and audience actions without separate URL-group borders. Empty sections remain within the shared area.
+- All source sections, including ICS, use personal-panel-style icon/gray headers with independent audience-first or account/container-first grouping and collapse controls. Empty sections remain within the shared area.
+- Default grouping is audience/security group; every new panel session resets grouping and expands sections. Mailboxes, sites, plans, groups/teams and case-insensitive ICS URLs supply container identities.
+- This replaces fixed ICS URL-first presentation. ICS audience actions and independently editable entries remain; URL groups have no separate borders. Presentation switches preserve all assignments, rules, exceptions and active edits, and do not enter the saved settings draft.
 - This is a presentation change; settings contracts and persistence remain unchanged.
 
 ## Project and delivery

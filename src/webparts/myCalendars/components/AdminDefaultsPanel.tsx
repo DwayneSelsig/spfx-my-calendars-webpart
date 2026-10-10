@@ -42,6 +42,7 @@ import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
 import { formatCalendarTime } from './views/calendarFormatting';
 import { MailboxPeoplePicker } from './MailboxPeoplePicker';
+import { getId } from '@fluentui/react/lib/Utilities';
 
 type AdminAddStep =
   | 'initial'
@@ -76,6 +77,8 @@ export interface IAdminDefaultsPanelProps {
 }
 
 interface IAdminDefaultsPanelState {
+  groupingModes: Partial<Record<CalendarSourceType, 'audience' | 'container'>>;
+  expandedSections: Partial<Record<CalendarSourceType, boolean>>;
   settings: IAdminWebPartSettings;
   isSaving: boolean;
   saveError?: string;
@@ -147,6 +150,7 @@ interface IAdminDefaultsPanelState {
 }
 
 export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps, IAdminDefaultsPanelState> {
+  private readonly sectionId = getId('admin-calendars-');
   private exchangeService: ExchangeCalendarService | null = null;
   private sharePointService: SharePointCalendarService | null = null;
   private plannerService: PlannerTaskService | null = null;
@@ -233,6 +237,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
 
   private createStateFromProps(props: IAdminDefaultsPanelProps): IAdminDefaultsPanelState {
     return {
+      groupingModes: {}, expandedSections: {},
       settings: structuredClone(props.settings),
       isSaving: false, saveError: undefined,
       audienceFirst: false, audiencePreset: false, everyone: false, resolvedMailboxId: undefined,
@@ -1591,38 +1596,114 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     </Stack>;
   }
 
+  private renderAdminSection(type: CalendarSourceType, children: React.ReactNode): React.ReactElement {
+    const definition = calendarSourceRegistry.find(item => item.type === type)!;
+    const presentation: Record<CalendarSourceType, { title: string; subtitle: string; background: string }> = {
+      exchange: { title: strings.OutlookLabel, subtitle: strings.OutlookSectionSubtitle, background: 'rgba(0, 120, 212, 0.12)' },
+      sharepoint: { title: strings.SharePointLabel, subtitle: strings.SharePointSectionSubtitle, background: 'rgba(3, 129, 134, 0.12)' },
+      planner: { title: strings.PlannerLabel, subtitle: strings.PlannerSectionSubtitle, background: 'rgba(16, 124, 65, 0.12)' },
+      unifiedGroup: { title: strings.GroupsAndTeamsLabel, subtitle: strings.GroupsAndTeamsSectionSubtitle, background: 'rgba(91, 95, 199, 0.12)' },
+      teamsShifts: { title: strings.TeamsShiftsLabel, subtitle: strings.TeamsShiftsSectionSubtitle, background: 'rgba(74, 79, 190, 0.12)' },
+      ics: { title: strings.AdminIcsCatalogLabel, subtitle: strings.AdminIcsSectionSubtitle, background: 'rgba(0, 120, 212, 0.12)' }
+    };
+    const { title, subtitle, background } = presentation[type];
+    const expanded = this.state.expandedSections[type] !== false;
+    const contentId = `${this.sectionId}-${type}`;
+    return <div key={type} data-admin-section={type} style={{ border: '1px solid #edebe9', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', padding: '12px 16px', gap: 12, backgroundColor: 'rgba(0, 0, 0, 0.04)' }}>
+        <button type="button" aria-expanded={expanded} aria-controls={contentId}
+          onClick={() => this.setSessionState(this.editSession, prev => ({ expandedSections: { ...prev.expandedSections, [type]: !expanded } }))}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 180px', minWidth: 0, border: 0, padding: 0, background: 'transparent', color: 'inherit', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+          <span style={{ width: 40, height: 40, backgroundColor: background, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon iconName={type === 'ics' ? 'World' : definition.iconName} style={{ fontSize: 20, color: definition.defaultColor }} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+            <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>{title}</span>
+            <span style={{ display: 'block', fontSize: 11, opacity: 0.55, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 1 }}>{subtitle}</span>
+          </span>
+          <Icon iconName="ChevronDown" style={{ fontSize: 14, opacity: 0.55, transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }} />
+        </button>
+        <div style={{ flex: '0 1 210px', minWidth: 0, maxWidth: '100%' }}>
+          <Dropdown ariaLabel={`${strings.AdminGroupingLabel}: ${title}`} selectedKey={this.state.groupingModes[type] || 'audience'}
+            options={[{ key: 'audience', text: strings.AdminGroupByAudienceLabel }, { key: 'container', text: strings.AdminGroupByAccountLabel }]}
+            onChange={(_, option) => {
+              if (option?.key === 'audience' || option?.key === 'container') {
+                const mode = option.key;
+                this.setSessionState(this.editSession, prev => ({ groupingModes: { ...prev.groupingModes, [type]: mode } }));
+              }
+            }} />
+        </div>
+      </div>
+      <div id={contentId} hidden={!expanded} style={{ padding: '8px 16px 16px', minWidth: 0, overflowWrap: 'anywhere' }}>{children}</div>
+    </div>;
+  }
+
+  private renderAddForAudience(type: CalendarSourceType, group: IAudienceGroup): React.ReactElement {
+    return <DefaultButton text={strings.AddMoreCalendarsLabel} onClick={() => this.setSessionState(this.editSession, {
+      showAddDialog: true, audienceFirst: false, audiencePreset: true, everyone: !group.groupId,
+      selectedAudienceGroups: group.groupId ? { [group.groupId]: group.displayName } : {},
+      selectedAudienceMetadata: group.groupId ? { [group.groupId]: group } : {},
+      selectedExchangeCalendars: {}, exchangeAll: false, pendingPolicy: { isMandatory: false, defaultEnabled: true }
+    }, () => { this.handleSelectSourceType(type).catch(error => console.error(error)); })} />;
+  }
+
+  private renderAssignmentHierarchy(type: CalendarSourceType, entries: Array<{
+    id: string; audiences: IAudienceGroup[]; containerId: string; containerName: string; description?: string;
+    render: (index: number) => React.ReactNode;
+  }>): React.ReactElement {
+    const groups = new Map<string, IAudienceGroup>();
+    entries.forEach(entry => (entry.audiences.length ? entry.audiences : [{ groupId: '', displayName: strings.EveryoneAudienceLabel }])
+      .forEach(group => groups.set(group.groupId, group)));
+    const matches = (entry: typeof entries[number], group: IAudienceGroup): boolean => group.groupId
+      ? entry.audiences.some(item => item.groupId === group.groupId) : !entry.audiences.length;
+    const containers = (items: typeof entries): Map<string, typeof entries> => {
+      const result = new Map<string, typeof entries>();
+      items.forEach(item => result.set(item.containerId, [...(result.get(item.containerId) || []), item]));
+      return result;
+    };
+    const audienceGroup = (group: IAudienceGroup, content: React.ReactNode): React.ReactElement =>
+      <AssignmentGroup key={group.groupId} title={group.displayName} description={audienceTypeLabel(group)}>
+        {content}{type !== 'ics' && this.renderAddForAudience(type, group)}
+      </AssignmentGroup>;
+    // ICS URL groups deliberately have no separate border.
+    const containerGroup = (id: string, items: typeof entries, content: React.ReactNode): React.ReactElement => type === 'ics'
+      ? <Stack key={id} tokens={{ childrenGap: 4 }} style={{ padding: 8, minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: '#605e5c', overflowWrap: 'anywhere' }}>{items[0].containerName}</div>{content}
+        </Stack>
+      : <AssignmentGroup key={id} title={items[0].containerName} description={items[0].description}>{content}</AssignmentGroup>;
+    return <Stack tokens={{ childrenGap: 6 }}>{this.state.groupingModes[type] === 'container'
+      ? Array.from(containers(entries), ([id, items]) => containerGroup(id, items,
+          Array.from(groups.values()).filter(group => items.some(item => matches(item, group))).map(group =>
+            audienceGroup(group, items.filter(item => matches(item, group)).map((item, index) => item.render(index))))))
+      : Array.from(groups.values()).map(group => audienceGroup(group,
+          Array.from(containers(entries.filter(item => matches(item, group))), ([id, items]) =>
+            containerGroup(id, items, items.map((item, index) => item.render(index))))))}
+    </Stack>;
+  }
+
   private renderGroupedAssignments(): React.ReactElement {
     const types: CalendarSourceType[] = ['exchange', 'sharepoint', 'planner', 'unifiedGroup', 'teamsShifts'];
     return <Stack tokens={{ childrenGap: 12 }}>{types.map(type => {
       const items = this.state.settings.assignedSources.filter(item => item.source.sourceType === type);
       const rules = type === 'exchange' ? this.state.settings.exchangeMailboxAssignments || [] : [];
       if (!items.length && !rules.length) return null;
-      const groups = new Map<string, IAudienceGroup>();
-      [...items, ...rules].forEach(item => item.audienceGroups.length ? item.audienceGroups.forEach(group => groups.set(group.groupId, group)) : groups.set('', { groupId: '', displayName: strings.EveryoneAudienceLabel }));
-      return <AssignmentGroup key={type} title={getSourceTypeDisplayName(type)}>{Array.from(groups.values()).map(group => {
-        const selectedItems = items.filter(item => group.groupId ? item.audienceGroups.some(entry => entry.groupId === group.groupId) : !item.audienceGroups.length);
-        const selectedRules = rules.filter(item => group.groupId ? item.audienceGroups.some(entry => entry.groupId === group.groupId) : !item.audienceGroups.length);
-        const containers = new Map<string, { name: string; sources: IAdminAssignedSource[]; rules: IExchangeMailboxAssignment[] }>();
-        selectedItems.forEach(item => {
-          const key = item.source.exchangeMailbox || item.source.sharePointSiteId || type;
-          const container = containers.get(key) || { name: item.source.sharePointSiteName || item.source.exchangeMailbox || getSourceTypeDisplayName(type), sources: [], rules: [] };
-          container.sources.push(item); containers.set(key, container);
-        });
-        selectedRules.forEach(rule => {
-          const container = containers.get(rule.mailboxId) || { name: rule.mailboxDisplayName, sources: [], rules: [] };
-          container.rules.push(rule); containers.set(rule.mailboxId, container);
-        });
-        return <AssignmentGroup key={group.groupId} title={group.displayName} description={audienceTypeLabel(group)}>
-          {Array.from(containers.entries()).map(([key, container]) => <AssignmentGroup key={key} title={type === 'exchange' ? this.state.mailboxMetadata[key.toLowerCase()]?.displayName || this.state.mailboxMetadata[key.toLowerCase()]?.mail || this.state.mailboxMetadata[key.toLowerCase()]?.userPrincipalName || container.name : container.name}
-            description={type === 'exchange' ? this.state.mailboxMetadata[key.toLowerCase()]?.mail || this.state.mailboxMetadata[key.toLowerCase()]?.userPrincipalName : undefined}>
-            {container.sources.map((item, index) => this.renderAssignedSource(item, index))}
-            {container.rules.map(rule => this.renderMailboxRule(rule))}
-          </AssignmentGroup>)}
-          <DefaultButton text={strings.AddMoreCalendarsLabel} onClick={() => this.setSessionState(this.editSession, { showAddDialog: true, audienceFirst: false, audiencePreset: true, everyone: !group.groupId,
-            selectedAudienceGroups: group.groupId ? { [group.groupId]: group.displayName } : {}, selectedAudienceMetadata: group.groupId ? { [group.groupId]: group } : {},
-            selectedExchangeCalendars: {}, exchangeAll: false, pendingPolicy: { isMandatory: false, defaultEnabled: true } }, () => { this.handleSelectSourceType(type).catch(error => console.error(error)); })} />
-        </AssignmentGroup>;
-      })}</AssignmentGroup>;
+      const mailbox = (id: string, fallback: string): { containerId: string; containerName: string; description?: string } => {
+        const metadata = this.state.mailboxMetadata[id.toLowerCase()];
+        return { containerId: id.toLowerCase(), containerName: metadata?.displayName || metadata?.mail || metadata?.userPrincipalName || fallback,
+          description: metadata?.mail || metadata?.userPrincipalName };
+      };
+      const entries = items.map(item => {
+        const source = item.source;
+        const id = (type === 'exchange' ? source.exchangeMailbox : type === 'sharepoint' ? source.sharePointSiteId
+          : type === 'planner' ? source.plannerPlanId : source.groupId) || item.adminSourceId;
+        const container = type === 'exchange' ? mailbox(id, id) : { containerId: id,
+          containerName: (type === 'sharepoint' ? source.sharePointSiteName : type === 'planner' ? source.plannerPlanTitle : source.name) || id };
+        return { id: item.assignmentId || item.adminSourceId, audiences: item.audienceGroups, ...container,
+          render: (index: number) => this.renderAssignedSource(item, index) };
+      });
+      rules.forEach(rule => entries.push({ id: rule.assignmentId, audiences: rule.audienceGroups,
+        ...mailbox(rule.mailboxId, rule.mailboxDisplayName), render: () => this.renderMailboxRule(rule) }));
+      return this.renderAdminSection(type, this.renderAssignmentHierarchy(type, entries));
     })}</Stack>;
   }
 
@@ -1712,20 +1793,11 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     );
   }
 
-  private renderIcsCatalog(): React.ReactElement[] {
-    const groups = new Map<string, IAdminIcsCatalogItem[]>();
-    this.state.settings.icsCatalog.forEach(item => {
-      const key = item.icsUrl.trim().toLowerCase();
-      const entries = groups.get(key) || [];
-      entries.push(item);
-      groups.set(key, entries);
-    });
-    return Array.from(groups.entries()).map(([key, items]) => (
-      <Stack key={key} tokens={{ childrenGap: 4 }} style={{ padding: 8 }}>
-        <div style={{ fontSize: 12, color: '#605e5c', overflowWrap: 'anywhere' }}>{items[0].icsUrl}</div>
-        {items.map((item, index) => this.renderIcsCatalogItem(item, index))}
-      </Stack>
-    ));
+  private renderIcsCatalog(): React.ReactElement {
+    return this.renderAdminSection('ics', this.state.settings.icsCatalog.length ? this.renderAssignmentHierarchy('ics', this.state.settings.icsCatalog.map(item => ({
+      id: item.adminIcsId, audiences: item.audienceGroups, containerId: item.icsUrl.trim().toLowerCase(), containerName: item.icsUrl,
+      render: (index: number) => this.renderIcsCatalogItem(item, index)
+    }))) : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminIcsCatalogItemsLabel}</div>);
   }
 
   private onRenderFooterContent = (): React.ReactElement => (
@@ -1840,11 +1912,8 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
                   : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminDefaultCalendarsLabel}</div>}
               </Stack>
               <div>
-                <Label>{strings.AdminIcsCatalogLabel}</Label>
                 <Stack tokens={{ childrenGap: 8 }}>
-                  {settings.icsCatalog.length > 0
-                    ? this.renderIcsCatalog()
-                    : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminIcsCatalogItemsLabel}</div>}
+                  {this.renderIcsCatalog()}
                 </Stack>
               </div>
             </Stack>

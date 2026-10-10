@@ -241,6 +241,13 @@ Personal settings are the only current product data written to OneDrive. When en
 
 The administrator calendar area **MUST** use one shared bordered container headed by **Admin default calendars**, containing **Add Admin Default**, the grouped calendar assignments, and the ICS catalog under its **Admin ICS catalog** subheading. Individual ICS URL groups **MUST NOT** have their own border. Empty sections remain inside the shared container. See DEC-027.
 
+Each populated event-source section and the ICS catalog **MUST** have an icon, gray header, title, subtitle, independent grouping dropdown and collapse control. The header styling follows the personal panel; administrator headers expose grouping rather than personal management, bulk-visibility or logo controls. Dropdown and collapse controls **MUST** be independently keyboard operable, and narrow headers **MUST** wrap without horizontal overflow.
+
+The display choices are **Audience / security group** (audience → container → entries) and **Account / URL** (container → audience → entries). Containers use existing stable mailbox, SharePoint site, Planner plan, Microsoft 365 group or Shifts team identities; names are preferred with identity fallback. ICS uses case-insensitive URL containers without separate URL borders. Explicit Everyone and each assigned audience remain visible; assignments and mailbox rules are not merged. Existing editing, policy, exceptions and audience-scoped addition actions remain available.
+
+Grouping and expansion **MUST** remain panel state outside the administrator settings draft. Each newly opened panel starts with audience grouping and expanded sections. Switching presentation **MUST NOT** change the draft, active edit identity, persistence callbacks or Save snapshot. Controls remain blocked while Save is pending.
+
+
 The current administrator panel exposes:
 
 - default Day, Week, or Month;
@@ -252,7 +259,7 @@ The current administrator panel exposes:
 - assigned Exchange, SharePoint, Planner, Unified Group/Team, and Teams Shifts sources;
 - group-first Exchange/SharePoint configuration, per-calendar Mandatory/Default/Available policy, shared source presentation and individual override permissions;
 - Exchange all-calendar rules including future calendars and calendar-specific exceptions; and
-- audience-first ICS catalog creation: one supported Entra group or explicit Everyone, then a required title and URL, added to the draft and persisted on Save. The administrator catalog groups entries by case-insensitive URL and displays that URL once with its titled audience entries. Audiences are edited through **Groups** when editing an entry; URL groups do not expose an **Add audience** button. Each entry remains independently editable; editing its URL moves it to the corresponding URL group.
+- audience-first ICS catalog creation: one supported Entra group or explicit Everyone, then a required title and URL, added to the draft and persisted on Save. The administrator catalog supports audience-first and URL-first display grouping, using case-insensitive URL keys and keeping every titled audience entry independently editable. Audiences are edited through **Groups** when editing an entry; URL groups do not expose an **Add audience** button. Editing an entry’s URL moves it to the corresponding URL group.
 
 The administrator Exchange flow uses a local Fluent UI people-picker wrapper for mailbox suggestions. It searches display names, UPNs and primary SMTP addresses through the existing Exchange service, keeps manual UPN/object-ID/primary-SMTP input available, and still performs authoritative identity resolution and calendar discovery only after the administrator chooses **Load calendars**.
 
