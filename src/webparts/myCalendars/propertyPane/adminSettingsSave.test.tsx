@@ -5,7 +5,7 @@ jest.mock('@microsoft/sp-property-pane', () => ({ PropertyPaneFieldType: { Custo
 jest.mock('@microsoft/sp-http', () => ({}));
 jest.mock('../components/MyCalendars', () => ({ __esModule: true, default: jest.fn() }));
 jest.mock('../services/ExchangeCalendarService', () => ({ ExchangeCalendarService: jest.fn(() => ({ setGraphClient: jest.fn(),
-  resolveMailbox: async () => ({ id: 'new-mailbox' }), getCalendars: async () => [{ id: 'new-calendar', name: 'New Exchange calendar', hexColor: '#0078d4' }] })) }));
+  resolveMailbox: async () => ({ id: 'new-mailbox', displayName: 'Shared team mailbox', mail: 'team@example.com', userPrincipalName: 'login@example.com' }), getCalendars: async () => [{ id: 'new-calendar', name: 'New Exchange calendar', hexColor: '#0078d4' }] })) }));
 jest.mock('../services/SharePointCalendarService', () => ({ SharePointCalendarService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
 jest.mock('../services/PlannerTaskService', () => ({ PlannerTaskService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
 jest.mock('../services/UnifiedGroupCalendarService', () => ({ UnifiedGroupCalendarService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
@@ -90,6 +90,51 @@ describe('administrator editor to SPFx property hand-off', () => {
     click('AddItemLabel');
   }
 
+  async function addIcs(): Promise<void> {
+    click('ManageAdminDefaultsLabel');
+    click('AddAdminDefaultLabel');
+    await act(async () => { Simulate.click(button('InternetCalendarLabel')); });
+    expect(document.querySelector('input[placeholder="IcsUrlPlaceholder"]')).toBeNull();
+    check('EveryoneAudienceLabel');
+    click('NextLabel');
+    for (const [placeholder, value] of [['IcsNamePlaceholder', ' Team holidays '], ['IcsUrlPlaceholder', ' https://example.com/holidays?country=nl&year=2026 ']]) {
+      const input = document.querySelector(`input[placeholder="${placeholder}"]`) as HTMLInputElement;
+      act(() => { input.value = value; Simulate.change(input); });
+    }
+    click('AddItemLabel');
+  }
+
+  it('saves an ICS catalog item through the property bridge and reopens it with the same identity and audience', async () => {
+    const existing = { adminIcsId: 'mt', displayName: 'MT holidays', icsUrl: 'https://example.com/holidays?country=nl&year=2026', audienceGroups: [{ groupId: 'mt', displayName: 'MT' }] };
+    webpart._adminSettings.icsCatalog = [existing];
+    webpart.properties.adminSettings = serializeAdminWebPartSettings(webpart._adminSettings);
+    const commit = jest.fn((_property: string | undefined, value: string | undefined) => { webpart.properties.adminSettings = value; });
+    await act(async () => { field.properties.onRender(host, undefined, commit); });
+    await addIcs();
+    await act(async () => { Simulate.click(button('SaveLabel')); });
+    expect(commit).toHaveBeenCalledTimes(1);
+    expectClosed();
+    const stored = loadAdminWebPartSettings({ current: webpart.properties.adminSettings }).settings;
+    expect(stored.icsCatalog).toEqual([existing, { adminIcsId: expect.any(String), displayName: 'Team holidays', icsUrl: 'https://example.com/holidays?country=nl&year=2026', audienceGroups: [] }]);
+    expect(webpart._adminSettings.icsCatalog).toEqual(stored.icsCatalog);
+    click('ManageAdminDefaultsLabel');
+    expect(document.body.textContent).toContain('Team holidays');
+    expect(document.body.textContent).toContain('EveryoneAudienceLabel');
+  });
+
+  it('retains the ICS draft with an error when the property bridge ignores Save', async () => {
+    const previous = webpart.properties.adminSettings;
+    await act(async () => { field.properties.onRender(host, undefined, jest.fn()); });
+    await addIcs();
+    await act(async () => { Simulate.click(button('SaveLabel')); });
+    expect(webpart.properties.adminSettings).toBe(previous);
+    expect(webpart._adminSettings.icsCatalog).toEqual([]);
+    expect(document.body.textContent).toContain('Team holidays');
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    expect(button('SaveLabel').disabled).toBe(false);
+    expect(webpart.rebuildResolvedSettings).not.toHaveBeenCalled();
+  });
+
   it('saves existing source and assignment edits once and reopens the accepted configuration after host rerender', async () => {
     const commit = jest.fn((property: string | undefined, value: string | undefined) => {
       expect(property).toBe('adminSettings');
@@ -117,6 +162,7 @@ describe('administrator editor to SPFx property hand-off', () => {
     await act(async () => { field.properties.onRender(host, undefined, commit); });
     await addExchange();
     expect(document.body.textContent).toContain('New Exchange calendar');
+    expect(document.body.textContent).toContain('Shared team mailboxteam@example.com');
     await act(async () => { Simulate.click(button('SaveLabel')); });
     expect(commit).toHaveBeenCalledTimes(1);
     expectClosed();

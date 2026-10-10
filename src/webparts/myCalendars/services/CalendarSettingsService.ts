@@ -535,7 +535,7 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
 
   const icsIdentityKeys = new Set<string>();
   for (const item of icsCatalog) {
-    const identityKey = item.icsUrl.toLowerCase();
+    const identityKey = JSON.stringify([item.icsUrl.toLowerCase(), item.audienceGroups.map(group => group.groupId).sort()]);
     if (icsIdentityKeys.has(identityKey)) {
       return undefined;
     }

@@ -10,6 +10,8 @@ type MSGraphClientV3 = any;
 export interface IResolvedMailbox {
   id: string;
   userPrincipalName: string;
+  displayName?: string;
+  mail?: string;
 }
 
 export interface IMailboxSearchResult {
@@ -337,17 +339,17 @@ export class ExchangeCalendarService {
       const isObjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized);
       if (isObjectId) {
         const user = await this.graphClient.api(`/users/${encodeURIComponent(normalized)}`)
-          .select('id,userPrincipalName').get();
-        if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '' });
+          .select('id,userPrincipalName,displayName,mail').get();
+        if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '', displayName: user.displayName, mail: user.mail });
       } else {
         const escaped = normalized.replace(/'/g, "''");
         let data = await this.graphClient.api('/users').query({
-          $select: 'id,userPrincipalName',
+          $select: 'id,userPrincipalName,displayName,mail',
           $filter: `userPrincipalName eq '${escaped}' or mail eq '${escaped}'`
         }).get();
         for (;;) {
           (data.value || []).forEach((user: IResolvedMailbox) => {
-            if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '' });
+            if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '', displayName: user.displayName, mail: user.mail });
           });
           if (identities.size > 1) throw new ExchangeRequestError('identity', 'ambiguous');
           if (!data['@odata.nextLink']) break;

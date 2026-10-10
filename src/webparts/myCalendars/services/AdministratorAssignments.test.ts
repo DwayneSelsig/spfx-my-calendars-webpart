@@ -1,6 +1,6 @@
 import { loadExchangeSources } from '../components/exchangeLoading';
 import { defaultAdminWebPartSettings, defaultUserCalendarSettings, defaultAllowedOverrides, IAdminAssignedSource, IAdminWebPartSettings, ICalendarSourceBase, IExchangeMailboxAssignment } from '../models/ICalendarSettings';
-import { addExchangeMailboxAssignment, addAdministratorAssignments, canonicalizeExchangeSourceIdentities, applyAdminSourceChanges, cleanAdminSourceOverrides, deriveUserCalendarSettings, getSourceIdentityKey, isAutomaticExchangeCalendarAssigned, normalizeAdminWebPartSettings, normalizeAssignmentPolicy, normalizeUserCalendarSettings, resolveCalendarSettings, serializeAdminWebPartSettings } from './CalendarSettingsService';
+import { loadAdminWebPartSettings, addExchangeMailboxAssignment, addAdministratorAssignments, canonicalizeExchangeSourceIdentities, applyAdminSourceChanges, cleanAdminSourceOverrides, deriveUserCalendarSettings, getSourceIdentityKey, isAutomaticExchangeCalendarAssigned, normalizeAdminWebPartSettings, normalizeAssignmentPolicy, normalizeUserCalendarSettings, resolveCalendarSettings, serializeAdminWebPartSettings } from './CalendarSettingsService';
 
 const source: ICalendarSourceBase = { sourceType: 'exchange', exchangeMailbox: 'mailbox', exchangeCalendarId: 'calendar-id', name: 'Calendar', color: '#0078d4', isEnabled: true };
 function assignment(groupId: string, isMandatory = false, defaultEnabled = true): IAdminAssignedSource {
@@ -11,6 +11,16 @@ function rule(): IExchangeMailboxAssignment { return { assignmentId: 'rule', mai
 const matched = new Set(['a', 'b']);
 
 describe('administrator assignment policy', () => {
+  it.each([['a', ['everyone', 'targeted']], ['b', ['everyone', 'targeted']], ['other', ['everyone']], ['', ['everyone']]])('filters the ICS catalog for membership %s using OR and Everyone', (groupId, expected) => {
+    const settings = { ...defaultAdminWebPartSettings, icsCatalog: [
+      { adminIcsId: 'everyone', displayName: 'Everyone', icsUrl: 'https://example.com/all', audienceGroups: [] },
+      { adminIcsId: 'targeted', displayName: 'Targeted', icsUrl: 'https://example.com/group', audienceGroups: [{ groupId: 'a', displayName: 'A' }, { groupId: 'b', displayName: 'B' }] }
+    ] };
+    const restored = loadAdminWebPartSettings({ current: serializeAdminWebPartSettings(settings) }).settings;
+    const result = resolveCalendarSettings({ adminSettings: restored, userSettings: defaultUserCalendarSettings, matchedGroupIds: new Set(groupId ? [groupId as string] : []) });
+    expect(result.availableAdminIcsCatalogItems.map(item => item.adminIcsId)).toEqual(expected);
+    expect(result.sources).toEqual([]);
+  });
   it.each([[true, true, true], [false, true, true], [false, false, false], [true, false, true]])('normalizes mandatory=%s enabled=%s', (isMandatory, defaultEnabled, expected) => {
     expect(normalizeAssignmentPolicy({ isMandatory, defaultEnabled })).toEqual({ isMandatory, defaultEnabled: expected });
   });

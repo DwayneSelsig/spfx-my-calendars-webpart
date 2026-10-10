@@ -662,16 +662,14 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   };
 
   // ICS flow
-  private handleGenerateOutlookLink = (): void => {
-    const { icsUrl, newCalendarName } = this.state;
-
-    if (!icsUrl.trim() || !newCalendarName.trim()) {
+  private handleGenerateOutlookLink = (name: string, icsUrl: string): void => {
+    if (!icsUrl.trim() || !name.trim()) {
       return;
     }
 
     // Encode the URL and name for the Outlook calendar add URL
     const encodedIcsUrl = encodeURIComponent(icsUrl.trim());
-    const encodedName = encodeURIComponent(newCalendarName.trim());
+    const encodedName = encodeURIComponent(name.trim());
 
     // Generate and open the Outlook calendar add link
     const outlookLink = `https://outlook.office.com/calendar/addcalendar?url=${encodedIcsUrl}&name=${encodedName}`;
@@ -679,7 +677,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   };
 
   private handleOpenOutlookCalendar = (): void => {
-    this.handleGenerateOutlookLink();
+    this.handleGenerateOutlookLink(this.state.newCalendarName, this.state.icsUrl);
     this.handleCloseAddDialog();
   };
 
@@ -1123,14 +1121,15 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
         {settings.availableAdminIcsCatalogItems.length > 0 && (
           <Stack tokens={{ childrenGap: 8 }}>
             <Label>{strings.AvailableViaAdminLabel}</Label>
+            <div>{strings.AdminIcsOpenHelpLabel}</div>
             {settings.availableAdminIcsCatalogItems.map(item => (
               <DefaultButton
                 key={item.adminIcsId}
                 text={item.displayName}
-                onClick={() => this.setSessionState(this.editSession, {
-                  newCalendarName: item.displayName,
-                  icsUrl: item.icsUrl
-                })}
+                onClick={() => {
+                  this.handleGenerateOutlookLink(item.displayName, item.icsUrl);
+                  this.handleCloseAddDialog();
+                }}
                 style={{ textAlign: 'left', height: 'auto', padding: '8px 12px' }}
               />
             ))}

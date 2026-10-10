@@ -66,7 +66,7 @@ Precedence is not uniform for every field:
 | `unifiedGroupShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Group auto mode | Suppresses explicit sources |
 | `teamsShiftsShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Shifts auto mode | Suppresses explicit sources |
 | `assignedSources` | Admin list | Yes | Currently modifiable/removable | Audience → personal override | Resolver/coordinator | Per-assignment visibility and shared per-field override permissions are enforced |
-| `icsCatalog` | Admin list | Yes | Prefills subscription flow | Audience filter only | Settings panel | Not a runtime event source |
+| `icsCatalog` | Admin list | Yes | Opens subscription flow directly | Audience filter only | Settings panel | Not a runtime event source |
 | `personalSources` | Personal list | No | Yes | Appended after admin sources | Resolver/coordinator | User-owned |
 | `adminSourceOverridesById` | Personal map | No | Derived | Stable `adminSourceId` | Resolver/save derivation | Shared administrator source ID; explicit visibility intent and permitted field overrides |
 | `sources` | Effective list | Indirect | Personal management | Admin, then personal | Coordinator | Not persisted directly |
@@ -169,7 +169,7 @@ AudienceService owns discovery and membership; CalendarSettingsService owns thei
 | Legacy `settings` | Current unavailable/invalid; legacy shape parses | Migrated subset with notice |
 | Hardcoded defaults | No recoverable input | Used; notice shown after invalid current data |
 
-Administrator normalization drops malformed entries. The persisted schema separates sourceCatalog and audienceGroups from assignment records referencing their IDs. Runtime/editor assignments hydrate those references for the existing panels. Duplicate source/audience combinations and case-insensitive duplicate ICS URLs reject the payload; the same source may be assigned to different audiences. Mailbox rules persist stable mailbox identity, policy, default override capabilities and calendar-ID exceptions.
+Administrator normalization drops malformed entries. The persisted schema separates sourceCatalog and audienceGroups from assignment records referencing their IDs. Runtime/editor assignments hydrate those references for the existing panels. Duplicate source/audience combinations reject the payload; the same source may be assigned to different audiences. The same case-insensitive ICS URL is allowed for different audience sets, including Everyone and a group. Repeating that URL for the same audience set rejects the payload regardless of group order. ICS entries retain their own IDs and titles and are individually filtered by audience. Mailbox rules persist stable mailbox identity, policy, default override capabilities and calendar-ID exceptions.
 
 Current administrator and personal locations accept only integer schema versions 2 through 7. Versions 2–6 are normalized to version 7; version 7 is accepted directly. A missing version, non-integer version, version below 2, or future version is rejected. Unversioned input is accepted only from the explicit legacy `settings` property or legacy OneDrive filename, after those locations have been selected by the recovery flow.
 
@@ -250,9 +250,11 @@ The current administrator panel exposes:
 - assigned Exchange, SharePoint, Planner, Unified Group/Team, and Teams Shifts sources;
 - group-first Exchange/SharePoint configuration, per-calendar Mandatory/Default/Available policy, shared source presentation and individual override permissions;
 - Exchange all-calendar rules including future calendars and calendar-specific exceptions; and
-- audience-targeted ICS catalog entries.
+- audience-first ICS catalog creation: one supported Entra group or explicit Everyone, then a required title and URL, added to the draft and persisted on Save. The administrator catalog groups entries by case-insensitive URL, displays that URL once with its titled audience entries, and provides Add audience using the group's first entry's title and URL. Each entry remains independently editable; editing its URL moves it to the corresponding URL group.
 
 The administrator Exchange flow uses a local Fluent UI people-picker wrapper for mailbox suggestions. It searches display names, UPNs and primary SMTP addresses through the existing Exchange service, keeps manual UPN/object-ID/primary-SMTP input available, and still performs authoritative identity resolution and calendar discovery only after the administrator chooses **Load calendars**.
+
+Exchange mailbox group headings **MUST** show the resolved mailbox display name with its primary mail address alongside it. Existing assignments and mailbox rules resolve display metadata when the panel opens; new selections reuse their resolved metadata. UPN is the fallback address when primary mail is absent. Lookup failure retains the existing heading and does not block editing. Display metadata remains panel state and does not change persistence or source identities.
 
 Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
 
@@ -269,7 +271,7 @@ The current personal panel exposes:
 - Planner automatic assigned-to-me filtering;
 - creation and management of personal sources;
 - policy-aware modification/removal of applicable administrator sources, grouped by audience without duplicate rows;
-- ICS subscription links, optionally prefilled from the administrator catalog; and
+- applicable administrator ICS subscription links opening Outlook with one click, alongside manual title/URL entry; and
 - reset of current and legacy personal-settings files.
 
 The Outlook and SharePoint section headers expose a tri-state bulk visibility control derived entirely from their individual states. Outlook combines `exchangeCalendarStates` with configured/effective Exchange `isEnabled`; SharePoint uses configured/effective `isEnabled`. Mixed or hidden groups become fully visible when activated, while fully visible groups hide only their optional calendars. Mandatory calendars remain enabled. The controls do not store group state and do not alter Planner, Unified Group, or Teams Shifts automatic-mode fields.

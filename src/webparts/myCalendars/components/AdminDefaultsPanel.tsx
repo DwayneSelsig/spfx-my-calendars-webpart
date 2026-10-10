@@ -31,7 +31,7 @@ import {
 } from '../models/ICalendarSettings';
 import { calendarSourceRegistry } from '../models/CalendarSourceRegistry';
 import * as strings from 'MyCalendarsWebPartStrings';
-import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar, IMailboxSearchResult } from '../services/ExchangeCalendarService';
+import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar, IMailboxSearchResult, IResolvedMailbox } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointList, ISharePointSite } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
@@ -88,6 +88,7 @@ interface IAdminDefaultsPanelState {
   exchangeAll: boolean;
   exchangeAllPolicy: IAssignmentPolicy;
   resolvedMailboxId?: string;
+  mailboxMetadata: Record<string, IResolvedMailbox>;
   mailboxRuleCalendars: Record<string, ICalendarSourceBase[]>;
   mailboxRuleErrors: Record<string, string>;
   selectedAudienceMetadata: Record<string, IAudienceGroup>;
@@ -238,6 +239,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       selectedSharePointLists: [], pendingSharePointSources: [],
       selectedExchangeCalendars: {}, exchangeAll: false, exchangeAllPolicy: { isMandatory: false, defaultEnabled: true },
       mailboxRuleCalendars: {}, mailboxRuleErrors: {}, selectedAudienceMetadata: {}, pendingPolicy: { isMandatory: false, defaultEnabled: true },
+      mailboxMetadata: {},
       editingSourceId: undefined,
       editingIcsId: undefined,
       showAddDialog: false,
@@ -422,7 +424,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   private handleSelectAddType = async (type: CalendarSourceType): Promise<void> => {
     const session = this.editSession;
     if (!this.isCurrentSession(session)) return;
-    if ((type === 'exchange' || type === 'sharepoint') && !this.state.audiencePreset) {
+    if ((type === 'exchange' || type === 'sharepoint' || type === 'ics') && !this.state.audiencePreset) {
       this.setSessionState(session, { addingCalendarType: type, addingCalendarStep: 'admin-audience-select', audienceFirst: true, everyone: false, selectedAudienceGroups: {}, selectedAudienceMetadata: {} });
       await this.loadSecurityGroups();
       if (!this.isCurrentSession(session)) return;
@@ -575,7 +577,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       this.setSessionState(this.editSession, { addingCalendarStep: 'exchange-mailbox', exchangeMailboxResolved: false, exchangeCalendars: [], selectedExchangeCalendars: {}, exchangeAll: false });
       return;
     }
-    if ((this.state.addingCalendarType === 'exchange' || this.state.addingCalendarType === 'sharepoint') && this.state.audiencePreset) {
+    if ((this.state.addingCalendarType === 'exchange' || this.state.addingCalendarType === 'sharepoint' || this.state.addingCalendarType === 'ics') && this.state.audiencePreset) {
       this.setSessionState(this.editSession, { addingCalendarStep: 'admin-audience-select', audienceFirst: true, audiencePreset: false });
       this.loadSecurityGroups().catch(error => console.error(error));
       return;
@@ -757,16 +759,17 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       if (!this.exchangeService) throw new Error('GraphClient not initialized');
       const resolved = await this.exchangeService.resolveMailbox(mailbox);
       const calendars = await this.exchangeService.getCalendars(resolved.id);
-      return { calendars, mailboxId: resolved.id };
+      return { calendars, mailboxId: resolved.id, resolved };
     }, {
       start: () => this.setSessionState(session, {
         exchangeMailbox: mailbox, exchangeCalendarsLoading: true, exchangeCalendars: [],
         exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
       }),
-      success: result => this.setSessionState(session, {
+      success: result => this.setSessionState(session, prev => ({
         exchangeCalendars: result.calendars, resolvedMailboxId: result.mailboxId, selectedExchangeCalendars: {}, exchangeMailboxResolved: true,
+        mailboxMetadata: { ...prev.mailboxMetadata, [result.mailboxId.toLowerCase()]: result.resolved },
         addingCalendarStep: 'exchange-calendar'
-      }),
+      })),
       error: error => {
         console.error('Exchange mailbox discovery failed:', error);
         this.setSessionState(session, { exchangeDiscoveryError: getExchangeDiscoveryErrorMessage(error) });
@@ -991,10 +994,22 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       return;
     }
 
-    await this.beginAudienceSelectionForIcs({
+    const item = {
       displayName: this.state.newCalendarName.trim(),
       icsUrl: this.state.icsUrl.trim()
-    });
+    };
+    if (this.state.audiencePreset) {
+      if (!this.state.everyone && Object.keys(this.state.selectedAudienceGroups).length === 0) return;
+      const newItem: IAdminIcsCatalogItem = {
+        ...item,
+        adminIcsId: generateStableId('adminIcs'),
+        audienceGroups: this.createSelectedAudienceGroups()
+      };
+      this.setSessionState(session, prev => ({ settings: { ...prev.settings, icsCatalog: [...prev.settings.icsCatalog, newItem] } }),
+        () => this.handleCloseAddDialog());
+      return;
+    }
+    await this.beginAudienceSelectionForIcs(item);
     if (!this.isCurrentSession(session)) return;
   };
 
@@ -1322,7 +1337,8 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       <Stack tokens={{ childrenGap: 12 }}>
         <TextField label={strings.DisplayNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setSessionState(this.editSession, { newCalendarName: value || '' })} placeholder={strings.IcsNamePlaceholder} />
         <TextField label={strings.IcsUrlLabel} value={this.state.icsUrl} onChange={(_, value) => this.setSessionState(this.editSession, { icsUrl: value || '' })} placeholder={strings.IcsUrlPlaceholder} />
-        <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmAdminIcsItem().catch(err => console.error(err))} disabled={!hasValidInput} />
+        <PrimaryButton text={strings.AddItemLabel} onClick={() => this.handleConfirmAdminIcsItem().catch(err => console.error(err))} disabled={!hasValidInput} />
+        <DefaultButton text={strings.CancelLabel} onClick={this.handleCloseAddDialog} />
       </Stack>
     );
   }
@@ -1492,14 +1508,26 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     if (!this.isCurrentSession(session)) return;
     if (!this.exchangeService) return;
     const generation = this.ruleDiscoveryGeneration;
-    const aliases = Array.from(new Set(this.state.settings.assignedSources.filter(item => item.source.sourceType === 'exchange' && item.source.exchangeMailbox).map(item => item.source.exchangeMailbox as string)));
+    const aliases = Array.from(new Set([
+      ...this.state.settings.assignedSources.filter(item => item.source.sourceType === 'exchange' && item.source.exchangeMailbox).map(item => item.source.exchangeMailbox as string),
+      ...(this.state.settings.exchangeMailboxAssignments || []).map(rule => rule.mailboxId)
+    ]));
     const identities = await Promise.all(aliases.map(async alias => {
-      try { return { alias, id: (await this.exchangeService?.resolveMailbox(alias))?.id }; } catch { return { alias, id: undefined }; }
+      try { const mailbox = await this.exchangeService?.resolveMailbox(alias); return { alias, mailbox }; } catch { return { alias, mailbox: undefined }; }
     }));
     if (!this.isCurrentSession(session)) return;
     if (generation !== this.ruleDiscoveryGeneration) return;
-    const byAlias = new Map(identities.filter(item => item.id).map(item => [item.alias.toLowerCase(), item.id as string]));
-    this.setSessionState(session, prev => ({ settings: canonicalizeExchangeSourceIdentities(prev.settings, byAlias) }));
+    const byAlias = new Map(identities.filter(item => item.mailbox).map(item => [item.alias.toLowerCase(), item.mailbox!.id]));
+    this.setSessionState(session, prev => {
+      const mailboxMetadata = { ...prev.mailboxMetadata };
+      identities.forEach(({ alias, mailbox }) => {
+        if (mailbox) {
+          mailboxMetadata[alias.toLowerCase()] = mailbox;
+          mailboxMetadata[mailbox.id.toLowerCase()] = mailbox;
+        }
+      });
+      return { settings: canonicalizeExchangeSourceIdentities(prev.settings, byAlias), mailboxMetadata };
+    });
   };
 
   private discoverMailboxRules = async (): Promise<void> => {
@@ -1585,7 +1613,8 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
           container.rules.push(rule); containers.set(rule.mailboxId, container);
         });
         return <AssignmentGroup key={group.groupId} title={group.displayName} description={audienceTypeLabel(group)}>
-          {Array.from(containers.entries()).map(([key, container]) => <AssignmentGroup key={key} title={container.name}>
+          {Array.from(containers.entries()).map(([key, container]) => <AssignmentGroup key={key} title={type === 'exchange' ? this.state.mailboxMetadata[key.toLowerCase()]?.displayName || this.state.mailboxMetadata[key.toLowerCase()]?.mail || this.state.mailboxMetadata[key.toLowerCase()]?.userPrincipalName || container.name : container.name}
+            description={type === 'exchange' ? this.state.mailboxMetadata[key.toLowerCase()]?.mail || this.state.mailboxMetadata[key.toLowerCase()]?.userPrincipalName : undefined}>
             {container.sources.map((item, index) => this.renderAssignedSource(item, index))}
             {container.rules.map(rule => this.renderMailboxRule(rule))}
           </AssignmentGroup>)}
@@ -1652,7 +1681,9 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
 
   private renderIcsCatalogItem(item: IAdminIcsCatalogItem, index: number): React.ReactElement {
     const isEditing = this.state.editingIcsId === item.adminIcsId;
-    const audienceText = item.audienceGroups.map(group => group.displayName).join(', ');
+    const audienceText = item.audienceGroups.length === 0
+      ? strings.EveryoneAudienceLabel
+      : item.audienceGroups.map(group => group.displayName).join(', ');
 
     return (
       <div key={item.adminIcsId} style={{ borderRadius: 4, padding: isEditing ? 12 : '6px 8px', backgroundColor: isEditing ? '#f3f2f1' : (index % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent') }}>
@@ -1672,7 +1703,6 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
             <Icon iconName="World" />
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 13 }}>{item.displayName}</strong>
-              <div style={{ fontSize: 11, color: '#605e5c' }}>{item.icsUrl}</div>
               <div style={{ fontSize: 11, color: '#605e5c' }}>{strings.AudiencesLabel}: {audienceText || strings.NoAudienceLabel}</div>
             </div>
             <IconButton iconProps={{ iconName: 'Edit' }} title={strings.EditLabel} ariaLabel={strings.EditLabel} onClick={() => this.toggleEditIcs(item.adminIcsId)} />
@@ -1680,6 +1710,27 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
         )}
       </div>
     );
+  }
+
+  private renderIcsCatalog(): React.ReactElement[] {
+    const groups = new Map<string, IAdminIcsCatalogItem[]>();
+    this.state.settings.icsCatalog.forEach(item => {
+      const key = item.icsUrl.trim().toLowerCase();
+      const entries = groups.get(key) || [];
+      entries.push(item);
+      groups.set(key, entries);
+    });
+    return Array.from(groups.entries()).map(([key, items]) => (
+      <Stack key={key} tokens={{ childrenGap: 4 }} style={{ border: '1px solid #edebe9', borderRadius: 4, padding: 8 }}>
+        <div style={{ fontSize: 12, color: '#605e5c', overflowWrap: 'anywhere' }}>{items[0].icsUrl}</div>
+        {items.map((item, index) => this.renderIcsCatalogItem(item, index))}
+        <DefaultButton text={strings.AddIcsAudienceLabel} iconProps={{ iconName: 'Add' }} onClick={() => {
+          this.setSessionState(this.editSession, { showAddDialog: true, addingCalendarType: 'ics' }, () => {
+            this.beginAudienceSelectionForIcs({ displayName: items[0].displayName, icsUrl: items[0].icsUrl }).catch(error => console.error(error));
+          });
+        }} />
+      </Stack>
+    ));
   }
 
   private onRenderFooterContent = (): React.ReactElement => (
@@ -1800,7 +1851,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
               <Label>{strings.AdminIcsCatalogLabel}</Label>
               <Stack tokens={{ childrenGap: 8 }}>
                 {settings.icsCatalog.length > 0
-                  ? settings.icsCatalog.map((item, index) => this.renderIcsCatalogItem(item, index))
+                  ? this.renderIcsCatalog()
                   : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminIcsCatalogItemsLabel}</div>}
               </Stack>
             </div>

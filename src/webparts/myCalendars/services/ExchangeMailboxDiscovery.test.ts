@@ -8,6 +8,16 @@ function graph(pages: unknown[]): { api: jest.Mock; request: { select: jest.Mock
 }
 
 describe('Exchange identity and calendar access', () => {
+  it('returns mailbox display name and primary mail separately from its UPN', async () => {
+    const id = '12345678-1234-1234-1234-123456789012';
+    const mailbox = { id, userPrincipalName: 'login@contoso.com', displayName: 'Team mailbox', mail: 'team@contoso.com' };
+    for (const identifier of [id, mailbox.mail]) {
+      const client = graph([identifier === id ? mailbox : { value: [mailbox] }]);
+      expect(await new ExchangeCalendarService(client).resolveMailbox(identifier)).toEqual(mailbox);
+      if (identifier === id) expect(client.request.select).toHaveBeenCalledWith('id,userPrincipalName,displayName,mail');
+      else expect(client.request.query.mock.calls[0][0].$select).toBe('id,userPrincipalName,displayName,mail');
+    }
+  });
   beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => undefined));
   afterEach(() => jest.restoreAllMocks());
 

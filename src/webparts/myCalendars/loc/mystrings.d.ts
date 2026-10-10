@@ -176,6 +176,8 @@ declare interface IMyCalendarsWebPartStrings {
   YourMailboxLabel: string;
   EnterMailboxEmailLabel: string;
   AvailableViaAdminLabel: string;
+  AdminIcsOpenHelpLabel: string;
+  AddIcsAudienceLabel: string;
   IcsNamePlaceholder: string;
   IcsUrlPlaceholder: string;
   OfficeHolidaysPlaceholder: string;

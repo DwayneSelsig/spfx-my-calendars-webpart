@@ -74,6 +74,103 @@ describe('settings panels awaited lifecycle', () => {
     return { panel, props };
   }
 
+  it('selects an ICS audience first, preserves input on Back and adds only a complete item', async () => {
+    const { panel } = admin();
+    const wizard = panel as unknown as {
+      handleSelectAddType: (type: 'ics') => Promise<void>;
+      handleApplyAudienceSelection: () => void;
+      handleBackOneStep: () => void;
+      handleConfirmAdminIcsItem: () => Promise<void>;
+    };
+    act(() => { panel.setState({ showAddDialog: true }); });
+    await act(async () => { await wizard.handleSelectAddType('ics'); });
+    expect(panel.state.addingCalendarStep).toBe('admin-audience-select');
+    expect(document.querySelector('input[placeholder="IcsUrlPlaceholder"]')).toBeNull();
+    act(() => { wizard.handleApplyAudienceSelection(); });
+    expect(panel.state.addingCalendarStep).toBe('admin-audience-select');
+    act(() => { panel.setState({ selectedAudienceGroups: { team: 'Team' }, selectedAudienceMetadata: { team: { groupId: 'team', displayName: 'Team', groupType: 'security' } } }); });
+    act(() => { wizard.handleApplyAudienceSelection(); });
+    expect(panel.state.addingCalendarStep).toBe('ics');
+    expect(Array.from(document.querySelectorAll('button')).find(item => item.textContent === 'AddItemLabel')?.disabled).toBe(true);
+    await act(async () => { await wizard.handleConfirmAdminIcsItem(); });
+    expect(panel.state.settings.icsCatalog).toEqual([]);
+    act(() => { panel.setState({ newCalendarName: ' Holidays & days ', icsUrl: ' https://example.com/feed?x=1&y=2 ' }); });
+    act(() => { wizard.handleBackOneStep(); });
+    expect(panel.state.addingCalendarStep).toBe('admin-audience-select');
+    expect(panel.state.selectedAudienceGroups).toEqual({ team: 'Team' });
+    expect(panel.state.newCalendarName).toBe(' Holidays & days ');
+    expect(panel.state.icsUrl).toBe(' https://example.com/feed?x=1&y=2 ');
+    act(() => { wizard.handleApplyAudienceSelection(); });
+    await act(async () => { await wizard.handleConfirmAdminIcsItem(); });
+    expect(panel.state.settings.icsCatalog).toEqual([{ adminIcsId: expect.any(String), displayName: 'Holidays & days', icsUrl: 'https://example.com/feed?x=1&y=2', audienceGroups: [{ groupId: 'team', displayName: 'Team', groupType: 'security' }] }]);
+    expect(panel.state.showAddDialog).toBe(false);
+  });
+
+  it('cancels an ICS addition without adding to the administrator draft', () => {
+    const { panel } = admin();
+    act(() => { panel.setState({ showAddDialog: true, addingCalendarType: 'ics', addingCalendarStep: 'ics', audiencePreset: true, everyone: true, newCalendarName: 'Unused', icsUrl: 'https://example.com/feed' }); });
+    click('CancelLabel');
+    expect(panel.state.settings.icsCatalog).toEqual([]);
+  });
+
+  it('shows a shared ICS URL once and adds an audience without re-entering its title or URL', async () => {
+    const url = 'https://example.com/holidays';
+    const catalog = [
+      { adminIcsId: 'all', displayName: 'Holidays', icsUrl: url, audienceGroups: [] },
+      { adminIcsId: 'mt', displayName: 'MT holidays', icsUrl: url, audienceGroups: [{ groupId: 'mt', displayName: 'MT' }] }
+    ];
+    const { panel } = admin({ settings: { ...structuredClone(defaultAdminWebPartSettings), icsCatalog: catalog } });
+    expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(1);
+    expect(document.body.textContent).toContain('AudiencesLabel: EveryoneAudienceLabel');
+    expect(document.body.textContent).toContain('AudiencesLabel: MT');
+    expect(document.querySelectorAll('button[aria-label="EditLabel"]')).toHaveLength(2);
+    await act(async () => { click('AddIcsAudienceLabel'); });
+    expect(panel.state.addingCalendarStep).toBe('admin-audience-select');
+    expect(panel.state.pendingAdminIcs).toEqual({ displayName: 'Holidays', icsUrl: url });
+    act(() => { panel.setState({ selectedAudienceGroups: { hr: 'HR' } }); });
+    click('AddItemLabel');
+    expect(panel.state.settings.icsCatalog.slice(0, 2)).toEqual(catalog);
+    expect(panel.state.settings.icsCatalog[2]).toMatchObject({ displayName: 'Holidays', icsUrl: url, audienceGroups: [{ groupId: 'hr', displayName: 'HR' }] });
+    expect(panel.state.showAddDialog).toBe(false);
+    expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(1);
+  });
+
+  it.each(['admin', 'manual'])('opens the %s ICS subscription once without saving a personal source', kind => {
+    const item = { adminIcsId: 'ics', displayName: 'Dagen & fête / #1', icsUrl: 'https://example.com/feed?x=a&y=b#part', audienceGroups: [] };
+    const { panel, props } = user({ settings: { ...structuredClone(defaultCalendarSettings), availableAdminIcsCatalogItems: [item] } });
+    const open = jest.spyOn(window, 'open').mockImplementation(() => null);
+    const sources = structuredClone(panel.state.settings.sources);
+    act(() => { panel.setState({ showAddDialog: true, addingCalendarType: 'ics', addingCalendarStep: 'ics', newCalendarName: kind === 'manual' ? item.displayName : 'Other draft', icsUrl: kind === 'manual' ? item.icsUrl : 'https://other.example/feed' }); });
+    click(kind === 'admin' ? item.displayName : 'OpenInOutlookLabel');
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(`https://outlook.office.com/calendar/addcalendar?url=${encodeURIComponent(item.icsUrl)}&name=${encodeURIComponent(item.displayName)}`, '_blank', 'noopener,noreferrer');
+    expect(panel.state.showAddDialog).toBe(false);
+    expect(panel.state.settings.sources).toEqual(sources);
+    expect(props.onSave).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('renders the resolved mailbox name and primary address (lookup failure: %s)', async failed => {
+    const id = '12345678-1234-1234-1234-123456789012';
+    const settings = { ...structuredClone(defaultAdminWebPartSettings), assignedSources: [{
+      adminSourceId: 'source', assignmentId: 'assignment', audienceGroups: [], isMandatory: false, defaultEnabled: true,
+      source: { sourceType: 'exchange' as const, name: 'Calendar', color: '#0078d4', isEnabled: true, exchangeMailbox: id, exchangeCalendarId: 'calendar' }
+    }] };
+    const { panel } = admin({ settings });
+    const wizard = panel as unknown as { exchangeService: { resolveMailbox: (alias: string) => Promise<{ id: string; displayName: string; mail: string; userPrincipalName: string }> }; canonicalizeMailboxes: () => Promise<void> };
+    wizard.exchangeService = { resolveMailbox: async () => {
+      if (failed) throw new Error('Directory unavailable');
+      return { id, displayName: 'Team mailbox', mail: 'team@contoso.com', userPrincipalName: 'login@contoso.com' };
+    } };
+    await act(async () => { await wizard.canonicalizeMailboxes(); });
+    const summaries = Array.from(document.querySelectorAll('summary')).map(element => element.textContent);
+    expect(summaries).toContain(failed ? id : 'Team mailboxteam@contoso.com');
+    if (!failed) {
+      expect(summaries).not.toContain(id);
+      expect(document.body.textContent).not.toContain('login@contoso.com');
+    }
+    expect(panel.state.settings.assignedSources[0].source.exchangeMailbox).toBe(id);
+  });
+
   it('blocks duplicate administrator Save and closes only after success', async () => {
     const pending = deferred();
     const { panel, props } = admin({ onSave: jest.fn(() => pending.promise) });

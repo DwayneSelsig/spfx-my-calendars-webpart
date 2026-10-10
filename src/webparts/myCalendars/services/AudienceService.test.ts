@@ -1,5 +1,7 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { AudienceService } from './AudienceService';
+import { defaultAdminWebPartSettings, defaultUserCalendarSettings } from '../models/ICalendarSettings';
+import { resolveCalendarSettings } from './CalendarSettingsService';
 
 function client(pages: unknown[]): { graph: MSGraphClientV3; api: jest.Mock; request: { header: jest.Mock; query: jest.Mock; get: jest.Mock } } {
   const request = { header: jest.fn().mockReturnThis(), query: jest.fn().mockReturnThis(), get: jest.fn() };
@@ -23,6 +25,19 @@ describe('audience discovery', () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  it('keeps group-targeted ICS subscriptions unavailable when membership evaluation fails', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const groupId = 'ics-membership-failure';
+    const graph = { api: jest.fn().mockReturnValue({ post: jest.fn().mockRejectedValue(new Error('403')) }) } as unknown as MSGraphClientV3;
+    const matchedGroupIds = await new AudienceService(graph).getMatchingGroupIds([groupId]);
+    const result = resolveCalendarSettings({ adminSettings: { ...defaultAdminWebPartSettings, icsCatalog: [
+      { adminIcsId: 'targeted', displayName: 'Targeted', icsUrl: 'https://example.com/group', audienceGroups: [{ groupId, displayName: 'Group' }] },
+      { adminIcsId: 'everyone', displayName: 'Everyone', icsUrl: 'https://example.com/all', audienceGroups: [] }
+    ] }, userSettings: defaultUserCalendarSettings, matchedGroupIds });
+    expect(matchedGroupIds.size).toBe(0);
+    expect(result.availableAdminIcsCatalogItems.map(item => item.adminIcsId)).toEqual(['everyone']);
+  });
 
   it('escapes prefix searches, pages all results and sorts locally without orderby', async () => {
     const { graph, api, request } = client([

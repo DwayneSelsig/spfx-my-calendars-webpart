@@ -84,7 +84,7 @@ Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping.
 - Current-user calendars are always discovered from `GET /me/calendars`.
 - A configured mailbox accepts a trimmed UPN, object ID or primary SMTP address. Secondary aliases are not resolved.
 - Administrator mailbox suggestions search directory display names, UPNs and primary SMTP addresses through the existing delegated Graph client. The persona photo uses the current SharePoint web's `/_layouts/15/userphoto.aspx` endpoint. Suggestions are convenience data only; the selected or manually entered identifier still goes through authoritative identity resolution before calendar discovery.
-- `resolveMailbox` returns `{ id, userPrincipalName }` or throws. Object IDs use `GET /users/{id}`; address input uses `GET /users` with exact `userPrincipalName`/`mail` equality and selects only `id,userPrincipalName`. OData literals are escaped, identity-query pages are followed, and zero/multiple distinct matches are rejected.
+- `resolveMailbox` returns `{ id, userPrincipalName, displayName?, mail? }` or throws. Object IDs use `GET /users/{id}`; address input uses `GET /users` with exact `userPrincipalName`/`mail` equality and selects `id,userPrincipalName,displayName,mail`. OData literals are escaped, identity-query pages are followed, and zero/multiple distinct matches are rejected. Administrator mailbox headings show the resolved display name and primary mail address alongside it, falling back to UPN when mail is absent. Existing explicit assignments and all-calendar rules resolve this metadata on panel opening; failed lookups retain the existing heading without preventing configuration or changing source identity. Metadata is held in panel state, not persisted.
 - The resolved object ID is used for `GET /users/{id}/calendars` and `GET /users/{id}/calendars/{calendarId}/calendarView`. Identity resolution **MUST NOT** be presented as proof of calendar access.
 - Only an omitted mailbox argument selects `/me`; an explicitly empty/whitespace identifier is invalid. URL path identifiers are encoded separately. Existing stored primary SMTP addresses resolve during runtime without a schema migration.
 - Personal UI loads current-user calendars automatically and can discover a manually entered mailbox.
@@ -252,7 +252,10 @@ ICS is an active subscription action, not an event source.
 
 - A user enters or selects a display name and ICS URL.
 - The UI opens `https://outlook.office.com/calendar/addcalendar?url={encodedUrl}&name={encodedName}` in a new tab.
-- An administrator can publish named ICS catalog entries to audiences; selecting one pre-fills the same personal flow.
+- Administrator creation **MUST** start with one supported Entra group or explicit Everyone, followed by a required title and ICS URL. Add places the trimmed values and audience in the administrator draft; Save persists the catalog through the existing SPFx property bridge. Back preserves the entered values and audience; Cancel adds nothing.
+- An administrator can publish named ICS catalog entries to audiences. Selecting an applicable entry **MUST** open its encoded URL and title directly in the Outlook subscription flow and close the add dialog. Manual title/URL entry remains available.
+- The user completes the subscription in Outlook; opening the link does not establish subscription completion.
+- The same ICS URL **MAY** be published to different audience sets with independent catalog IDs and titles. The same URL and audience set **MUST NOT** be repeated; URL comparison remains case-insensitive and audience order is immaterial. Users see each applicable catalog entry, including entries with the same URL.
 - The web part **MUST NOT** fetch, parse, normalize, cache, or render ICS content.
 - The subscription action is not persisted as a personal web-part source.
 - An administrator catalog item is persisted in web-part properties but does not prove that a user completed the Outlook subscription.

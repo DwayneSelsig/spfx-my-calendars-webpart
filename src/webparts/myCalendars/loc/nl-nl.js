@@ -177,6 +177,8 @@ define([], function() {
     ,"YourMailboxLabel": "uw postvak"
     ,"EnterMailboxEmailLabel": "Voer een postvak-e-mailadres in om agenda's te laden:"
     ,"AvailableViaAdminLabel": "Beschikbaar via uw beheerder"
+    ,"AddIcsAudienceLabel": "Doelgroep toevoegen"
+    ,"AdminIcsOpenHelpLabel": "Klik op een agenda om het abonnement in Outlook te openen en daar te voltooien. U kunt hieronder ook zelf een titel en ICS-URL invoeren."
     ,"IcsNamePlaceholder": "bijv. Feestdagen kantoor"
     ,"IcsUrlPlaceholder": "https://www.officeholidays.com/ics-all/netherlands"
     ,"OfficeHolidaysPlaceholder": "bijv. Feestdagen kantoor"

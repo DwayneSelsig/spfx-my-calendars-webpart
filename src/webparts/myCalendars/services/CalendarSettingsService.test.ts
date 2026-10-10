@@ -4,10 +4,33 @@ import {
   migrateLegacyUserSettings,
   normalizeAdminWebPartSettings,
   normalizeUserCalendarSettings,
-  resolveCalendarSettings
+  resolveCalendarSettings,
+  serializeAdminWebPartSettings
 } from './CalendarSettingsService';
 
 describe('administrator settings normalization and loading', () => {
+  it('round-trips the same ICS URL for Everyone and distinct group audiences', () => {
+    const url = 'https://example.com/calendar.ics';
+    const catalog = [
+      { adminIcsId: 'all', displayName: 'All holidays', icsUrl: url, audienceGroups: [] },
+      { adminIcsId: 'mt', displayName: 'MT holidays', icsUrl: url, audienceGroups: [{ groupId: 'mt', displayName: 'MT' }] },
+      { adminIcsId: 'hr', displayName: 'HR holidays', icsUrl: url, audienceGroups: [{ groupId: 'hr', displayName: 'HR' }] }
+    ];
+    const normalized = normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, icsCatalog: catalog });
+    expect(normalized?.icsCatalog).toEqual(catalog);
+    const loaded = loadAdminWebPartSettings({ current: serializeAdminWebPartSettings(normalized!) });
+    expect(loaded.source).toBe('current');
+    expect(loaded.settings.icsCatalog).toEqual(catalog);
+    expect(resolveCalendarSettings({ adminSettings: loaded.settings, userSettings: defaultUserCalendarSettings, matchedGroupIds: new Set(['mt']) }).availableAdminIcsCatalogItems.map(item => item.adminIcsId)).toEqual(['all', 'mt']);
+    expect(resolveCalendarSettings({ adminSettings: loaded.settings, userSettings: defaultUserCalendarSettings, matchedGroupIds: new Set(['mt', 'hr']) }).availableAdminIcsCatalogItems.map(item => item.adminIcsId)).toEqual(['all', 'mt', 'hr']);
+  });
+
+  it.each([{ audienceGroups: [] }, { audienceGroups: [{ groupId: 'a', displayName: 'A' }, { groupId: 'b', displayName: 'B' }] }])('rejects the same ICS URL and audience set regardless of group order', ({ audienceGroups }) => {
+    expect(normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, icsCatalog: [
+      { adminIcsId: 'one', displayName: 'One', icsUrl: 'https://example.com/feed', audienceGroups },
+      { adminIcsId: 'two', displayName: 'Two', icsUrl: ' HTTPS://EXAMPLE.COM/FEED ', audienceGroups: [...audienceGroups].reverse() }
+    ] })).toBeUndefined();
+  });
   it('preserves cache and other administrator fields during normalization', () => {
     const normalized = normalizeAdminWebPartSettings({
       ...defaultAdminWebPartSettings,

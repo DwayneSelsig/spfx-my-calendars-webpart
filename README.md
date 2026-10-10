@@ -45,7 +45,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
 - Use organization theme colors and support light and dark themes.
 - Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.
-- Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation.
+- Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation. Create an admin ICS entry by selecting its audience first, then entering its title and URL; eligible users open its Outlook subscription flow with one click, while manual ICS entry remains available.
 - Preview personal settings live in the calendar before saving. Cancel restores saved settings; failed Save retains your draft and restores the calendar with an error message.
 - Store personal settings and per-source visibility choices in the OneDrive App Folder. Save and Reset wait for storage; toolbar view preferences update optimistically and roll back on failure.
 - Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
@@ -85,7 +85,8 @@ The administrator settings model includes:
 - browser-cache enablement and a cache duration from 1 to 60 minutes;
 - organization color and source-logo defaults;
 - audience-assigned calendar sources;
-- audience-assigned ICS catalog entries;
+- Exchange mailbox headings showing the mailbox name and primary email address;
+- audience-assigned ICS catalog entries grouped under one URL, with a direct action to add audiences without re-entering the subscription URL;
 - automatic loading defaults for Planner, Groups and Teams, and Teams Shifts;
 
 The current administrator panel does not expose every modeled field. Organization color, service-level source-logo defaults, automatic source-loading defaults, and the Planner assigned-to-me default are registered implementation gaps.

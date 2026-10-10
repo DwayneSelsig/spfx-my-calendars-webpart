@@ -109,6 +109,10 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - ICS opens the Exchange Online subscription wizard through a generated deep link.
 - The web part does not fetch, parse, normalize, cache, or render ICS content.
 - The administrator ICS catalog publishes approved subscription links to audiences; it is not an event-source catalog.
+- New administrator ICS entries start with one supported Entra group or explicit Everyone, then a required title and URL. Add updates the draft; Save persists through the existing SPFx property bridge.
+- The same case-insensitive ICS URL is allowed for different audience sets, including Everyone alongside targeted groups. Entries retain independent IDs/titles and each applicable entry is shown. Duplicate URL/audience-set combinations are rejected regardless of group order.
+- The administrator catalog shows one URL block containing its audience entries. Add audience reuses that block's first entry's title and URL; existing entries remain independently editable and retain their IDs.
+- Selecting an applicable administrator entry opens the generated Outlook subscription link directly and closes the add dialog. Manual subscription input remains available. Outlook completes the subscription; the web part does not record completion.
 
 ### DEC-004 — Independent source loading
 
@@ -137,6 +141,8 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - It is not limited to shifts assigned to the current user.
 
 ### DEC-022 — Mailbox identity and discovery feedback
+
+- Administrator mailbox headings display directory displayName with primary mail alongside it, using UPN only when mail is absent. Existing assignments/rules resolve metadata on panel opening and new selections retain resolved metadata in panel state; failed lookups preserve the existing heading without changing source identities or persistence.
 
 - **Status:** Decision
 - Configured Exchange mailboxes accept UPN, object ID and primary SMTP (`mail`). Secondary aliases remain outside scope; delegated `User.ReadBasic.All` supports the needed basic-field identity resolution.

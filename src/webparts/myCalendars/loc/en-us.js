@@ -178,6 +178,8 @@ define([], function() {
     ,"YourMailboxLabel": "your mailbox"
     ,"EnterMailboxEmailLabel": "Enter a mailbox email to load calendars:"
     ,"AvailableViaAdminLabel": "Available from your administrator"
+    ,"AddIcsAudienceLabel": "Add audience"
+    ,"AdminIcsOpenHelpLabel": "Click a calendar to open and complete the subscription in Outlook. You can also enter your own title and ICS URL below."
     ,"IcsNamePlaceholder": "e.g. Office Holidays"
     ,"IcsUrlPlaceholder": "https://www.officeholidays.com/ics-all/netherlands"
     ,"OfficeHolidaysPlaceholder": "e.g. Office Holidays"
