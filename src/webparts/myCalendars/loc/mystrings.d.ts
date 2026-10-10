@@ -1,4 +1,26 @@
 declare interface IMyCalendarsWebPartStrings {
+  MandatoryPolicyLabel: string;
+  DefaultPolicyLabel: string;
+  AvailablePolicyLabel: string;
+  PolicyLabel: string;
+  EveryoneAudienceLabel: string;
+  MultipleGroupsLabel: string;
+  AudiencePermissionsHelpLabel: string;
+  AllMailboxCalendarsLabel: string;
+  InheritPolicyLabel: string;
+  ExcludeAssignmentLabel: string;
+  SharedCalendarPropertiesLabel: string;
+  AllowNameOverrideLabel: string;
+  AllowColorOverrideLabel: string;
+  AllowLogoOverrideLabel: string;
+  AllowAssignedFilterOverrideLabel: string;
+  AllowCompletedFilterOverrideLabel: string;
+  FollowAdminDefaultLabel: string;
+  AddMoreCalendarsLabel: string;
+  GroupTypeMicrosoft365Label: string;
+  GroupTypeSecurityLabel: string;
+  GroupTypeMailSecurityLabel: string;
+  AssignmentDiscoveryFailedLabel: string;
   AppLocalEnvironmentSharePoint: string;
   AppLocalEnvironmentTeams: string;
   AppLocalEnvironmentOffice: string;

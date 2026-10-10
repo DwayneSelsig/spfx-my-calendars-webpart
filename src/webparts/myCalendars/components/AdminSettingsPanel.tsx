@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { AssignmentPolicyControl, AllowedOverrideControls, AssignmentGroup, audienceTypeLabel, assignmentPolicyLabel } from './AssignmentControls';
 import { LatestDiscovery } from './latestDiscovery';
 import { updateAudienceDiscovery } from './audienceDiscoveryState';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
@@ -17,6 +18,10 @@ import { Slider } from '@fluentui/react/lib/Slider';
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
 import {
   type IAdminAssignedSource,
+  type IAssignmentPolicy,
+  type IExchangeMailboxAssignment,
+  type IAdminAllowedOverrides,
+  defaultAllowedOverrides,
   type IAdminIcsCatalogItem,
   type IAdminWebPartSettings,
   type IAudienceGroup,
@@ -31,7 +36,7 @@ import { SharePointCalendarService, ISharePointList, ISharePointSite } from '../
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 import { AudienceService, IEntraSecurityGroup } from '../services/AudienceService';
-import { createAdminAssignedSource, generateStableId } from '../services/CalendarSettingsService';
+import { generateStableId, normalizeAdminWebPartSettings, addAdministratorAssignments, addExchangeMailboxAssignment, canonicalizeExchangeSourceIdentities, getSourceIdentityKey } from '../services/CalendarSettingsService';
 import { getSourceTypeDescription, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
@@ -70,6 +75,19 @@ export interface IAdminSettingsPanelProps {
 
 interface IAdminSettingsPanelState {
   settings: IAdminWebPartSettings;
+  audienceFirst?: boolean;
+  audiencePreset?: boolean;
+  everyone?: boolean;
+  selectedExchangeCalendars: Record<string, IAssignmentPolicy>;
+  selectedSharePointLists: string[];
+  pendingSharePointSources: Array<{ source: ICalendarSourceBase; policy: IAssignmentPolicy }>;
+  exchangeAll: boolean;
+  exchangeAllPolicy: IAssignmentPolicy;
+  resolvedMailboxId?: string;
+  mailboxRuleCalendars: Record<string, ICalendarSourceBase[]>;
+  mailboxRuleErrors: Record<string, string>;
+  selectedAudienceMetadata: Record<string, IAudienceGroup>;
+  pendingPolicy: IAssignmentPolicy;
   editingSourceId: string | undefined;
   editingIcsId: string | undefined;
   showAddDialog: boolean;
@@ -129,6 +147,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private unifiedGroupService: UnifiedGroupCalendarService | null = null;
   private audienceService: AudienceService | null = null;
   private readonly SITES_PER_PAGE = 20;
+  private ruleDiscoveryGeneration = 0;
+  private sharePointFieldsGeneration = 0;
   private readonly mailboxDiscovery = new LatestDiscovery();
   private readonly audienceDiscovery = new LatestDiscovery();
 
@@ -152,6 +172,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     if (this.props.graphClient) {
       this.initializeGraphClient(this.props.graphClient);
       this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
+      this.discoverMailboxRules().then(() => this.canonicalizeMailboxes()).catch(error => console.error(error));
     }
   }
 
@@ -167,6 +188,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     if (prevProps.isOpen !== this.props.isOpen && this.props.isOpen) {
       this.setState(this.createStateFromProps(this.props), () => {
         this.enrichSharePointSiteNames().catch(err => console.error('Failed to enrich SharePoint site names:', err));
+        this.discoverMailboxRules().then(() => this.canonicalizeMailboxes()).catch(error => console.error(error));
       });
     }
   }
@@ -174,6 +196,10 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private createStateFromProps(props: IAdminSettingsPanelProps): IAdminSettingsPanelState {
     return {
       settings: JSON.parse(JSON.stringify(props.settings)),
+      audienceFirst: false, audiencePreset: false, everyone: false, resolvedMailboxId: undefined,
+      selectedSharePointLists: [], pendingSharePointSources: [],
+      selectedExchangeCalendars: {}, exchangeAll: false, exchangeAllPolicy: { isMandatory: false, defaultEnabled: true },
+      mailboxRuleCalendars: {}, mailboxRuleErrors: {}, selectedAudienceMetadata: {}, pendingPolicy: { isMandatory: false, defaultEnabled: true },
       editingSourceId: undefined,
       editingIcsId: undefined,
       showAddDialog: false,
@@ -219,6 +245,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   }
 
   private invalidateDialogDiscovery(): void {
+    this.ruleDiscoveryGeneration++;
+    this.sharePointFieldsGeneration++;
     this.mailboxDiscovery.invalidate();
     this.audienceDiscovery.invalidate();
   }
@@ -269,6 +297,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
     this.setState({
       showAddDialog: false,
+      audienceFirst: false, audiencePreset: false, everyone: false, selectedExchangeCalendars: {}, exchangeAll: false, resolvedMailboxId: undefined,
       addingCalendarType: undefined,
       addingCalendarStep: 'initial',
       spSites: [],
@@ -321,14 +350,25 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private handleSave = (): void => {
-    Promise.resolve(this.props.onSave(this.state.settings)).catch(error => {
+    const normalized = normalizeAdminWebPartSettings(this.state.settings);
+    if (!normalized) return;
+    Promise.resolve(this.props.onSave(normalized)).catch(error => {
       console.error('Failed to save admin settings draft:', error);
     });
   };
 
   private handleSelectAddType = async (type: CalendarSourceType): Promise<void> => {
+    if ((type === 'exchange' || type === 'sharepoint') && !this.state.audiencePreset) {
+      this.setState({ addingCalendarType: type, addingCalendarStep: 'admin-audience-select', audienceFirst: true, everyone: false, selectedAudienceGroups: {}, selectedAudienceMetadata: {} });
+      await this.loadSecurityGroups();
+      return;
+    }
+    await this.handleSelectSourceType(type);
+  };
+
+  private handleSelectSourceType = async (type: CalendarSourceType): Promise<void> => {
     if (type === 'sharepoint') {
-      this.setState({ addingCalendarType: type, addingCalendarStep: 'sharepoint-site', spSitesLoading: true });
+      this.setState({ addingCalendarType: type, addingCalendarStep: 'sharepoint-site', spSitesLoading: true, selectedSharePointLists: [], pendingSharePointSources: [] });
       const sites = await this.sharePointService?.getAccessibleSites() || [];
       this.setState({ spSites: sites, spSitesLoading: false });
       return;
@@ -375,6 +415,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private handleBackToTypeSelection = (): void => {
+    this.setState({ audienceFirst: false, audiencePreset: false, everyone: false, selectedExchangeCalendars: {}, exchangeAll: false, pendingSharePointSources: [], selectedSharePointLists: [] });
     this.invalidateDialogDiscovery();
     this.setState({ exchangeDiscoveryError: undefined, exchangeCalendarsLoading: false });
     this.setState({
@@ -417,6 +458,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private handleBackOneStep = (): void => {
+    this.sharePointFieldsGeneration++;
     this.audienceDiscovery.invalidate();
     this.setState({ securityGroupsLoading: false, securityGroupsError: undefined, securityGroupsLoaded: false });
     if (this.state.addingCalendarStep === 'admin-audience-select') {
@@ -451,8 +493,14 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       return;
     }
 
-    if (this.state.addingCalendarType === 'exchange' && this.state.exchangeSelectedCalendarId) {
-      this.setState({ exchangeSelectedCalendarId: undefined });
+    if (this.state.addingCalendarType === 'exchange' && this.state.addingCalendarStep === 'exchange-calendar') {
+      this.mailboxDiscovery.invalidate();
+      this.setState({ addingCalendarStep: 'exchange-mailbox', exchangeMailboxResolved: false, exchangeCalendars: [], selectedExchangeCalendars: {}, exchangeAll: false });
+      return;
+    }
+    if ((this.state.addingCalendarType === 'exchange' || this.state.addingCalendarType === 'sharepoint') && this.state.audiencePreset) {
+      this.setState({ addingCalendarStep: 'admin-audience-select', audienceFirst: true, audiencePreset: false });
+      this.loadSecurityGroups().catch(error => console.error(error));
       return;
     }
 
@@ -523,6 +571,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private handleSelectSharePointList = (list: ISharePointList): void => {
     this.setState({
       spSelectedList: list,
+      spAvailableFields: [], spFieldMapping: {},
       newCalendarName: list.name,
       newCalendarColor: this.state.settings.organizationPrimaryColor || '#0078d4'
     }, () => {
@@ -531,6 +580,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   };
 
   private async fetchSharePointListFields(list: ISharePointList): Promise<void> {
+    const generation = ++this.sharePointFieldsGeneration;
     const { spSelectedSite } = this.state;
     if (!spSelectedSite || !this.props.graphClient) {
       return;
@@ -542,6 +592,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
         .query({ $select: 'name,displayName,columnGroup' })
         .get();
 
+      if (generation !== this.sharePointFieldsGeneration || this.state.spSelectedList?.id !== list.id) return;
       const rawOptions: IDropdownOption[] = (columnsData.value || [])
         .filter((column: IGraphColumn) => column.name && !column.name.startsWith('_') && column.columnGroup !== '_Hidden')
         .map((column: IGraphColumn) => ({
@@ -559,6 +610,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
         }
       });
     } catch (error) {
+      if (generation !== this.sharePointFieldsGeneration || this.state.spSelectedList?.id !== list.id) return;
       console.error('Failed to load SharePoint field metadata:', error);
       this.setState({ addingCalendarStep: 'sharepoint-fields' });
     }
@@ -576,15 +628,17 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     const mailbox = this.state.exchangeMailbox.trim();
     await this.mailboxDiscovery.run(async () => {
       if (!this.exchangeService) throw new Error('GraphClient not initialized');
-      return this.exchangeService.getCalendars(mailbox);
+      const resolved = await this.exchangeService.resolveMailbox(mailbox);
+      const calendars = await this.exchangeService.getCalendars(resolved.id);
+      return { calendars, mailboxId: resolved.id };
     }, {
       start: () => this.setState({
         exchangeMailbox: mailbox, exchangeCalendarsLoading: true, exchangeCalendars: [],
         exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
       }),
-      success: calendars => this.setState({
-        exchangeCalendars: calendars, exchangeMailboxResolved: true,
-        addingCalendarStep: calendars.length ? 'exchange-calendar' : 'exchange-mailbox'
+      success: result => this.setState({
+        exchangeCalendars: result.calendars, resolvedMailboxId: result.mailboxId, selectedExchangeCalendars: {}, exchangeMailboxResolved: true,
+        addingCalendarStep: 'exchange-calendar'
       }),
       error: error => {
         console.error('Exchange mailbox discovery failed:', error);
@@ -623,15 +677,20 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     sources: ICalendarSourceBase[],
     target?: { kind: 'source'; id: string }
   ): Promise<void> => {
+    if (this.state.audiencePreset && !target) {
+      this.addSourcesToAudience(sources);
+      return;
+    }
     const selectedAudienceGroups: Record<string, string> = {};
     if (target) {
-      const existing = this.state.settings.assignedSources.find(item => item.adminSourceId === target.id);
+      const existing = this.state.settings.assignedSources.find(item => (item.assignmentId || item.adminSourceId) === target.id);
       existing?.audienceGroups.forEach(group => {
         selectedAudienceGroups[group.groupId] = group.displayName;
       });
     }
 
     this.setState({
+      audienceFirst: false, audiencePreset: false, everyone: !!target && Object.keys(selectedAudienceGroups).length === 0,
       pendingAdminSources: sources,
       pendingAdminIcs: undefined,
       audienceEditTarget: target,
@@ -656,6 +715,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     }
 
     this.setState({
+      audienceFirst: false, audiencePreset: false, everyone: !!target && Object.keys(selectedAudienceGroups).length === 0,
       pendingAdminSources: [],
       pendingAdminIcs: item,
       audienceEditTarget: target,
@@ -670,7 +730,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private createSelectedAudienceGroups(): IAudienceGroup[] {
     return Object.keys(this.state.selectedAudienceGroups).map(groupId => ({
       groupId,
-      displayName: this.state.selectedAudienceGroups[groupId]
+      displayName: this.state.selectedAudienceGroups[groupId],
+      groupType: this.state.selectedAudienceMetadata[groupId]?.groupType || this.state.settings.audienceGroups?.find(group => group.groupId === groupId)?.groupType
     }));
   }
 
@@ -690,20 +751,34 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       sharePointFieldMapping: this.state.spFieldMapping
     };
 
-    await this.beginAudienceSelectionForSources([source]);
+    const pending = [...this.state.pendingSharePointSources, { source, policy: this.state.pendingPolicy }];
+    const remaining = this.state.selectedSharePointLists.filter(id => id !== this.state.spSelectedList?.id);
+    if (remaining.length) {
+      this.setState({ pendingSharePointSources: pending, selectedSharePointLists: remaining, spFieldMapping: {}, spAvailableFields: [], pendingPolicy: { isMandatory: false, defaultEnabled: true } }, () => {
+        const next = this.state.spLists.find(item => item.id === remaining[0]); if (next) this.handleSelectSharePointList(next);
+      });
+      return;
+    }
+    const settings = addAdministratorAssignments(this.state.settings, pending, this.createSelectedAudienceGroups());
+    this.setState({ settings, pendingSharePointSources: [], selectedSharePointLists: [] }, () => this.handleCloseAddDialog());
   };
 
   private handleConfirmExchangeCalendar = async (): Promise<void> => {
-    const source: ICalendarSourceBase = {
-      sourceType: 'exchange',
-      name: this.state.newCalendarName,
-      color: this.state.newCalendarColor,
-      isEnabled: true,
-      exchangeMailbox: this.state.exchangeMailbox.trim() || undefined,
-      exchangeCalendarId: this.state.exchangeSelectedCalendarId || 'calendar'
-    };
-
-    await this.beginAudienceSelectionForSources([source]);
+    const mailboxId = this.state.resolvedMailboxId;
+    if (!mailboxId) return;
+    if (this.state.exchangeAll) {
+      const rule: IExchangeMailboxAssignment = { assignmentId: generateStableId('mailboxAssignment'), mailboxId,
+        mailboxDisplayName: this.state.exchangeMailbox, audienceGroups: this.createSelectedAudienceGroups(),
+        ...this.state.exchangeAllPolicy, allowedOverrides: { ...defaultAllowedOverrides }, exceptions: [] };
+      const settings = addExchangeMailboxAssignment(this.state.settings, rule);
+      this.setState({ settings,
+        mailboxRuleCalendars: { ...this.state.mailboxRuleCalendars, [mailboxId]: this.state.exchangeCalendars.map(calendar => ({ sourceType: 'exchange', name: calendar.name, color: calendar.hexColor, isEnabled: true, exchangeMailbox: mailboxId, exchangeCalendarId: calendar.id })) } }, () => this.handleCloseAddDialog());
+      return;
+    }
+    const sources: ICalendarSourceBase[] = this.state.exchangeCalendars.filter(calendar => this.state.selectedExchangeCalendars[calendar.id]).map(calendar => ({
+      sourceType: 'exchange', name: calendar.name, color: calendar.hexColor, isEnabled: true, exchangeMailbox: mailboxId, exchangeCalendarId: calendar.id
+    }));
+    this.addSourcesToAudience(sources, this.state.selectedExchangeCalendars);
   };
 
   private handleConfirmPlannerPlan = async (): Promise<void> => {
@@ -776,10 +851,22 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   private loadSecurityGroups = async (searchText?: string): Promise<void> => {
     await this.audienceDiscovery.run(async () => {
       if (!this.audienceService) throw new Error('GraphClient not initialized');
-      return this.audienceService.getSecurityGroups(searchText);
+      return this.audienceService.getAudienceGroups(searchText);
     }, {
       start: () => this.setState(prev => updateAudienceDiscovery(prev, { type: 'start' })),
-      success: securityGroups => this.setState(prev => updateAudienceDiscovery(prev, { type: 'success', groups: securityGroups })),
+      success: securityGroups => this.setState(prev => {
+        const known = new Map(securityGroups.map(group => [group.id, group]));
+        const enrich = (group: IAudienceGroup): IAudienceGroup => { const found = known.get(group.groupId); return found ? { ...group, displayName: found.displayName, groupType: found.groupType } : group; };
+        const selectedAudienceMetadata = { ...prev.selectedAudienceMetadata };
+        for (const id of Object.keys(prev.selectedAudienceGroups)) {
+          const found = known.get(id); if (found) selectedAudienceMetadata[id] = { groupId: id, displayName: found.displayName, groupType: found.groupType };
+        }
+        return { ...prev, ...updateAudienceDiscovery(prev, { type: 'success', groups: securityGroups }), selectedAudienceMetadata,
+          settings: { ...prev.settings, audienceGroups: (prev.settings.audienceGroups || []).map(enrich),
+            assignedSources: prev.settings.assignedSources.map(item => ({ ...item, audienceGroups: item.audienceGroups.map(enrich) })),
+            exchangeMailboxAssignments: (prev.settings.exchangeMailboxAssignments || []).map(item => ({ ...item, audienceGroups: item.audienceGroups.map(enrich) })),
+            icsCatalog: prev.settings.icsCatalog.map(item => ({ ...item, audienceGroups: item.audienceGroups.map(enrich) })) } };
+      }),
       error: error => {
         console.error('Audience discovery failed:', error);
         this.setState(prev => updateAudienceDiscovery(prev, { type: 'error', message: strings.SecurityGroupsLoadErrorLabel }));
@@ -805,13 +892,16 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       } else {
         delete selectedAudienceGroups[group.id];
       }
-      return { selectedAudienceGroups };
+      return { selectedAudienceGroups: prev.audienceFirst && checked ? { [group.id]: group.displayName } : selectedAudienceGroups,
+        everyone: false, selectedAudienceMetadata: { ...prev.selectedAudienceMetadata, [group.id]: { groupId: group.id, displayName: group.displayName, groupType: group.groupType } } };
     });
   };
 
   private handleApplyAudienceSelection = (): void => {
     const audienceGroups = this.createSelectedAudienceGroups();
-    if (audienceGroups.length === 0) {
+    if (audienceGroups.length === 0 && !this.state.everyone) return;
+    if (this.state.audienceFirst && this.state.addingCalendarType) {
+      this.setState({ audienceFirst: false, audiencePreset: true }, () => { this.handleSelectSourceType(this.state.addingCalendarType as CalendarSourceType).catch(error => console.error(error)); });
       return;
     }
 
@@ -819,7 +909,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       const settings = {
         ...this.state.settings,
         assignedSources: this.state.settings.assignedSources.map(item =>
-          item.adminSourceId === this.state.audienceEditTarget?.id
+          (item.assignmentId || item.adminSourceId) === this.state.audienceEditTarget?.id
             ? { ...item, audienceGroups }
             : item
         )
@@ -861,11 +951,12 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
       return;
     }
 
-    const newSources = this.state.pendingAdminSources.map(source => createAdminAssignedSource(source, audienceGroups));
-    const settings = {
-      ...this.state.settings,
-      assignedSources: [...this.state.settings.assignedSources, ...newSources]
-    };
+    this.addSourcesToAudience(this.state.pendingAdminSources);
+  };
+
+  private addSourcesToAudience = (sources: ICalendarSourceBase[], policies?: Record<string, IAssignmentPolicy>): void => {
+    const settings = addAdministratorAssignments(this.state.settings, sources.map(source => ({ source,
+      policy: policies?.[source.exchangeCalendarId || getSourceIdentityKey(source)] || this.state.pendingPolicy })), this.createSelectedAudienceGroups());
     this.setState({ settings }, () => this.handleCloseAddDialog());
   };
 
@@ -873,6 +964,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     this.setState(prev => ({
       settings: {
         ...prev.settings,
+        sourceCatalog: (prev.settings.sourceCatalog || []).map(item => item.adminSourceId === adminSourceId ? { ...item, source: { ...item.source, ...updates } } : item),
         assignedSources: prev.settings.assignedSources.map(item =>
           item.adminSourceId === adminSourceId
             ? { ...item, source: { ...item.source, ...updates } }
@@ -886,14 +978,14 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     this.setState(prev => ({
       settings: {
         ...prev.settings,
-        assignedSources: prev.settings.assignedSources.filter(item => item.adminSourceId !== adminSourceId)
+        assignedSources: prev.settings.assignedSources.filter(item => (item.assignmentId || item.adminSourceId) !== adminSourceId)
       },
       editingSourceId: prev.editingSourceId === adminSourceId ? undefined : prev.editingSourceId
     }));
   };
 
   private handleEditAssignedSourceAudiences = async (adminSourceId: string): Promise<void> => {
-    const existing = this.state.settings.assignedSources.find(item => item.adminSourceId === adminSourceId);
+    const existing = this.state.settings.assignedSources.find(item => (item.assignmentId || item.adminSourceId) === adminSourceId);
     if (!existing) {
       return;
     }
@@ -959,12 +1051,13 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
           <Dropdown label={strings.EndDateFieldLabel} options={spAvailableFields} selectedKey={spFieldMapping.endDateField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, endDateField: option?.key as string } })} />
           <Dropdown label={strings.LocationFieldOptionalLabel} options={[{ key: '', text: strings.NoneLabel }, ...spAvailableFields]} selectedKey={spFieldMapping.locationField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, locationField: option?.key as string } })} />
           <Dropdown label={strings.DescriptionFieldOptionalLabel} options={[{ key: '', text: strings.NoneLabel }, ...spAvailableFields]} selectedKey={spFieldMapping.descriptionField || ''} onChange={(_, option) => this.setState({ spFieldMapping: { ...spFieldMapping, descriptionField: option?.key as string } })} />
+          <AssignmentPolicyControl policy={this.state.pendingPolicy} onChange={pendingPolicy => this.setState({ pendingPolicy })} />
           <TextField label={strings.CalendarNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} />
           <div>
             <Label>{strings.ColorLabel}</Label>
             <ColorPicker color={this.state.newCalendarColor} onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })} alphaType="none" />
           </div>
-          <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmSharePointCalendar().catch(err => console.error(err))} />
+          <PrimaryButton text={strings.AddItemLabel} onClick={() => this.handleConfirmSharePointCalendar().catch(err => console.error(err))} />
         </Stack>
       );
     }
@@ -979,9 +1072,10 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
           <Label>{formatLocalizedString(strings.SelectCalendarListLabel, spSelectedSite.name)}</Label>
           <Stack tokens={{ childrenGap: 8 }}>
             {spLists.map(list => (
-              <DefaultButton key={list.id} text={list.name} onClick={() => this.handleSelectSharePointList(list)} style={{ textAlign: 'left', height: 'auto', padding: '8px' }} />
+              <Checkbox key={list.id} label={list.name} checked={this.state.selectedSharePointLists.indexOf(list.id) >= 0} onChange={(_, checked) => this.setState(prev => ({ selectedSharePointLists: checked ? [...prev.selectedSharePointLists, list.id] : prev.selectedSharePointLists.filter(id => id !== list.id) }))} />
             ))}
           </Stack>
+          <PrimaryButton text={strings.NextLabel} disabled={!this.state.selectedSharePointLists.length} onClick={() => { const list = spLists.find(item => item.id === this.state.selectedSharePointLists[0]); if (list) this.handleSelectSharePointList(list); }} />
         </Stack>
       );
     }
@@ -1022,43 +1116,25 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
   }
 
   private renderExchangeFlow(): React.ReactElement {
-    const { exchangeMailbox, exchangeMailboxResolved, exchangeCalendars, exchangeCalendarsLoading, exchangeSelectedCalendarId } = this.state;
+    const { exchangeMailbox, exchangeMailboxResolved, exchangeCalendars, exchangeCalendarsLoading } = this.state;
 
-    if (exchangeSelectedCalendarId) {
-      return (
-        <Stack tokens={{ childrenGap: 12 }}>
-          <TextField label={strings.CalendarNameLabel} value={this.state.newCalendarName} onChange={(_, value) => this.setState({ newCalendarName: value || '' })} />
-          <div>
-            <Label>{strings.ColorLabel}</Label>
-            <ColorPicker color={this.state.newCalendarColor} onChange={(_, color) => this.setState({ newCalendarColor: `#${color.hex}` })} alphaType="none" />
-          </div>
-          <PrimaryButton text={strings.NextChooseGroupsLabel} onClick={() => this.handleConfirmExchangeCalendar().catch(err => console.error(err))} />
-        </Stack>
-      );
-    }
-
-    if (exchangeCalendarsLoading) {
-      return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
-    }
-
-    if (exchangeMailboxResolved && exchangeCalendars.length > 0) {
-      return (
-        <Stack tokens={{ childrenGap: 12 }}>
-          <Label>{formatLocalizedString(strings.SelectCalendarFromMailboxLabel, exchangeMailbox || strings.YourMailboxLabel)}</Label>
-          <Stack tokens={{ childrenGap: 8 }}>
-            {exchangeCalendars.map(cal => (
-              <Stack key={cal.id} horizontal verticalAlign="center" tokens={{ childrenGap: 8 }} style={{ border: '1px solid #edebe9', borderRadius: 4, padding: '8px 12px', backgroundColor: '#f3f2f1', cursor: 'pointer' }} onClick={() => this.handleSelectExchangeCalendar(cal)}>
-                <div style={{ width: 16, height: 16, backgroundColor: cal.hexColor, borderRadius: 2, flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <strong>{cal.name}</strong>
-                  {cal.isDefaultCalendar && <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>{strings.DefaultLabel}</span>}
-                </div>
-              </Stack>
-            ))}
-          </Stack>
-        </Stack>
-      );
-    }
+    if (exchangeCalendarsLoading) return <Spinner size={SpinnerSize.medium} label={strings.LoadingLabel} />;
+    if (exchangeMailboxResolved) return (
+      <Stack tokens={{ childrenGap: 12 }}>
+        <Label>{formatLocalizedString(strings.SelectCalendarFromMailboxLabel, exchangeMailbox)}</Label>
+        <Checkbox label={strings.AllMailboxCalendarsLabel} checked={this.state.exchangeAll} onChange={(_, checked) => this.setState({ exchangeAll: !!checked })} />
+        {this.state.exchangeAll && <AssignmentPolicyControl policy={this.state.exchangeAllPolicy} onChange={exchangeAllPolicy => this.setState({ exchangeAllPolicy })} />}
+        {!this.state.exchangeAll && exchangeCalendars.map(calendar => <Stack key={calendar.id} tokens={{ childrenGap: 4 }}>
+          <Checkbox label={calendar.name} checked={!!this.state.selectedExchangeCalendars[calendar.id]} onChange={(_, checked) => this.setState(prev => {
+            const selectedExchangeCalendars = { ...prev.selectedExchangeCalendars };
+            if (checked) selectedExchangeCalendars[calendar.id] = { isMandatory: false, defaultEnabled: true }; else delete selectedExchangeCalendars[calendar.id];
+            return { selectedExchangeCalendars };
+          })} />
+          {this.state.selectedExchangeCalendars[calendar.id] && <AssignmentPolicyControl policy={this.state.selectedExchangeCalendars[calendar.id]} onChange={policy => this.setState(prev => ({ selectedExchangeCalendars: { ...prev.selectedExchangeCalendars, [calendar.id]: policy } }))} />}
+        </Stack>)}
+        <PrimaryButton text={strings.AddItemLabel} disabled={!this.state.exchangeAll && !Object.keys(this.state.selectedExchangeCalendars).length} onClick={() => this.handleConfirmExchangeCalendar().catch(error => console.error(error))} />
+      </Stack>
+    );
 
     return (
       <Stack tokens={{ childrenGap: 12 }}>
@@ -1162,6 +1238,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>{strings.SelectAdminAudienceGroupsLabel}</Label>
+        <MessageBar>{strings.AudiencePermissionsHelpLabel}</MessageBar>
+        <Checkbox label={strings.EveryoneAudienceLabel} checked={!!this.state.everyone} onChange={(_, checked) => this.setState({ everyone: !!checked, selectedAudienceGroups: {} })} />
         <TextField placeholder={strings.SearchSecurityGroupsPlaceholder} value={this.state.securityGroupSearch} onChange={(_, value) => this.handleSecurityGroupSearchChange(value)} />
         <PrimaryButton text={strings.SearchLabel} onClick={() => this.handleSecurityGroupSearch().catch(err => console.error(err))} />
         {selectedCount > 0 && (
@@ -1176,11 +1254,11 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
         ) : (
           <Stack tokens={{ childrenGap: 8 }}>
             {this.state.securityGroups.map(group => (
-              <Checkbox key={group.id} label={group.displayName} checked={!!this.state.selectedAudienceGroups[group.id]} onChange={(_, checked) => this.handleToggleAudienceGroup(group, checked)} />
+              <Checkbox key={group.id} label={group.displayName + (group.groupType ? ' — ' + audienceTypeLabel({ groupId: group.id, displayName: group.displayName, groupType: group.groupType }) : '')} checked={!!this.state.selectedAudienceGroups[group.id]} onChange={(_, checked) => this.handleToggleAudienceGroup(group, checked)} />
             ))}
           </Stack>
         )}
-        <PrimaryButton text={this.state.audienceEditTarget ? strings.ApplyGroupsLabel : strings.AddItemLabel} onClick={this.handleApplyAudienceSelection} disabled={selectedCount === 0} />
+        <PrimaryButton text={this.state.audienceFirst ? strings.NextLabel : this.state.audienceEditTarget ? strings.ApplyGroupsLabel : strings.AddItemLabel} onClick={this.handleApplyAudienceSelection} disabled={selectedCount === 0 && !this.state.everyone} />
       </Stack>
     );
   }
@@ -1225,12 +1303,130 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
     );
   }
 
+  private handleUpdatePolicy = (id: string, policy: IAssignmentPolicy): void => {
+    this.setState(prev => ({ settings: { ...prev.settings, assignedSources: prev.settings.assignedSources.map(item => (item.assignmentId || item.adminSourceId) === id ? { ...item, ...policy } : item) } }));
+  };
+
+  private handleUpdateAllowedOverrides = (id: string, allowedOverrides: IAdminAllowedOverrides): void => {
+    this.setState(prev => ({ settings: { ...prev.settings,
+      sourceCatalog: (prev.settings.sourceCatalog || []).map(item => item.adminSourceId === id ? { ...item, allowedOverrides } : item),
+      assignedSources: prev.settings.assignedSources.map(item => item.adminSourceId === id ? { ...item, allowedOverrides } : item) } }));
+  };
+
+  private handleUpdateMailboxRule = (id: string, updates: Partial<IExchangeMailboxAssignment>): void => {
+    this.setState(prev => ({ settings: { ...prev.settings, exchangeMailboxAssignments: (prev.settings.exchangeMailboxAssignments || []).map(rule => rule.assignmentId === id ? { ...rule, ...updates } : rule) } }));
+  };
+
+  private canonicalizeMailboxes = async (): Promise<void> => {
+    if (!this.exchangeService) return;
+    const generation = this.ruleDiscoveryGeneration;
+    const aliases = Array.from(new Set(this.state.settings.assignedSources.filter(item => item.source.sourceType === 'exchange' && item.source.exchangeMailbox).map(item => item.source.exchangeMailbox as string)));
+    const identities = await Promise.all(aliases.map(async alias => {
+      try { return { alias, id: (await this.exchangeService?.resolveMailbox(alias))?.id }; } catch { return { alias, id: undefined }; }
+    }));
+    if (generation !== this.ruleDiscoveryGeneration) return;
+    const byAlias = new Map(identities.filter(item => item.id).map(item => [item.alias.toLowerCase(), item.id as string]));
+    this.setState(prev => ({ settings: canonicalizeExchangeSourceIdentities(prev.settings, byAlias) }));
+  };
+
+  private discoverMailboxRules = async (): Promise<void> => {
+    if (!this.exchangeService) return;
+    const generation = ++this.ruleDiscoveryGeneration;
+    const ids = Array.from(new Set((this.state.settings.exchangeMailboxAssignments || []).map(rule => rule.mailboxId)));
+    const results = await Promise.all(ids.map(async mailboxId => {
+      try {
+        const calendars = await this.exchangeService?.getCalendars(mailboxId) || [];
+        return { mailboxId, sources: calendars.map(calendar => ({ sourceType: 'exchange' as const, name: calendar.name, color: calendar.hexColor, isEnabled: true, exchangeMailbox: mailboxId, exchangeCalendarId: calendar.id })), error: '' };
+      } catch (error) { return { mailboxId, sources: [], error: getExchangeDiscoveryErrorMessage(error) }; }
+    }));
+    if (generation !== this.ruleDiscoveryGeneration) return;
+    this.setState({ mailboxRuleCalendars: results.reduce<Record<string, ICalendarSourceBase[]>>((all, item) => ({ ...all, [item.mailboxId]: item.sources }), {}),
+      mailboxRuleErrors: results.reduce<Record<string, string>>((all, item) => ({ ...all, [item.mailboxId]: item.error }), {}) });
+  };
+
+  private updateDiscoveredSource = (source: ICalendarSourceBase, allowed: IAdminAllowedOverrides, updates: Partial<ICalendarSourceBase>, allowedUpdates?: IAdminAllowedOverrides): void => {
+    this.setState(prev => {
+      const catalog = (prev.settings.sourceCatalog || []).slice();
+      const existing = catalog.find(item => getSourceIdentityKey(item.source) === getSourceIdentityKey(source));
+      const id = existing?.adminSourceId || 'exchange|' + encodeURIComponent((source.exchangeMailbox || '').toLowerCase()) + '|' + encodeURIComponent(source.exchangeCalendarId || '');
+      const definition = { adminSourceId: id, source: { ...(existing?.source || source), ...updates }, allowedOverrides: allowedUpdates || existing?.allowedOverrides || allowed };
+      const index = catalog.findIndex(item => item.adminSourceId === id);
+      if (index >= 0) catalog[index] = definition; else catalog.push(definition);
+      return { settings: { ...prev.settings, sourceCatalog: catalog, assignedSources: prev.settings.assignedSources.map(item => item.adminSourceId === id ? { ...item, source: definition.source, allowedOverrides: definition.allowedOverrides } : item) } };
+    });
+  };
+
+  private renderMailboxRule(rule: IExchangeMailboxAssignment): React.ReactElement {
+    return <Stack key={rule.assignmentId} tokens={{ childrenGap: 8 }}>
+      <Label>{strings.AllMailboxCalendarsLabel}</Label>
+      <AssignmentPolicyControl policy={rule} onChange={policy => this.handleUpdateMailboxRule(rule.assignmentId, policy)} />
+      <AllowedOverrideControls value={rule.allowedOverrides} onChange={allowedOverrides => this.setState(prev => ({ settings: { ...prev.settings,
+        exchangeMailboxAssignments: (prev.settings.exchangeMailboxAssignments || []).map(item => item.mailboxId === rule.mailboxId ? { ...item, allowedOverrides } : item) } }))} />
+      {this.state.mailboxRuleErrors[rule.mailboxId] && <MessageBar messageBarType={MessageBarType.error}>{this.state.mailboxRuleErrors[rule.mailboxId]}</MessageBar>}
+      {(this.state.mailboxRuleCalendars[rule.mailboxId] || []).map(source => {
+        const exception = rule.exceptions.find(item => item.calendarId === source.exchangeCalendarId);
+        const key = exception?.excluded ? 'exclude' : exception?.isMandatory !== undefined ? exception.isMandatory ? 'mandatory' : exception.defaultEnabled ? 'default' : 'available' : 'inherit';
+        const definition = this.state.settings.sourceCatalog?.find(item => getSourceIdentityKey(item.source) === getSourceIdentityKey(source));
+        const shared = definition?.source || source;
+        return <AssignmentGroup key={source.exchangeCalendarId} title={shared.name}>
+          <Dropdown label={strings.PolicyLabel} selectedKey={key} options={[{ key: 'inherit', text: strings.InheritPolicyLabel }, { key: 'exclude', text: strings.ExcludeAssignmentLabel }, { key: 'mandatory', text: strings.MandatoryPolicyLabel }, { key: 'default', text: strings.DefaultPolicyLabel }, { key: 'available', text: strings.AvailablePolicyLabel }]}
+            onChange={(_, option) => {
+              const exceptions = rule.exceptions.filter(item => item.calendarId !== source.exchangeCalendarId);
+              if (option?.key !== 'inherit') exceptions.push({ calendarId: source.exchangeCalendarId as string,
+                ...(option?.key === 'exclude' ? { excluded: true } : { isMandatory: option?.key === 'mandatory', defaultEnabled: option?.key !== 'available' }) });
+              this.handleUpdateMailboxRule(rule.assignmentId, { exceptions });
+            }} />
+          <MessageBar>{strings.SharedCalendarPropertiesLabel}</MessageBar>
+          <TextField label={strings.NameLabel} value={shared.name} onChange={(_, name) => this.updateDiscoveredSource(source, rule.allowedOverrides, { name: name || '' })} />
+          <ColorPicker color={shared.color} alphaType="none" onChange={(_, color) => this.updateDiscoveredSource(source, rule.allowedOverrides, { color: '#' + color.hex })} />
+          <Toggle label={strings.SourceLogoLabel} checked={shared.showSourceLogo ?? true} onChange={(_, checked) => this.updateDiscoveredSource(source, rule.allowedOverrides, { showSourceLogo: !!checked })} />
+          <AllowedOverrideControls value={definition?.allowedOverrides || rule.allowedOverrides} onChange={allowed => this.updateDiscoveredSource(source, rule.allowedOverrides, {}, allowed)} />
+        </AssignmentGroup>;
+      })}
+      <DefaultButton text={strings.DeleteLabel} onClick={() => this.setState(prev => ({ settings: { ...prev.settings, exchangeMailboxAssignments: (prev.settings.exchangeMailboxAssignments || []).filter(item => item.assignmentId !== rule.assignmentId) } }))} />
+    </Stack>;
+  }
+
+  private renderGroupedAssignments(): React.ReactElement {
+    const types: CalendarSourceType[] = ['exchange', 'sharepoint', 'planner', 'unifiedGroup', 'teamsShifts'];
+    return <Stack tokens={{ childrenGap: 12 }}>{types.map(type => {
+      const items = this.state.settings.assignedSources.filter(item => item.source.sourceType === type);
+      const rules = type === 'exchange' ? this.state.settings.exchangeMailboxAssignments || [] : [];
+      if (!items.length && !rules.length) return null;
+      const groups = new Map<string, IAudienceGroup>();
+      [...items, ...rules].forEach(item => item.audienceGroups.length ? item.audienceGroups.forEach(group => groups.set(group.groupId, group)) : groups.set('', { groupId: '', displayName: strings.EveryoneAudienceLabel }));
+      return <AssignmentGroup key={type} title={getSourceTypeDisplayName(type)}>{Array.from(groups.values()).map(group => {
+        const selectedItems = items.filter(item => group.groupId ? item.audienceGroups.some(entry => entry.groupId === group.groupId) : !item.audienceGroups.length);
+        const selectedRules = rules.filter(item => group.groupId ? item.audienceGroups.some(entry => entry.groupId === group.groupId) : !item.audienceGroups.length);
+        const containers = new Map<string, { name: string; sources: IAdminAssignedSource[]; rules: IExchangeMailboxAssignment[] }>();
+        selectedItems.forEach(item => {
+          const key = item.source.exchangeMailbox || item.source.sharePointSiteId || type;
+          const container = containers.get(key) || { name: item.source.sharePointSiteName || item.source.exchangeMailbox || getSourceTypeDisplayName(type), sources: [], rules: [] };
+          container.sources.push(item); containers.set(key, container);
+        });
+        selectedRules.forEach(rule => {
+          const container = containers.get(rule.mailboxId) || { name: rule.mailboxDisplayName, sources: [], rules: [] };
+          container.rules.push(rule); containers.set(rule.mailboxId, container);
+        });
+        return <AssignmentGroup key={group.groupId} title={group.displayName} description={audienceTypeLabel(group)}>
+          {Array.from(containers.entries()).map(([key, container]) => <AssignmentGroup key={key} title={container.name}>
+            {container.sources.map((item, index) => this.renderAssignedSource(item, index))}
+            {container.rules.map(rule => this.renderMailboxRule(rule))}
+          </AssignmentGroup>)}
+          <DefaultButton text={strings.AddMoreCalendarsLabel} onClick={() => this.setState({ showAddDialog: true, audienceFirst: false, audiencePreset: true, everyone: !group.groupId,
+            selectedAudienceGroups: group.groupId ? { [group.groupId]: group.displayName } : {}, selectedAudienceMetadata: group.groupId ? { [group.groupId]: group } : {},
+            selectedExchangeCalendars: {}, exchangeAll: false, pendingPolicy: { isMandatory: false, defaultEnabled: true } }, () => { this.handleSelectSourceType(type).catch(error => console.error(error)); })} />
+        </AssignmentGroup>;
+      })}</AssignmentGroup>;
+    })}</Stack>;
+  }
+
   private renderAssignedSource(item: IAdminAssignedSource, index: number): React.ReactElement {
-    const isEditing = this.state.editingSourceId === item.adminSourceId;
+    const isEditing = this.state.editingSourceId === (item.assignmentId || item.adminSourceId);
     const audienceText = item.audienceGroups.map(group => group.displayName).join(', ');
 
     return (
-      <div key={item.adminSourceId} style={{ borderRadius: 4, padding: isEditing ? 12 : '6px 8px', backgroundColor: isEditing ? '#f3f2f1' : (index % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent') }}>
+      <div key={item.assignmentId || item.adminSourceId} style={{ borderRadius: 4, padding: isEditing ? 12 : '6px 8px', backgroundColor: isEditing ? '#f3f2f1' : (index % 2 === 1 ? 'rgba(0,0,0,0.02)' : 'transparent') }}>
         {isEditing ? (
           <Stack tokens={{ childrenGap: 8 }}>
             <TextField label={strings.NameLabel} value={item.source.name} onChange={(_, value) => this.handleUpdateAssignedSource(item.adminSourceId, { name: value || '' })} />
@@ -1243,12 +1439,19 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               <Label>{strings.ColorLabel}</Label>
               <ColorPicker color={item.source.color} onChange={(_, color) => this.handleUpdateAssignedSource(item.adminSourceId, { color: `#${color.hex}` })} alphaType="none" />
             </div>
-            <Toggle label={strings.EnabledLabel} checked={item.source.isEnabled} onText={strings.OnLabel} offText={strings.OffLabel} onChange={(_, checked) => this.handleUpdateAssignedSource(item.adminSourceId, { isEnabled: !!checked })} />
+            <AssignmentPolicyControl policy={item} onChange={policy => this.handleUpdatePolicy(item.assignmentId || item.adminSourceId, policy)} />
+            <MessageBar>{strings.SharedCalendarPropertiesLabel}</MessageBar>
+            <Toggle label={strings.SourceLogoLabel} checked={item.source.showSourceLogo ?? true} onChange={(_, checked) => this.handleUpdateAssignedSource(item.adminSourceId, { showSourceLogo: !!checked })} />
+            {item.source.sourceType === 'planner' && <Stack tokens={{ childrenGap: 6 }}>
+              <Toggle label={strings.AssignedToMeOnlyLabel} checked={!!item.source.plannerAssignedToMeOnly} onChange={(_, checked) => this.handleUpdateAssignedSource(item.adminSourceId, { plannerAssignedToMeOnly: !!checked })} />
+              <Toggle label={strings.ShowCompletedTasksLabel} checked={item.source.showCompletedTasks !== false} onChange={(_, checked) => this.handleUpdateAssignedSource(item.adminSourceId, { showCompletedTasks: !!checked })} />
+            </Stack>}
+            <AllowedOverrideControls value={item.allowedOverrides} planner={item.source.sourceType === 'planner'} onChange={allowedOverrides => this.handleUpdateAllowedOverrides(item.adminSourceId, allowedOverrides)} />
             <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.AudiencesLabel}: {audienceText || strings.NoAudienceLabel}</div>
             <Stack horizontal tokens={{ childrenGap: 8 }}>
-              <DefaultButton text={strings.GroupsLabel} onClick={() => this.handleEditAssignedSourceAudiences(item.adminSourceId).catch(err => console.error(err))} />
+              <DefaultButton text={strings.GroupsLabel} onClick={() => this.handleEditAssignedSourceAudiences(item.assignmentId || item.adminSourceId).catch(err => console.error(err))} />
               <PrimaryButton text={strings.DoneLabel} onClick={() => this.toggleEditSource(undefined)} />
-              <DefaultButton text={strings.DeleteLabel} onClick={() => this.handleDeleteAssignedSource(item.adminSourceId)} />
+              <DefaultButton text={strings.DeleteLabel} onClick={() => this.handleDeleteAssignedSource(item.assignmentId || item.adminSourceId)} />
             </Stack>
           </Stack>
         ) : (
@@ -1256,6 +1459,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             <div style={{ width: 16, height: 16, backgroundColor: item.source.color, borderRadius: 2, flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 13 }}>{item.source.name}</strong>
+              <div>{assignmentPolicyLabel(item)}</div>
               {item.source.sourceType === 'sharepoint' && (
                 <div style={{ fontSize: 11, color: '#605e5c' }}>
                   {strings.SiteLabel}: {item.source.sharePointSiteName || strings.SiteNameUnavailableLabel}
@@ -1263,7 +1467,7 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
               )}
               <div style={{ fontSize: 11, color: '#605e5c' }}>{getSourceTypeDisplayName(item.source.sourceType)} • {strings.AudiencesLabel}: {audienceText || strings.NoAudienceLabel}</div>
             </div>
-            <IconButton iconProps={{ iconName: 'Edit' }} title={strings.EditLabel} ariaLabel={strings.EditLabel} onClick={() => this.toggleEditSource(item.adminSourceId)} />
+            <IconButton iconProps={{ iconName: 'Edit' }} title={strings.EditLabel} ariaLabel={strings.EditLabel} onClick={() => this.toggleEditSource(item.assignmentId || item.adminSourceId)} />
           </Stack>
         )}
       </div>
@@ -1407,8 +1611,8 @@ export class AdminSettingsPanel extends React.Component<IAdminSettingsPanelProps
             <div>
               <Label>{strings.AdminDefaultCalendarsLabel}</Label>
               <Stack tokens={{ childrenGap: 8 }}>
-                {settings.assignedSources.length > 0
-                  ? settings.assignedSources.map((item, index) => this.renderAssignedSource(item, index))
+                {settings.assignedSources.length > 0 || (settings.exchangeMailboxAssignments || []).length > 0
+                  ? this.renderGroupedAssignments()
                   : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminDefaultCalendarsLabel}</div>}
               </Stack>
             </div>

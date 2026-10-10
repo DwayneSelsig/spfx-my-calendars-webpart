@@ -28,11 +28,11 @@ This change does not deploy, publish or merge an installation.
 
 ## Local verification
 
-- `npm run build` passes: 21 Heft/Jest suites, 98 tests, production compilation/lint and solution packaging; zero failed tests and no build warnings.
+- `npm run build` passes: 22 Heft/Jest suites, 148 tests, production compilation/lint and solution packaging; zero failed tests and no build warnings.
 - Regression coverage adds mailbox identity/discovery/error-stage tests, audience pagination/local sorting/error/membership tests, request-generation tests, selection-preserving state transitions and independent Exchange loading. Existing localization consistency tests also pass.
 - `git diff --check` passes. The two permission declarations are aligned at ten scopes, including only the newly added `User.ReadBasic.All`.
 - Changed areas are Exchange/Audience services, the two active settings panels, Exchange orchestration in `MyCalendars`, small pure helpers/tests, English/Dutch resources, permission manifests, README and the related normative/decision documents.
-- `graphify update .` refreshes the code graph. Its CLI does not refresh semantic documentation extraction; generated graph documentation is not evidence of updated product intent. It reports five configuration JSON files with zero extracted nodes, and updates community names using hubs rather than an LLM.
+- `graphify update .` refreshes the code graph; a semantic extraction pass refreshes the changed documentation relationships. Graph output remains navigation evidence. The CLI reports five configuration JSON files with zero extracted nodes.
 - No Microsoft 365 tenant/host integration validation, deployment, publication or merge was performed. The existing full event field selection and the LimitedDetails limitation remain.
 
 ## References and limitations
@@ -43,4 +43,35 @@ This change does not deploy, publish or merge an installation.
 - [Calendar permission roles](https://learn.microsoft.com/en-us/graph/api/resources/calendarpermission?view=graph-rest-1.0): limitedRead permits availability, titles and locations.
 - [Advanced directory queries](https://learn.microsoft.com/en-us/graph/aad-advanced-queries): filter plus orderby requires advanced-query conditions. This implementation leaves orderby absent and sorts after pagination; the original query's runtime failure is not retested here.
 
-Exchange calendar/event pagination, wider audience group types, empty-means-everyone behavior, retry policies and tenant/user audience-cache scoping remain outside this change. Existing deviations remain registered.
+Exchange calendar discovery pagination, supported audience group types and explicit Everyone assignments are implemented. Exchange event pagination, retry policies and tenant/user audience-cache scoping remain separate work; their remaining deviations stay registered.
+
+## Grouped assignment and policy verification
+
+Verify in SharePoint Web Part/full-page, Teams personal/tab, Office and Outlook hosts with approved delegated Graph permissions:
+
+1. As a web-part editor, select a supported group or Everyone before adding a mailbox/site. Confirm distribution groups are absent and no source permissions are changed.
+2. Select multiple Exchange calendars with different Mandatory/Default/Available policies. Select multiple SharePoint lists and verify each mapping independently.
+3. Assign the same calendar through two groups. As a member of both, verify one settings row/event set, Multiple groups provenance and the strongest policy.
+4. Turn an optional calendar off/on and save, including a choice equal to the current default. Change that default as an administrator and verify the explicit choice survives. Use Follow administrator default to clear it.
+5. Verify mandatory calendars remain enabled through row controls and bulk actions. Toggle name/color/logo capabilities independently; verify protected values cannot change through personal controls or the type-wide logo setting.
+6. Configure Exchange All calendars, create another calendar externally, and manually refresh. Verify it appears with the container policy. Confirm explicit-only mailbox assignments never include the new calendar.
+7. Add policy exceptions and exclusions to an all-calendar rule. Verify exclusion is local to that rule and a second applicable group can still assign the calendar.
+8. Verify denied mailbox discovery/event access remains visibly failed, preserves unrelated source results and does not downgrade mandatory policy. Restore access and refresh; personal choices survive failed discovery.
+9. Observe optional → mandatory → optional and verify the old false override does not revive after an observed change and subsequent successful personal save.
+10. Reopen migrated settings and rename calendars externally. Verify existing source IDs, shared customizations and personal choices remain stable.
+
+Automated checks cover policy, schema migration, discovery paging, deduplication and loading helpers. This host matrix requires tenant accounts/source permissions and is not replaced by those tests.
+
+## Existing assignment save and reload verification
+
+The persistence repair has local regression coverage; this sequence is not yet executed in a tenant:
+
+1. Confirm the served bundle URL/hash matches the newly built package's deployed manifest; disable browser caching for the comparison. A local successful build does not prove the page runs that package.
+2. On an existing published Exchange assignment, record only assignment/source IDs and policy booleans at draft acceptance, both SPFx callbacks and the persisted page properties. Avoid recording event content or personal settings.
+3. Change Default to Mandatory, click the panel's Save, reopen it in the same session, republish the SharePoint page and reload. Every checkpoint must retain the same IDs and true/true policy. Verify identical current/backup JSON.
+4. As a matching group member with a previous personal false/removed override, verify one enabled mandatory source. Test a non-member separately; mandatory policy does not bypass targeting or source access.
+5. Repeat with changed name/color and Mandatory to Default. Verify IDs, shared presentation and unrelated personal data survive. Following an observed mandatory interval, discarded false/removed overrides must not revive.
+6. If the published JSON is correct but events are missing, inspect group-membership and Exchange status/errors independently. No automatic permission grant or policy downgrade is expected.
+7. Start an older slow save/discovery, then accept a newer edit. Verify the newer policy remains and the old completion cannot refresh its panel over the newer save.
+
+Local tests model the installed SPFx dirty-state snapshot behavior without a new host-test framework. They do not replace deployment, publication or endpoint-access checks.

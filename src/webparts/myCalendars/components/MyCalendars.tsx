@@ -1,3 +1,4 @@
+import { isAutomaticExchangeCalendarAssigned } from '../services/CalendarSettingsService';
 import * as React from 'react';
 import { loadExchangeSources } from './exchangeLoading';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
@@ -155,6 +156,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   private toolbarResizeObserver: ResizeObserver | undefined;
   private activeLoadId = 0;
   private loadingStatusWrapperRef = React.createRef<HTMLDivElement>();
+  private refreshingAdminSources = false;
   private refreshTimer: number | null = null;
   private loadedMonthsBySource = new Map<string, Set<string>>();
   private knownSourceIdsByService: Record<ServiceKey, Set<string>> = {
@@ -235,6 +237,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   }
 
   public componentDidUpdate(prevProps: IMyCalendarsProps): void {
+    if (this.refreshingAdminSources) return;
     const defaultViewChanged = prevProps.settings.defaultView !== this.props.settings.defaultView;
     if (defaultViewChanged) {
       const defaultView = this.props.settings.defaultView;
@@ -595,14 +598,17 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           }
           const exchangeCalendarStates = this.props.settings.exchangeCalendarStates || {};
           const discoveredSourceIds = new Set(userCalendars
+            .filter(calendar => !isAutomaticExchangeCalendarAssigned(this.props.settings, calendar.id))
             .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .map(calendar => `exchange_${calendar.id}`));
           Array.from(this.knownSourceIdsByService.exchange)
             .filter(sourceId => sourceId.indexOf('exchange_') === 0 && !discoveredSourceIds.has(sourceId))
             .forEach(sourceId => markLoaded('exchange', sourceId));
-          userCalendars.filter(calendar => exchangeCalendarStates[calendar.id] !== false)
+          userCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(this.props.settings, calendar.id))
+            .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .forEach(calendar => registerLoadedSource('exchange', `exchange_${calendar.id}`));
           return userCalendars
+            .filter(calendar => !isAutomaticExchangeCalendarAssigned(this.props.settings, calendar.id))
             .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
             .filter(calendar => !this.areMonthsLoaded(`exchange_${calendar.id}`, requestedMonthKeys))
             .map(calendar => ({
@@ -619,7 +625,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
         }, configured, (sourceId, events) => markLoaded('exchange', sourceId, events),
         (error, sourceId) => console.error('Failed to load Exchange source:', sourceId, error));
         appendAppointments(result.events);
-        updateStatus('exchange', result.hadError ? 'error' : 'ready', result.hadError ? strings.ExchangeLoadErrorLabel : undefined);
+        const discoveryErrors = this.props.settings.adminExchangeDiscoveryErrors || [];
+        const hadError = result.hadError || discoveryErrors.length > 0;
+        updateStatus('exchange', hadError ? 'error' : 'ready', hadError ? [strings.ExchangeLoadErrorLabel, ...discoveryErrors].join(' — ') : undefined);
       })());
     }
 
@@ -643,7 +651,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 sourceDisplayName: source.name,
                 colorHex: source.color,
                 sourceType: 'sharepoint' as const,
-                showSourceLogo: this.props.settings.sharePointShowSourceLogo ?? true
+                showSourceLogo: source.showSourceLogo ?? this.props.settings.sharePointShowSourceLogo ?? true
               } as IEvent));
               markLoaded('sharepoint', source.id, normalizedEvents);
               return normalizedEvents;
@@ -701,7 +709,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source.plannerAssignedToMeOnly ?? false,
                 source.showCompletedTasks ?? true,
                 source,
-                this.props.settings.plannerShowSourceLogo ?? true
+                source.showSourceLogo ?? this.props.settings.plannerShowSourceLogo ?? true
               );
               markLoaded('planner', source.id, events);
               return events;
@@ -735,7 +743,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
                 source.plannerAssignedToMeOnly ?? false,
                 source.showCompletedTasks ?? true,
                 source,
-                this.props.settings.plannerShowSourceLogo ?? true
+                source.showSourceLogo ?? this.props.settings.plannerShowSourceLogo ?? true
               );
               markLoaded('planner', source.id, events);
               return events;
@@ -796,7 +804,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               startDate,
               endDate,
               source,
-              this.props.settings.teamsShiftsShowSourceLogo ?? true
+              source.showSourceLogo ?? this.props.settings.teamsShiftsShowSourceLogo ?? true
             );
             markLoaded('teamsShifts', source.id, events);
             return events;
@@ -892,7 +900,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
               sourceDisplayName: source.name,
               colorHex: source.color,
               sourceType: 'unifiedGroup' as const,
-              showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
+              showSourceLogo: source.showSourceLogo ?? this.props.settings.unifiedGroupShowSourceLogo ?? true,
               sourceIconName: iconName
             } as IEvent));
             markLoaded('unifiedGroup', source.id, normalizedEvents);
@@ -942,6 +950,8 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   };
 
   private handleManualRefresh = async (): Promise<void> => {
+    this.refreshingAdminSources = true;
+    try { await this.props.onRefreshAdminSources?.(); } finally { this.refreshingAdminSources = false; }
     const visibleRange = this.getVisibleRange();
     const preserveAppointments = this.props.settings.enableCache;
     await this.loadAppointments(undefined, undefined, true, undefined, preserveAppointments, true);

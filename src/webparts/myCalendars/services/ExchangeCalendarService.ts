@@ -160,14 +160,20 @@ export class ExchangeCalendarService {
         ? `/users/${encodeURIComponent(identity.id)}/calendars`
         : '/me/calendars';
 
-      const data = await this.graphClient
+      let data = await this.graphClient
         .api(endpoint)
         .query({
           $select: 'id,name,hexColor,isDefaultCalendar,color,canViewPrivateItems'
         })
         .get();
 
-      return (data.value || []).map((calendar: IGraphCalendar) => ({
+      const calendars: IGraphCalendar[] = [];
+      for (;;) {
+        calendars.push(...(data.value || []));
+        if (!data['@odata.nextLink']) break;
+        data = await this.graphClient.api(data['@odata.nextLink']).get();
+      }
+      return calendars.map((calendar: IGraphCalendar) => ({
         id: calendar.id,
         name: calendar.name,
         hexColor: this.getCalendarColor(calendar),

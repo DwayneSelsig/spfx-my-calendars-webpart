@@ -1,3 +1,5 @@
+import { AssignmentGroup, assignmentPolicyLabel } from './AssignmentControls';
+import { applyAdminSourceChanges, isAutomaticExchangeCalendarAssigned } from '../services/CalendarSettingsService';
 import * as React from 'react';
 import { LatestDiscovery } from './latestDiscovery';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
@@ -23,7 +25,6 @@ import { formatCalendarTime } from './views/calendarFormatting';
 import { getBulkVisibilityTarget, getGroupVisibilityState, type GroupVisibilityState, setOutlookVisibility, setSharePointVisibility } from './calendarVisibility';
 import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
-
 export interface ISettingsPanelProps {
   isOpen: boolean;
   onDismiss: () => void;
@@ -34,7 +35,6 @@ export interface ISettingsPanelProps {
   graphClient?: MSGraphClientV3;
   locale?: string;
 }
-
 interface ISettingsPanelState {
   settings: ICalendarSettings;
   editingSourceId: string | undefined;
@@ -591,7 +591,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
   };
 
   private handleUpdateSource = (id: string, updates: Partial<ICalendarSource>): void => {
-    const settings = { ...this.state.settings, sources: this.state.settings.sources.map(s => s.id === id ? { ...s, ...updates } : s) };
+    const settings = { ...this.state.settings, sources: this.state.settings.sources.map(s => s.id === id ? applyAdminSourceChanges(s, updates) : s) };
     this.setState({ settings });
   };
 
@@ -612,23 +612,23 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
 
   private handleToggleOutlookGroupVisibility = (): void => {
     this.setState(prev => {
-      const configured = prev.settings.sources.filter(source => source.sourceType === 'exchange').map(source => source.isEnabled);
-      const discovered = prev.userExchangeCalendars.map(calendar => (prev.settings.exchangeCalendarStates || {})[calendar.id] !== false);
+      const configured = prev.settings.sources.filter(source => source.sourceType === 'exchange' && !source.isMandatory).map(source => source.isEnabled);
+      const discovered = prev.userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(prev.settings, calendar.id)).map(calendar => (prev.settings.exchangeCalendarStates || {})[calendar.id] !== false);
       const target = getBulkVisibilityTarget(getGroupVisibilityState([...discovered, ...configured]));
-      return { settings: setOutlookVisibility(prev.settings, prev.userExchangeCalendars.map(calendar => calendar.id), target) };
+      return { settings: setOutlookVisibility(prev.settings, prev.userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(prev.settings, calendar.id)).map(calendar => calendar.id), target) };
     });
   };
 
   private handleToggleSharePointGroupVisibility = (): void => {
     this.setState(prev => {
-      const values = prev.settings.sources.filter(source => source.sourceType === 'sharepoint').map(source => source.isEnabled);
+      const values = prev.settings.sources.filter(source => source.sourceType === 'sharepoint' && !source.isMandatory).map(source => source.isEnabled);
       const target = getBulkVisibilityTarget(getGroupVisibilityState(values));
       return { settings: setSharePointVisibility(prev.settings, target) };
     });
   };
 
   private handleDeleteSource = (id: string): void => {
-    const settings = { ...this.state.settings, sources: this.state.settings.sources.filter(s => s.id !== id) };
+    const settings = { ...this.state.settings, sources: this.state.settings.sources.filter(s => s.id !== id || s.isMandatory) };
     this.setState({ settings });
   };
 
@@ -1599,6 +1599,18 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
     );
   };
 
+  private renderGroupedCalendarSources(type: CalendarSourceType): React.ReactElement {
+    const sources = this.state.settings.sources.filter(source => source.sourceType === type);
+    const personal = sources.filter(source => source.origin !== 'admin');
+    const groups = new Map<string, ICalendarSource[]>();
+    for (const source of sources.filter(item => item.origin === 'admin')) {
+      const names = (source.audienceGroupNames || []).map(name => name === '__everyone__' ? strings.EveryoneAudienceLabel : name);
+      const title = names.length > 1 ? strings.MultipleGroupsLabel : names[0] || strings.EveryoneAudienceLabel;
+      groups.set(title, [...(groups.get(title) || []), source]);
+    }
+    return <Stack tokens={{ childrenGap: 6 }}>{Array.from(groups.entries()).map(([title, items]) => <AssignmentGroup key={title} title={title}>{items.map((source, index) => this.renderCalendarSource(source, index))}</AssignmentGroup>)}{personal.map((source, index) => this.renderCalendarSource(source, index))}</Stack>;
+  }
+
   private renderCalendarSource = (source: ICalendarSource, index: number = 0): React.ReactElement => {
     const { editingSourceId } = this.state;
     const isEditing = editingSourceId === source.id;
@@ -1619,6 +1631,7 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
             <TextField
               label={strings.NameLabel}
               value={source.name}
+              disabled={isAdminSource && source.allowedOverrides?.name === false}
               onChange={(_, value) => this.handleUpdateSource(source.id, { name: value || '' })}
             />
             {source.sourceType === 'sharepoint' && (
@@ -1626,24 +1639,32 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 {strings.SiteLabel}: {source.sharePointSiteName || strings.SiteNameUnavailableLabel}
               </div>
             )}
-            <div style={{ order: 3 }}>
+            {(!isAdminSource || source.allowedOverrides?.color !== false) && <div style={{ order: 3 }}>
               <Label>{strings.ColorLabel}</Label>
               <ColorPicker
                 color={source.color}
                 onChange={(_, color) => this.handleUpdateSource(source.id, { color: `#${color.hex}` })}
                 alphaType="none"
               />
-            </div>
+            </div>}
             <Toggle
-              label={strings.EnabledLabel}
+              disabled={!!source.isMandatory}
+              label={source.isMandatory ? strings.MandatoryPolicyLabel : strings.EnabledLabel}
               checked={source.isEnabled}
               onChange={(_, checked) => this.handleUpdateSource(source.id, { isEnabled: !!checked })}
               onText={strings.OnLabel}
               offText={strings.OffLabel}
             />
+            <Toggle label={strings.SourceLogoLabel} checked={source.showSourceLogo ?? this.state.settings[source.sourceType === 'sharepoint' ? 'sharePointShowSourceLogo' : source.sourceType === 'planner' ? 'plannerShowSourceLogo' : source.sourceType === 'unifiedGroup' ? 'unifiedGroupShowSourceLogo' : source.sourceType === 'teamsShifts' ? 'teamsShiftsShowSourceLogo' : 'exchangeShowSourceLogo'] ?? true}
+              disabled={isAdminSource && source.allowedOverrides?.showSourceLogo === false} onChange={(_, checked) => this.handleUpdateSource(source.id, { showSourceLogo: !!checked })} />
+            {source.sourceType === 'planner' && <Stack tokens={{ childrenGap: 6 }}>
+              <Toggle label={strings.AssignedToMeOnlyLabel} checked={!!source.plannerAssignedToMeOnly} disabled={isAdminSource && source.allowedOverrides?.plannerAssignedToMeOnly === false} onChange={(_, checked) => this.handleUpdateSource(source.id, { plannerAssignedToMeOnly: !!checked })} />
+              <Toggle label={strings.ShowCompletedTasksLabel} checked={source.showCompletedTasks !== false} disabled={isAdminSource && source.allowedOverrides?.showCompletedTasks === false} onChange={(_, checked) => this.handleUpdateSource(source.id, { showCompletedTasks: !!checked })} />
+            </Stack>}
             <Stack horizontal tokens={{ childrenGap: 8 }}>
               <PrimaryButton text={strings.DoneLabel} onClick={() => this.toggleEdit(undefined)} />
-              <DefaultButton text={isAdminSource ? strings.RemoveForMeLabel : strings.DeleteLabel} onClick={() => this.handleDeleteSource(source.id)} />
+              {isAdminSource && !source.isMandatory && <DefaultButton text={strings.FollowAdminDefaultLabel} onClick={() => this.handleUpdateSource(source.id, { visibilityOverride: undefined })} />}
+              <DefaultButton disabled={!!source.isMandatory} text={isAdminSource ? strings.RemoveForMeLabel : strings.DeleteLabel} onClick={() => this.handleDeleteSource(source.id)} />
             </Stack>
           </Stack>
         ) : (
@@ -1663,11 +1684,11 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                 </div>
               )}
               {isAdminSource && (
-                <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>({strings.AdminDefaultLabel})</span>
+                <span style={{ fontSize: 11, color: '#605e5c', marginLeft: 8 }}>({assignmentPolicyLabel(source)})</span>
               )}
               {isAdminSource && source.audienceGroupNames && source.audienceGroupNames.length > 0 && (
                 <div style={{ fontSize: 11, color: '#605e5c' }}>
-                  {strings.ViaLabel}: {source.audienceGroupNames.join(', ')}
+                  {strings.ViaLabel}: {source.audienceGroupNames.map(name => name === '__everyone__' ? strings.EveryoneAudienceLabel : name).join(', ')}
                 </div>
               )}
             </div>
@@ -1679,7 +1700,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
               styles={{ root: { width: 28, height: 28 }, icon: { fontSize: 14 } }}
             />
             <IconButton
-              iconProps={{ iconName: source.isEnabled ? 'View' : 'Hide' }}
+              disabled={!!source.isMandatory}
+              iconProps={{ iconName: source.isMandatory ? 'Lock' : source.isEnabled ? 'View' : 'Hide' }}
               title={source.isEnabled ? strings.HideCalendarLabel : strings.ShowCalendarLabel}
               ariaLabel={source.isEnabled ? strings.HideCalendarLabel : strings.ShowCalendarLabel}
               onClick={() => this.handleUpdateSource(source.id, { isEnabled: !source.isEnabled })}
@@ -1799,10 +1821,10 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   showLogoValue: settings.exchangeShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, exchangeShowSourceLogo: checked } }),
                   visibilityState: getGroupVisibilityState([
-                    ...userExchangeCalendars.map(calendar => this.isExchangeCalendarEnabled(calendar.id)),
+                    ...userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(settings, calendar.id)).map(calendar => this.isExchangeCalendarEnabled(calendar.id)),
                     ...settings.sources.filter(source => source.sourceType === 'exchange').map(source => source.isEnabled)
                   ]),
-                  visibilityDisabled: userExchangeCalendarsLoading || userExchangeCalendars.length + settings.sources.filter(source => source.sourceType === 'exchange').length === 0,
+                  visibilityDisabled: userExchangeCalendarsLoading || userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(settings, calendar.id)).length + settings.sources.filter(source => source.sourceType === 'exchange' && !source.isMandatory).length === 0,
                   onVisibilityChange: this.handleToggleOutlookGroupVisibility,
                   headerActions: (
                     <DefaultButton
@@ -1816,8 +1838,8 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                     <Stack tokens={{ childrenGap: 6 }}>
                       {userExchangeCalendarsLoading
                         ? <Spinner size={SpinnerSize.small} label={strings.LoadingLabel} />
-                        : userExchangeCalendars.map((calendar, i) => this.renderExchangeCalendarItem(calendar, i))}
-                      {settings.sources.filter(source => source.sourceType === 'exchange').map((source, i) => this.renderCalendarSource(source, userExchangeCalendars.length + i))}
+                        : userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(settings, calendar.id)).map((calendar, i) => this.renderExchangeCalendarItem(calendar, i))}
+                      {this.renderGroupedCalendarSources('exchange')}
                     </Stack>
                   )
                 })}
@@ -1833,8 +1855,9 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
                   showLogoValue: settings.sharePointShowSourceLogo ?? true,
                   onShowLogoChange: (checked) => this.setState({ settings: { ...settings, sharePointShowSourceLogo: checked } }),
                   visibilityState: getGroupVisibilityState(settings.sources.filter(source => source.sourceType === 'sharepoint').map(source => source.isEnabled)),
+                  visibilityDisabled: !settings.sources.some(source => source.sourceType === 'sharepoint' && !source.isMandatory),
                   onVisibilityChange: this.handleToggleSharePointGroupVisibility,
-                  children: settings.sources.filter(s => s.sourceType === 'sharepoint').map((source, i) => this.renderCalendarSource(source, i))
+                  children: this.renderGroupedCalendarSources('sharepoint')
                 })}
 
                 {/* Planner */}
@@ -1973,6 +1996,5 @@ export class SettingsPanel extends React.Component<ISettingsPanelProps, ISetting
       </Panel>
     );
   }
-
 
 }

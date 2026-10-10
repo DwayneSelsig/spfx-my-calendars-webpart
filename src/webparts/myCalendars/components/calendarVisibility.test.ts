@@ -40,3 +40,15 @@ describe('calendar group visibility', () => {
     expect(updated.sources[1].isEnabled).toBe(true);
   });
 });
+
+  it('bulk visibility leaves mandatory administrator calendars enabled and records optional intent', () => {
+    const settings: ICalendarSettings = { ...defaultCalendarSettings, sources: [
+      { id: 'mandatory', adminSourceId: 'mandatory', origin: 'admin', sourceType: 'exchange', name: 'Mandatory', color: '#0078d4', isEnabled: true, isMandatory: true, defaultEnabled: true },
+      { id: 'optional', adminSourceId: 'optional', origin: 'admin', sourceType: 'exchange', name: 'Default', color: '#0078d4', isEnabled: true, isMandatory: false, defaultEnabled: true },
+      { id: 'mandatory-sp', adminSourceId: 'mandatory-sp', origin: 'admin', sourceType: 'sharepoint', name: 'Mandatory', color: '#0078d4', isEnabled: true, isMandatory: true, defaultEnabled: true }
+    ] };
+    const hidden = setOutlookVisibility(settings, [], false);
+    expect(hidden.sources[0].isEnabled).toBe(true);
+    expect(hidden.sources[1]).toMatchObject({ isEnabled: false, visibilityOverride: false });
+    expect(setSharePointVisibility(hidden, false).sources[2].isEnabled).toBe(true);
+  });

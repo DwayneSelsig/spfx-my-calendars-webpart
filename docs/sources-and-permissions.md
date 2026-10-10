@@ -54,7 +54,7 @@ The requests are duplicated in `config/package-solution.json` and `MyCalendarsWe
 
 ### Pagination, retry, and throttling
 
-The code follows `@odata.nextLink` for Unified-group discovery, joined-Team discovery, and Shifts retrieval. It does not follow paging for Exchange calendars/events, SharePoint items, Planner group/plan/task discovery. Audience search and configured Exchange identity resolution follow all returned `@odata.nextLink` pages.
+The code follows `@odata.nextLink` for Unified-group discovery, joined-Team discovery, and Shifts retrieval. Exchange calendar discovery follows paging; Exchange events, SharePoint items and Planner group/plan/task discovery retain their existing paging limitations. Audience search and configured Exchange identity resolution follow all returned `@odata.nextLink` pages.
 
 There is no explicit exponential backoff, `Retry-After` handling, or retry limit in a source service. Retry occurs indirectly when a failed month remains uncached and later navigation or manual refresh starts another load. Selected failed discovery promises are cleared so a later load can rediscover.
 
@@ -87,9 +87,11 @@ Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping.
 - The resolved object ID is used for `GET /users/{id}/calendars` and `GET /users/{id}/calendars/{calendarId}/calendarView`. Identity resolution **MUST NOT** be presented as proof of calendar access.
 - Only an omitted mailbox argument selects `/me`; an explicitly empty/whitespace identifier is invalid. URL path identifiers are encoded separately. Existing stored primary SMTP addresses resolve during runtime without a schema migration.
 - Personal UI loads current-user calendars automatically and can discover a manually entered mailbox.
-- Administrator and personal source flows can select one calendar from a mailbox.
+- Administrator configuration selects an audience first and can select multiple mailbox calendars with independent policies, or create an all-calendar rule including future calendars with per-calendar exceptions. The personal source-add flow continues to select one calendar.
 
 Events use `GET /me/calendars/{calendarId}/calendarView` or `GET /users/{mailbox}/calendars/{calendarId}/calendarView` with an inclusive/exclusive date window, `Prefer: outlook.timezone="UTC"`, selected fields, and `$top=500`.
+
+Administrator all-calendar rules are expanded in delegated user context before effective policy resolution. Discovery errors stay distinct from empty success, appear in Exchange loading status, and preserve unresolved dynamic personal overrides. Selected audiences do not grant calendar permissions. Calendar IDs, rather than display names, identify exceptions and user choices.
 
 ### Mapping contract
 
@@ -104,7 +106,7 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 - Event details can open Graph-provided `joinUrl` and `webLink`.
 - Calendar discovery is cached as a coordinator promise until reset; events use the successful source/month cache.
 - Individual automatic calendars and configured Exchange sources are isolated from each other. Failure of current-user discovery does not prevent configured source loads. Only successful requests mark source/month results as loaded.
-- Calendar and event responses do not follow `@odata.nextLink`; discovery and retrieval can be incomplete beyond the returned page or 500 items.
+- Calendar discovery follows every `@odata.nextLink`. Event retrieval retains its existing 500-item/page limitation.
 
 **Requirement (DEC-022):** mailbox identity, calendar discovery and event retrieval remain separate access steps. Discovery and event failures **MUST** retain their original diagnostic status/code and stage; an agenda-endpoint 404 **MUST NOT** be interpreted as proof that the mailbox does not exist. Panels show localized errors and successful empty results, finish current-request loading on both success and failure, and discard obsolete discovery responses.
 
@@ -123,6 +125,8 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 - Settings panels read list columns and can inspect the first item to propose a field mapping.
 - A missing persisted site name can be resolved from `GET /sites/{siteId}`. Resolutions are cached per service instance; failure does not block event retrieval.
 
+Administrator assignment remains explicit per selected list; new lists are not automatically assigned. Each selected list keeps its own field mapping and Mandatory/Default/Available policy. Audience membership does not grant list access.
+
 ### Retrieval and mapping
 
 Runtime retrieval calls `GET /sites/{siteId}/lists/{listId}/items?expand=fields`, then filters the requested range on the client.
@@ -139,7 +143,7 @@ Items without a title or start date, items with invalid dates, and items outside
 
 - Source identity is site ID plus list ID.
 - Calendar name, SharePoint site name, color, enabled state, IDs, and field mapping are stored separately in the source entry. Legacy entries without a site name remain valid and are backfilled only on an explicit save by the settings owner.
-- Runtime currently uses the source-type-wide logo flag, not per-source `showSourceLogo`.
+- Configured-source logo visibility uses per-source `showSourceLogo` before the source-type-wide default.
 - Configured sources load independently and successful months are cached in memory.
 - Site search falls back to wildcard accessible-site discovery after an error; several discovery methods return an empty array on failure.
 - Runtime list-item retrieval propagates errors to the coordinator.
@@ -205,7 +209,7 @@ Mapping matches Exchange for title, plain-text preview, dates, all-day state, lo
 - Discovery promises and successful source/month results are cached until reset.
 - Event loads are isolated per group; discovery failure affects the complete service family.
 - Event retrieval does not follow paging beyond `$top=500`.
-- Runtime uses the source-type logo setting and ignores per-source `showSourceLogo`.
+- Configured sources use per-source `showSourceLogo` before the source-type default; automatic sources retain the type-wide setting.
 
 ## Teams Shifts
 
@@ -237,7 +241,7 @@ Teams Shifts **MUST** include all shifts returned for all Teams where the curren
 - Joined-Team discovery is cached in the retained service instance until reset. Successful months use the coordinator cache.
 - Team-not-found/404 is treated as an empty Team. Another Team failure aborts the full source call, so results collected earlier in that call are lost.
 - The API supports server-side date filtering, but current code downloads every returned page for each Team before client filtering.
-- Runtime uses the source-type logo flag and ignores per-source `showSourceLogo`.
+- Configured sources use per-source `showSourceLogo` before the source-type default; automatic sources retain the type-wide setting.
 
 ## ICS subscription
 

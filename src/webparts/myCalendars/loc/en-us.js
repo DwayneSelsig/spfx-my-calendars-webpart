@@ -1,5 +1,27 @@
 define([], function() {
   return {
+    "MandatoryPolicyLabel": "Mandatory",
+    "DefaultPolicyLabel": "Default",
+    "AvailablePolicyLabel": "Available",
+    "PolicyLabel": "Display policy",
+    "EveryoneAudienceLabel": "Everyone",
+    "MultipleGroupsLabel": "Multiple groups",
+    "AudiencePermissionsHelpLabel": "Audience assignment does not grant Exchange or SharePoint permissions.",
+    "AllMailboxCalendarsLabel": "All calendars (including future calendars)",
+    "InheritPolicyLabel": "Inherit mailbox policy",
+    "ExcludeAssignmentLabel": "Exclude from this assignment",
+    "SharedCalendarPropertiesLabel": "These properties apply to this calendar across all audiences.",
+    "AllowNameOverrideLabel": "Allow personal name",
+    "AllowColorOverrideLabel": "Allow personal color",
+    "AllowLogoOverrideLabel": "Allow personal source logo",
+    "AllowAssignedFilterOverrideLabel": "Allow personal assignment filter",
+    "AllowCompletedFilterOverrideLabel": "Allow personal completed-task filter",
+    "FollowAdminDefaultLabel": "Follow administrator default",
+    "AddMoreCalendarsLabel": "Add more calendars",
+    "GroupTypeMicrosoft365Label": "Microsoft 365 group",
+    "GroupTypeSecurityLabel": "Security group",
+    "GroupTypeMailSecurityLabel": "Mail-enabled security group",
+    "AssignmentDiscoveryFailedLabel": "Calendar discovery failed",
     "AppLocalEnvironmentSharePoint": "The app is running on your local environment as SharePoint web part",
     "AppLocalEnvironmentTeams": "The app is running on your local environment as Microsoft Teams app",
     "AppLocalEnvironmentOffice": "The app is running on your local environment in office.com",
@@ -104,8 +126,8 @@ define([], function() {
     ,"IcsUrlLabel": "ICS URL"
     ,"LoadingPlannerPlansLabel": "Loading your Planner plans..."
     ,"LoadingGroupsAndTeamsLabel": "Loading groups and teams..."
-    ,"SearchSecurityGroupsPlaceholder": "Search security groups..."
-    ,"LoadingSecurityGroupsLabel": "Loading security groups..."
+    ,"SearchSecurityGroupsPlaceholder": "Search groups"
+    ,"LoadingSecurityGroupsLabel": "Loading groups..."
     ,"MicrosoftPlannerLabel": "Microsoft Planner"
     ,"Microsoft365GroupLabel": "Microsoft 365 Group"
     ,"TeamsLabel": "Teams"
@@ -244,7 +266,7 @@ define([], function() {
     ,"MinutesLabel": "{0} minutes"
     ,"SettingsLabel": "Settings"
     ,"RefreshLabel": "Refresh"
-    ,"SelectAdminAudienceGroupsLabel": "Select one or more Entra security groups:"
+    ,"SelectAdminAudienceGroupsLabel": "Select an audience"
     ,"ViaLabel": "Via"
     ,"MailboxInputHelpLabel": "Enter a UPN, object ID or primary SMTP address. Secondary aliases are not supported."
     ,"MailboxRequiredLabel": "Enter a mailbox identifier."
@@ -253,7 +275,7 @@ define([], function() {
     ,"MailboxResolutionErrorLabel": "The mailbox identity could not be resolved. Check Graph permission approval and try again."
     ,"ExchangeDiscoveryErrorLabel": "Calendars could not be loaded. Check the mailbox identifier and your calendar access, then try again. Limited calendar permissions may prevent discovery."
     ,"NoMailboxCalendarsLabel": "No calendars were returned for this mailbox."
-    ,"SecurityGroupsLoadErrorLabel": "Security groups could not be loaded. Try searching again. Your selection has been retained."
-    ,"NoSecurityGroupsLabel": "No security groups found."
+    ,"SecurityGroupsLoadErrorLabel": "Unable to load groups. Try again."
+    ,"NoSecurityGroupsLabel": "No supported groups found."
   }
 });

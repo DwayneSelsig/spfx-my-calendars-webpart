@@ -1,3 +1,4 @@
+import { serializeAdminWebPartSettings } from './CalendarSettingsService';
 import type { IAdminWebPartSettings } from '../models/ICalendarSettings';
 
 export interface IAdminSettingsPropertyBag {
@@ -23,9 +24,11 @@ export function persistAdminWebPartSettings(
   settings: IAdminWebPartSettings,
   notifyPropertyChange: AdminSettingsPropertyChangeNotifier
 ): string {
-  const serialized = JSON.stringify(settings);
+  const serialized = serializeAdminWebPartSettings(settings);
+  // SPFx must observe each transition before the local property bag is synchronized.
+  // Prewriting both values can hide the change from a freshly initialized host snapshot.
+  notifyPropertyChange(serialized);
   properties.adminSettings = serialized;
   properties.adminSettingsBackup = serialized;
-  notifyPropertyChange(serialized);
   return serialized;
 }

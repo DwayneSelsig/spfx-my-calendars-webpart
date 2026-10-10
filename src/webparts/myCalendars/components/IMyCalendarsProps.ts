@@ -12,6 +12,7 @@ export interface IMyCalendarsProps {
   onSettingsChange: (settings: ICalendarSettings) => void;
   onDefaultViewChange: (view: CalendarViewType) => void;
   onResetSettings?: () => void;
+  onRefreshAdminSources?: () => Promise<void>;
   context: WebPartContext;
   tenantId?: string;
   userId?: string;

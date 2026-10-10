@@ -99,7 +99,7 @@ class AdminCalendarManagerControl extends React.Component<IAdminCalendarManagerC
             </MessageBar>
           )}
           <div style={{ fontSize: 12, color: '#605e5c' }}>
-            {formatLocalizedString(strings.AdminPropertyPaneSummaryLabel, adminSettings.assignedSources.length, adminSettings.icsCatalog.length, defaultViewLabel)}
+            {formatLocalizedString(strings.AdminPropertyPaneSummaryLabel, adminSettings.assignedSources.length + (adminSettings.exchangeMailboxAssignments || []).length, adminSettings.icsCatalog.length, defaultViewLabel)}
           </div>
           <DefaultButton
             text={isSaving ? strings.SavingLabel : strings.ManageAdminDefaultsLabel}

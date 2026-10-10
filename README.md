@@ -23,6 +23,10 @@ The web part does not create, change, or delete events or tasks in a source syst
 
 ## Main features
 
+- Assign Exchange and SharePoint calendars to Microsoft 365, security or mail-enabled security groups, or Everyone, through group-first administrator settings. Choose Mandatory, Default or Available per calendar and independently control personal name, color, logo and supported option changes. Group assignment does not grant source permissions.
+- A previously removed or hidden assigned calendar reappears enabled when its applicable policy becomes Mandatory. The old removal/visibility override is discarded on observing that policy and cleaned from storage on the next successful personal save, while permitted personal presentation choices remain.
+- Select multiple Exchange calendars, or opt into all current and future mailbox calendars with individual policy exceptions. SharePoint calendars remain explicitly selected with their own field mapping. Matching assignments produce one effective calendar using the strongest policy.
+
 - Configure shared Exchange calendars using a UPN, object ID or primary SMTP address, with clear discovery errors and empty-result feedback. Secondary aliases are not supported.
 - Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
 - Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
@@ -31,7 +35,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Navigate beyond the initial seven-month window with source- and month-aware loading, and optionally cache the initial range in the browser for an administrator-defined lifetime. An unreadable or incompatible appointment-cache entry is discarded as a whole and rebuilt from source data.
 - Handle source-specific date and time behavior defensively, including mailbox time zones, Graph all-day values, and SharePoint's inclusive all-day end dates.
 - Show sanitized HTML descriptions and meeting organizer information without presenting an attendee-less appointment as a meeting.
-- Enable or disable individual sources. Outlook and SharePoint sections also provide a tri-state bulk visibility control that changes those same individual visibility settings.
+- Enable or disable individual sources. Outlook and SharePoint sections also provide a tri-state bulk visibility control that changes optional individual visibility settings while mandatory calendars remain enabled.
 - Keep automatic Planner, Group and Teams, and Teams Shifts discovery separate from visibility controls. Automatically discovered sources are enabled by default; Planner includes all accessible plans, not only tasks assigned to the current user.
 - Show the SharePoint site name separately from the editable calendar name in personal settings, administrator settings, and event details. Older saved sources are enriched when their site can be resolved.
 - Display Graph calendar availability in Day, Week, Month, Search, and Event Details while preserving the calendar color as source identity. Availability uses icons, outlines, and theme-aware patterns; the signed-in user's response is shown only for events loaded from their own mailbox.
@@ -41,7 +45,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
 - Use organization theme colors and support light and dark themes.
 - Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.
-- Assign administrator sources and ICS catalog entries to Entra groups. The current implementation only discovers non-mail-enabled security groups; the confirmed target model is broader.
+- Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation.
 - Store personal settings and per-source visibility choices in the OneDrive App Folder.
 - Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
 - Open exact Outlook and Microsoft 365 Group calendar events, SharePoint list events, and Planner tasks from Event Details. Sources without a reliable exact item link, including Teams Shifts, do not receive a general application fallback.
@@ -95,7 +99,7 @@ Personal settings include:
 
 Date and time labels follow the current SharePoint page culture. This includes the regional 12- or 24-hour time format.
 
-The confirmed source policy separates membership (`optional` or `mandatory`) from the set of user overrides an administrator allows. Mandatory sources cannot be disabled or removed. The current implementation has no persisted policy schema and treats every administrator source as user-overridable. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
+Administrator assignments use Mandatory (always enabled), Default (initially enabled) or Available (initially disabled). Edits to existing assignments are passed to SPFx before synchronizing current and backup properties; save and republish the SharePoint page to persist them for readers. Mandatory sources cannot be disabled or removed. Personal name, color, logo and supported source-option permissions are configured separately. Explicit optional-calendar visibility choices persist until reset or an observed policy disallows them. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
 
 ## Documentation
 

@@ -1,3 +1,4 @@
+import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage } from './services/ExchangeCalendarService';
 import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
@@ -13,6 +14,7 @@ import type { IMyCalendarsProps } from './components/IMyCalendarsProps';
 import {
   type IAdminWebPartSettings,
   type ICalendarSettings,
+  type IExchangeMailboxDiscovery,
   type CalendarViewType,
   type IUserCalendarSettings,
   defaultAdminWebPartSettings,
@@ -23,6 +25,10 @@ import { PropertyPaneAdminCalendarManager } from './propertyPane/PropertyPaneAdm
 import { AudienceService } from './services/AudienceService';
 import {
   deriveUserCalendarSettings,
+  audienceApplies,
+  canonicalizeExchangeSourceIdentities,
+  cleanAdminSourceOverrides,
+  normalizeAdminWebPartSettings,
   loadAdminWebPartSettings,
   migrateLegacyUserSettings,
   resolveCalendarSettings
@@ -52,6 +58,9 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   private _graphClient: MSGraphClientV3 | undefined;
   private _audienceService: AudienceService | null = null;
   private _adminLoadNotice: string | undefined;
+  private _mailboxDiscoveries: IExchangeMailboxDiscovery[] = [];
+  private _settingsGeneration = 0;
+  private _adminSaveGeneration = 0;
 
   public render(): void {
     const element: React.ReactElement<IMyCalendarsProps> = React.createElement(
@@ -67,6 +76,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         onSettingsChange: this.handleUserSettingsChange,
         onDefaultViewChange: this.handleDefaultViewChange,
         onResetSettings: this.handleResetUserSettings,
+        onRefreshAdminSources: this.handleRefreshAdminSources,
         context: this.context,
         tenantId: this.getAadContextId(this.context.pageContext.aadInfo?.tenantId),
         userId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
@@ -133,6 +143,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       adminSettings: this._adminSettings,
       userSettings: this._userSettings,
       matchedGroupIds: this._matchedGroupIds,
+      mailboxDiscoveries: this._mailboxDiscoveries,
+      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
       organizationPrimaryColor: currentTheme.palette?.themePrimary
     });
     // SPFx renders after a theme change. Rendering here would also mount React
@@ -175,13 +187,38 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   private async rebuildResolvedSettings(): Promise<void> {
-    this._matchedGroupIds = await this.resolveMatchedGroupIds();
+    const generation = ++this._settingsGeneration;
+    const matched = await this.resolveMatchedGroupIds();
+    const rules = (this._adminSettings.exchangeMailboxAssignments || []).filter(rule => audienceApplies(rule.audienceGroups, matched));
+    const service = this._graphClient ? new ExchangeCalendarService(this._graphClient) : undefined;
+    const aliases = Array.from(new Set(this._adminSettings.assignedSources.filter(item => audienceApplies(item.audienceGroups, matched) && item.source.sourceType === 'exchange' && item.source.exchangeMailbox).map(item => item.source.exchangeMailbox as string)));
+    const resolvedAliases = await Promise.all(aliases.map(async alias => {
+      try { return { alias, id: (await service?.resolveMailbox(alias))?.id }; }
+      catch { return { alias, id: undefined }; }
+    }));
+    if (generation !== this._settingsGeneration) return;
+    this._adminSettings = canonicalizeExchangeSourceIdentities(this._adminSettings, new Map(resolvedAliases.filter(item => item.id).map(item => [item.alias.toLowerCase(), item.id as string])));
+    const mailboxIds = Array.from(new Set(rules.map(rule => rule.mailboxId)));
+    const discoveries = await Promise.all(mailboxIds.map(async mailboxId => {
+      try {
+        if (!service) throw new Error('GraphClient not initialized');
+        const calendars = await service.getCalendars(mailboxId);
+        return { mailboxId, sources: calendars.map(calendar => ({ sourceType: 'exchange' as const, exchangeMailbox: mailboxId,
+          exchangeCalendarId: calendar.id, name: calendar.name, color: calendar.hexColor, isEnabled: true })) };
+      } catch (error) { return { mailboxId, sources: [], error: getExchangeDiscoveryErrorMessage(error) }; }
+    }));
+    if (generation !== this._settingsGeneration) return;
+    this._matchedGroupIds = matched;
+    this._mailboxDiscoveries = discoveries;
     this._resolvedSettings = resolveCalendarSettings({
       adminSettings: this._adminSettings,
       userSettings: this._userSettings,
       matchedGroupIds: this._matchedGroupIds,
+      mailboxDiscoveries: this._mailboxDiscoveries,
+      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
       organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
     });
+    this._userSettings = cleanAdminSourceOverrides(this._userSettings, this._resolvedSettings.applicableAdminSources || [], this._resolvedSettings.unresolvedAdminSourceIds);
   }
 
   private getAadContextId(value: unknown): string | undefined {
@@ -204,6 +241,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
 
     const groupIds = new Set<string>();
     this._adminSettings.assignedSources.forEach(item => item.audienceGroups.forEach(group => groupIds.add(group.groupId)));
+    (this._adminSettings.exchangeMailboxAssignments || []).forEach(item => item.audienceGroups.forEach(group => groupIds.add(group.groupId)));
     this._adminSettings.icsCatalog.forEach(item => item.audienceGroups.forEach(group => groupIds.add(group.groupId)));
 
     return this._audienceService.getMatchingGroupIds(Array.from(groupIds));
@@ -214,15 +252,21 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       nextResolvedSettings: settings,
       adminSettings: this._adminSettings,
       matchedGroupIds: this._matchedGroupIds,
-      existingUserSettings: this._userSettings
+      existingUserSettings: this._userSettings,
+      mailboxDiscoveries: this._mailboxDiscoveries,
+      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId)
     });
 
     this._resolvedSettings = resolveCalendarSettings({
       adminSettings: this._adminSettings,
       userSettings: this._userSettings,
       matchedGroupIds: this._matchedGroupIds,
+      mailboxDiscoveries: this._mailboxDiscoveries,
+      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
       organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
     });
+
+    this._userSettings = cleanAdminSourceOverrides(this._userSettings, this._resolvedSettings.applicableAdminSources || [], this._resolvedSettings.unresolvedAdminSourceIds);
 
     if (this._storageService) {
       this._storageService.saveUserSettings(this._userSettings).then(success => {
@@ -235,9 +279,14 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     this.render();
   };
 
+  private handleRefreshAdminSources = async (): Promise<void> => {
+    await this.rebuildResolvedSettings();
+    this.render();
+  };
+
   private handleDefaultViewChange = (defaultView: CalendarViewType): void => {
     this._userSettings = {
-      ...this._userSettings,
+      ...cleanAdminSourceOverrides(this._userSettings, this._resolvedSettings.applicableAdminSources || [], this._resolvedSettings.unresolvedAdminSourceIds),
       defaultView
     };
 
@@ -245,6 +294,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       adminSettings: this._adminSettings,
       userSettings: this._userSettings,
       matchedGroupIds: this._matchedGroupIds,
+      mailboxDiscoveries: this._mailboxDiscoveries,
+      currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
       organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
     });
 
@@ -272,6 +323,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
           adminSettings: this._adminSettings,
           userSettings: this._userSettings,
           matchedGroupIds: this._matchedGroupIds,
+          mailboxDiscoveries: this._mailboxDiscoveries,
+          currentUserMailboxId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
           organizationPrimaryColor: this._themeVariant?.palette?.themePrimary
         });
         this.render();
@@ -283,11 +336,15 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     settings: IAdminWebPartSettings,
     notifyPropertyChange: AdminSettingsPropertyChangeNotifier
   ): Promise<void> => {
-    this._adminSettings = settings;
-    persistAdminWebPartSettings(this.properties, settings, notifyPropertyChange);
+    const normalized = normalizeAdminWebPartSettings(settings);
+    if (!normalized) throw new Error('Invalid administrator settings.');
+    const generation = ++this._adminSaveGeneration;
+    persistAdminWebPartSettings(this.properties, normalized, notifyPropertyChange);
+    this._adminSettings = normalized;
     this._adminLoadNotice = undefined;
 
     await this.rebuildResolvedSettings();
+    if (generation !== this._adminSaveGeneration) return;
     this.context.propertyPane.refresh();
     this.render();
   };

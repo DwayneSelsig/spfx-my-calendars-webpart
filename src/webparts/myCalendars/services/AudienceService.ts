@@ -1,10 +1,14 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import * as strings from 'MyCalendarsWebPartStrings';
 
-export interface IEntraSecurityGroup {
+export interface IEntraAudienceGroup {
   id: string;
   displayName: string;
+  groupType?: import('../models/ICalendarSettings').AudienceGroupType;
 }
+
+/** Legacy type name retained for existing discovery-state consumers. */
+export type IEntraSecurityGroup = IEntraAudienceGroup;
 
 interface IGroupMembershipCacheEntry {
   expiresAt: number;
@@ -21,9 +25,9 @@ export class AudienceService {
     this.graphClient = graphClient;
   }
 
-  public async getSecurityGroups(searchText?: string): Promise<IEntraSecurityGroup[]> {
+  public async getAudienceGroups(searchText?: string): Promise<IEntraSecurityGroup[]> {
     const normalizedSearch = (searchText || '').trim().replace(/'/g, "''");
-    const filterSegments = ['mailEnabled eq false', 'securityEnabled eq true'];
+    const filterSegments = ["(securityEnabled eq true or groupTypes/any(c:c eq 'Unified'))"];
     if (normalizedSearch) {
       filterSegments.push(`startswith(displayName,'${normalizedSearch}')`);
     }
@@ -32,12 +36,14 @@ export class AudienceService {
       let data = await this.graphClient
         .api('/groups')
         .header('ConsistencyLevel', 'eventual')
-        .query({ $select: 'id,displayName', $filter: filterSegments.join(' and '), $top: 50 })
+        .query({ $select: 'id,displayName,groupTypes,mailEnabled,securityEnabled', $filter: filterSegments.join(' and '), $top: 50, $count: 'true' })
         .get();
       const groups = new Map<string, IEntraSecurityGroup>();
       for (;;) {
-        (data.value || []).forEach((item: { id?: string; displayName?: string }) => {
-          if (item.id) groups.set(item.id, { id: item.id, displayName: item.displayName || strings.UnnamedSecurityGroupLabel });
+        (data.value || []).forEach((item: { id?: string; displayName?: string; groupTypes?: string[]; securityEnabled?: boolean; mailEnabled?: boolean }) => {
+          const groupType = (item.groupTypes || []).indexOf('Unified') >= 0 ? 'microsoft365'
+            : item.securityEnabled === true ? item.mailEnabled === true ? 'mailEnabledSecurity' : 'security' : undefined;
+          if (item.id && groupType) groups.set(item.id, { id: item.id, displayName: item.displayName || strings.UnnamedSecurityGroupLabel, groupType });
         });
         if (!data['@odata.nextLink']) break;
         data = await this.graphClient.api(data['@odata.nextLink']).header('ConsistencyLevel', 'eventual').get();

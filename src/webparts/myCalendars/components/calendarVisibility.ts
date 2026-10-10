@@ -1,3 +1,4 @@
+import { applyAdminSourceChanges } from '../services/CalendarSettingsService';
 import type { ICalendarSettings } from '../models/ICalendarSettings';
 
 export type GroupVisibilityState = 'on' | 'off' | 'mixed';
@@ -18,13 +19,13 @@ export function setOutlookVisibility(settings: ICalendarSettings, discoveredCale
   return {
     ...settings,
     exchangeCalendarStates,
-    sources: settings.sources.map(source => source.sourceType === 'exchange' ? { ...source, isEnabled: visible } : source)
+    sources: settings.sources.map(source => source.sourceType === 'exchange' ? applyAdminSourceChanges(source, { isEnabled: visible }) : source)
   };
 }
 
 export function setSharePointVisibility(settings: ICalendarSettings, visible: boolean): ICalendarSettings {
   return {
     ...settings,
-    sources: settings.sources.map(source => source.sourceType === 'sharepoint' ? { ...source, isEnabled: visible } : source)
+    sources: settings.sources.map(source => source.sourceType === 'sharepoint' ? applyAdminSourceChanges(source, { isEnabled: visible }) : source)
   };
 }

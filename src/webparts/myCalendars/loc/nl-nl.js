@@ -1,5 +1,27 @@
 define([], function() {
   return {
+    "MandatoryPolicyLabel": "Verplicht",
+    "DefaultPolicyLabel": "Standaard",
+    "AvailablePolicyLabel": "Beschikbaar",
+    "PolicyLabel": "Zichtbaarheidsbeleid",
+    "EveryoneAudienceLabel": "Iedereen",
+    "MultipleGroupsLabel": "Meerdere groepen",
+    "AudiencePermissionsHelpLabel": "Doelgroeptoewijzing verleent geen Exchange- of SharePoint-rechten.",
+    "AllMailboxCalendarsLabel": "Alle agenda’s (inclusief toekomstige agenda’s)",
+    "InheritPolicyLabel": "Mailboxbeleid overnemen",
+    "ExcludeAssignmentLabel": "Uitsluiten van deze toewijzing",
+    "SharedCalendarPropertiesLabel": "Deze eigenschappen gelden voor deze agenda voor alle doelgroepen.",
+    "AllowNameOverrideLabel": "Persoonlijke naam toestaan",
+    "AllowColorOverrideLabel": "Persoonlijke kleur toestaan",
+    "AllowLogoOverrideLabel": "Persoonlijk bronlogo toestaan",
+    "AllowAssignedFilterOverrideLabel": "Persoonlijk toewijzingsfilter toestaan",
+    "AllowCompletedFilterOverrideLabel": "Persoonlijk filter voor voltooide taken toestaan",
+    "FollowAdminDefaultLabel": "Beheerstandaard volgen",
+    "AddMoreCalendarsLabel": "Meer agenda’s toevoegen",
+    "GroupTypeMicrosoft365Label": "Microsoft 365-groep",
+    "GroupTypeSecurityLabel": "Securitygroep",
+    "GroupTypeMailSecurityLabel": "Mail-enabled securitygroep",
+    "AssignmentDiscoveryFailedLabel": "Agendadiscovery mislukt",
     "AppLocalEnvironmentSharePoint": "De app wordt uitgevoerd in de lokale SharePoint-omgeving",
     "AppLocalEnvironmentTeams": "De app wordt uitgevoerd in de lokale Microsoft Teams-omgeving",
     "AppLocalEnvironmentOffice": "De app wordt uitgevoerd in de lokale office.com-omgeving",
@@ -103,8 +125,8 @@ define([], function() {
     ,"IcsUrlLabel": "ICS-URL"
     ,"LoadingPlannerPlansLabel": "Uw Planner-plannen laden..."
     ,"LoadingGroupsAndTeamsLabel": "Groepen en Teams laden..."
-    ,"SearchSecurityGroupsPlaceholder": "Beveiligingsgroepen zoeken..."
-    ,"LoadingSecurityGroupsLabel": "Beveiligingsgroepen laden..."
+    ,"SearchSecurityGroupsPlaceholder": "Groepen zoeken"
+    ,"LoadingSecurityGroupsLabel": "Groepen laden..."
     ,"MicrosoftPlannerLabel": "Microsoft Planner"
     ,"Microsoft365GroupLabel": "Microsoft 365-groep"
     ,"TeamsLabel": "Teams"
@@ -243,7 +265,7 @@ define([], function() {
     ,"MinutesLabel": "{0} minuten"
     ,"SettingsLabel": "Instellingen"
     ,"RefreshLabel": "Vernieuwen"
-    ,"SelectAdminAudienceGroupsLabel": "Selecteer een of meer Entra-beveiligingsgroepen:"
+    ,"SelectAdminAudienceGroupsLabel": "Selecteer een doelgroep"
     ,"ViaLabel": "Via"
     ,"MailboxInputHelpLabel": "Voer een UPN, object-ID of primair SMTP-adres in. Secundaire aliases worden niet ondersteund."
     ,"MailboxRequiredLabel": "Voer een mailboxidentificatie in."
@@ -252,7 +274,7 @@ define([], function() {
     ,"MailboxResolutionErrorLabel": "De mailboxidentiteit kon niet worden bepaald. Controleer de goedkeuring van Graph-machtigingen en probeer opnieuw."
     ,"ExchangeDiscoveryErrorLabel": "Agenda’s konden niet worden geladen. Controleer de mailboxidentificatie en je agendatoegang en probeer opnieuw. Beperkte agendarechten kunnen het ophalen verhinderen."
     ,"NoMailboxCalendarsLabel": "Er zijn geen agenda’s teruggegeven voor deze mailbox."
-    ,"SecurityGroupsLoadErrorLabel": "Beveiligingsgroepen konden niet worden geladen. Zoek opnieuw. Je selectie is behouden."
-    ,"NoSecurityGroupsLabel": "Geen beveiligingsgroepen gevonden."
+    ,"SecurityGroupsLoadErrorLabel": "Groepen kunnen niet worden geladen. Probeer opnieuw."
+    ,"NoSecurityGroupsLabel": "Geen ondersteunde groepen gevonden."
   };
 });

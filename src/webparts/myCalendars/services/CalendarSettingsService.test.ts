@@ -91,7 +91,7 @@ describe('administrator settings normalization and loading', () => {
     expect(resolved.sources.map(source => source.sharePointSiteName)).toEqual(['Contoso', undefined]);
   });
 
-  it.each([2, 3, 4, 5, 6])('accepts administrator and personal schema version %s and normalizes it to version 6', schemaVersion => {
+  it.each([2, 3, 4, 5, 6, 7])('accepts administrator and personal schema version %s and normalizes it to version 7', schemaVersion => {
     const admin = normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, schemaVersion });
     const user = normalizeUserCalendarSettings({ ...defaultUserCalendarSettings, schemaVersion });
 
@@ -119,17 +119,17 @@ describe('administrator settings normalization and loading', () => {
       userVisibleHourCount: undefined
     });
 
-    expect(admin).toMatchObject({ schemaVersion: 6, preferredStartMinutes: 420, visibleHourCount: 12, slotDurationMinutes: 15 });
-    expect(user).toMatchObject({ schemaVersion: 6, userPreferredStartMinutes: 540, userVisibleHourCount: 8 });
+    expect(admin).toMatchObject({ schemaVersion: 7, preferredStartMinutes: 420, visibleHourCount: 12, slotDurationMinutes: 15 });
+    expect(user).toMatchObject({ schemaVersion: 7, userPreferredStartMinutes: 540, userVisibleHourCount: 8 });
   });
 
-  it.each([undefined, 1, 1.5, 7, '6'])('rejects unsupported current schema version %p', schemaVersion => {
+  it.each([undefined, 1, 1.5, 8, '6'])('rejects unsupported current schema version %p', schemaVersion => {
     expect(normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, schemaVersion })).toBeUndefined();
     expect(normalizeUserCalendarSettings({ ...defaultUserCalendarSettings, schemaVersion })).toBeUndefined();
   });
 
   it('falls back from an unknown current administrator version to backup, legacy, and defaults', () => {
-    const invalidCurrent = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 7 });
+    const invalidCurrent = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 8 });
     const backup = JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion: 6, defaultView: 'day' });
 
     expect(loadAdminWebPartSettings({ current: invalidCurrent, backup })).toMatchObject({ source: 'backup', settings: { defaultView: 'day' } });

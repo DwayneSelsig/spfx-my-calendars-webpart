@@ -72,3 +72,11 @@ describe('Exchange identity and calendar access', () => {
     expect(client.api.mock.calls.map(call => call[0])).toEqual(['/me/calendars', '/me/calendars/calendar%2Fid%2B/calendarView']);
   });
 });
+
+describe('Exchange calendar discovery paging', () => {
+  it('discovers every mailbox calendar page and preserves calendar IDs', async () => {
+    const client = graph([{ value: [{ id: 'first', name: 'First' }], '@odata.nextLink': 'calendar-next' }, { value: [{ id: 'second', name: 'Second' }] }]);
+    expect((await new ExchangeCalendarService(client).getCalendars()).map(calendar => calendar.id)).toEqual(['first', 'second']);
+    expect(client.api).toHaveBeenCalledWith('calendar-next');
+  });
+});

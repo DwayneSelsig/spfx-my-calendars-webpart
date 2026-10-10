@@ -13,14 +13,14 @@ Read the common and applicable source section in [Sources and permissions](sourc
 - `MyCalendars` **MUST** coordinate source loading, range state, deduplication, source status, search state, and renderer selection.
 - Source families **MUST** load independently so a failure in one family does not remove valid results from another.
 - A failed source/month combination **MUST** remain eligible for retry.
-- A manual refresh **MUST** invalidate range state and force source retrieval. With administrator caching enabled, existing appointments **MUST** remain visible until successful replacements are available; without it, reset behavior clears them.
+- A manual refresh **MUST** rediscover applicable Exchange mailbox rules before invalidating range state and forcing source retrieval. With administrator caching enabled, existing appointments **MUST** remain visible until successful replacements are available; without it, reset behavior clears them.
 - Loaded discovery and navigation-range data **MUST NOT** be persisted. When the administrator enables appointment caching, normalized events and successful source/month state for the initial seven-month range **MAY** be persisted in browser `localStorage` under DEC-017.
 - Results from an obsolete load generation **MUST NOT** be merged into current state.
 
 ### Initialization and settings hand-off
 
 1. `MyCalendarsWebPart.onInit` creates `SettingsStorageService` and attempts to obtain an `MSGraphClientV3`.
-2. Administrator and personal settings are loaded, audiences are evaluated, and `resolveCalendarSettings` produces effective settings.
+2. Administrator and personal settings are loaded, audiences are evaluated, applicable Exchange all-calendar rules are discovered, and `resolveCalendarSettings` produces deduplicated effective settings.
 3. SPFx calls `render`; React mounts only after `onInit` completes.
 4. `MyCalendars` creates source-service instances and starts enabled service-family loads independently.
 5. Source services map external values to `ICalendarEvent`.
@@ -51,6 +51,10 @@ For a reset load, the coordinator:
 Navigation loads missing months that intersect the visible Day, Week, or Month range. Visible-range loads are serialized through `rangeLoadPromise`. A request includes only service families with at least one known source missing a visible month.
 
 Only successful source/month combinations enter the runtime range cache. Failed combinations remain unmarked and can therefore be retried by later navigation or refresh.
+
+### Administrator assignment identity
+
+CalendarSettingsService combines matching audience assignments by stable mailbox/calendar or site/list identity before loading. Each effective source has one ID, strongest visibility policy and combined provenance. Administrator sources supersede matching personal entries and automatic current-user Exchange rows, including disabled Available sources; personal records remain persisted. Automatic mailbox discovery errors remain visible in Exchange status and do not become successful range-cache entries.
 
 ### Runtime-only caches
 

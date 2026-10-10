@@ -1,6 +1,11 @@
 import {
   CALENDAR_SETTINGS_SCHEMA_VERSION,
   type IAdminAssignedSource,
+  type IAdminAllowedOverrides,
+  type IExchangeMailboxAssignment,
+  type IExchangeMailboxDiscovery,
+  type IAdminSourceDefinition,
+  defaultAllowedOverrides,
   type IAdminIcsCatalogItem,
   type IAdminSourceOverride,
   type IAdminWebPartSettings,
@@ -151,14 +156,15 @@ function normalizeAudienceGroups(value: unknown): IAudienceGroup[] {
   }
 
   return value
-    .map(item => {
+    .map((item): IAudienceGroup | undefined => {
       if (!isRecord(item) || typeof item.groupId !== 'string' || typeof item.displayName !== 'string') {
         return undefined;
       }
 
       return {
         groupId: item.groupId.trim(),
-        displayName: item.displayName.trim()
+        displayName: item.displayName.trim(),
+        groupType: item.groupType === 'microsoft365' || item.groupType === 'security' || item.groupType === 'mailEnabledSecurity' ? item.groupType : undefined
       };
     })
     .filter((item): item is IAudienceGroup => !!item && !!item.groupId && !!item.displayName);
@@ -170,12 +176,175 @@ function normalizeOverride(value: unknown): IAdminSourceOverride | undefined {
   }
 
   const override: IAdminSourceOverride = {};
+  ['showSourceLogo', 'plannerAssignedToMeOnly', 'showCompletedTasks'].forEach(key => {
+    if (typeof value[key] === 'boolean') (override as Record<string, unknown>)[key] = value[key];
+  });
   if (typeof value.removed === 'boolean') override.removed = value.removed;
   if (typeof value.isEnabled === 'boolean') override.isEnabled = value.isEnabled;
   if (typeof value.name === 'string' && value.name.trim()) override.name = value.name.trim();
   if (typeof value.color === 'string' && value.color.trim()) override.color = value.color.trim();
 
   return Object.keys(override).length > 0 ? override : undefined;
+}
+
+
+export function normalizeAllowedOverrides(value: unknown): IAdminAllowedOverrides {
+  const raw = isRecord(value) ? value : {};
+  return Object.keys(defaultAllowedOverrides).reduce((result, key) => {
+    (result as unknown as Record<string, boolean>)[key] = raw[key] !== false;
+    return result;
+  }, { ...defaultAllowedOverrides });
+}
+
+export function normalizeAssignmentPolicy(value: { isMandatory?: unknown; defaultEnabled?: unknown }): { isMandatory: boolean; defaultEnabled: boolean } {
+  return { isMandatory: value.isMandatory === true, defaultEnabled: value.isMandatory === true || value.defaultEnabled !== false };
+}
+
+export function audienceApplies(groups: IAudienceGroup[], matched: Set<string>): boolean {
+  return groups.length === 0 || groups.some(group => matched.has(group.groupId));
+}
+
+/** Wire format keeps shared source and audience metadata out of assignment records. */
+export function serializeAdminWebPartSettings(settings: IAdminWebPartSettings): string {
+  const normalized = normalizeAdminWebPartSettings(settings);
+  if (!normalized) throw new Error('Invalid administrator settings.');
+  const { assignedSources, exchangeMailboxAssignments, icsCatalog, ...base } = normalized;
+  return JSON.stringify({
+    ...base,
+    assignedSources: assignedSources.map(item => ({ assignmentId: item.assignmentId, adminSourceId: item.adminSourceId,
+      audienceGroupIds: item.audienceGroups.map(group => group.groupId), ...normalizeAssignmentPolicy(item) })),
+    exchangeMailboxAssignments: (exchangeMailboxAssignments || []).map(({ audienceGroups, ...item }) => ({
+      ...item, audienceGroupIds: audienceGroups.map(group => group.groupId)
+    })),
+    icsCatalog: icsCatalog.map(({ audienceGroups, ...item }) => ({ ...item, audienceGroupIds: audienceGroups.map(group => group.groupId) }))
+  });
+}
+
+export function canonicalizeExchangeSourceIdentities(settings: IAdminWebPartSettings, mailboxIds: Map<string, string>): IAdminWebPartSettings {
+  const canonical = (source: ICalendarSourceBase): ICalendarSourceBase => {
+    const id = source.sourceType === 'exchange' && source.exchangeMailbox ? mailboxIds.get(source.exchangeMailbox.toLowerCase()) : undefined;
+    return id ? { ...source, exchangeMailbox: id } : source;
+  };
+  return { ...settings, assignedSources: settings.assignedSources.map(item => ({ ...item, source: canonical(item.source) })),
+    sourceCatalog: (settings.sourceCatalog || []).map(item => ({ ...item, source: canonical(item.source) })) };
+}
+
+export function addExchangeMailboxAssignment(settings: IAdminWebPartSettings, rule: IExchangeMailboxAssignment): IAdminWebPartSettings {
+  const normalized = normalizeAdminWebPartSettings(settings);
+  if (!normalized) throw new Error('Invalid administrator settings.');
+  const audienceKey = rule.audienceGroups.map(group => group.groupId).sort().join(',');
+  const existing = (normalized.exchangeMailboxAssignments || []).find(item => item.mailboxId.toLowerCase() === rule.mailboxId.toLowerCase() && item.audienceGroups.map(group => group.groupId).sort().join(',') === audienceKey);
+  if (existing) return { ...normalized, exchangeMailboxAssignments: (normalized.exchangeMailboxAssignments || []).map(item => item.assignmentId === existing.assignmentId ? { ...item, ...normalizeAssignmentPolicy(rule) } : item) };
+  const transferred = normalized.assignedSources.filter(item => item.source.sourceType === 'exchange' && item.source.exchangeMailbox?.toLowerCase() === rule.mailboxId.toLowerCase() && item.audienceGroups.map(group => group.groupId).sort().join(',') === audienceKey);
+  const exceptions = [...rule.exceptions];
+  for (const item of transferred) {
+    if (item.source.exchangeCalendarId && !exceptions.some(entry => entry.calendarId === item.source.exchangeCalendarId)) exceptions.push({ calendarId: item.source.exchangeCalendarId, ...normalizeAssignmentPolicy(item) });
+  }
+  return { ...normalized, assignedSources: normalized.assignedSources.filter(item => transferred.indexOf(item) < 0),
+    exchangeMailboxAssignments: [...(normalized.exchangeMailboxAssignments || []), { ...rule, exceptions }] };
+}
+
+export function addAdministratorAssignments(settings: IAdminWebPartSettings, entries: Array<{ source: ICalendarSourceBase; policy: { isMandatory: boolean; defaultEnabled: boolean } }>, groups: IAudienceGroup[]): IAdminWebPartSettings {
+  const assignedSources = settings.assignedSources.slice();
+  const rules = (settings.exchangeMailboxAssignments || []).map(rule => ({ ...rule, exceptions: rule.exceptions.slice() }));
+  const audienceKey = groups.map(group => group.groupId).sort().join(',');
+  for (const entry of entries) {
+    const identity = getSourceIdentityKey(entry.source);
+    const existing = (settings.sourceCatalog || []).find(item => getSourceIdentityKey(item.source) === identity) || assignedSources.find(item => getSourceIdentityKey(item.source) === identity);
+    const rule = entry.source.sourceType === 'exchange' ? rules.find(item => item.mailboxId.toLowerCase() === entry.source.exchangeMailbox?.toLowerCase() && item.audienceGroups.map(group => group.groupId).sort().join(',') === audienceKey) : undefined;
+    if (rule) {
+      rule.exceptions = rule.exceptions.filter(item => item.calendarId !== entry.source.exchangeCalendarId);
+      rule.exceptions.push({ calendarId: entry.source.exchangeCalendarId as string, ...normalizeAssignmentPolicy(entry.policy) });
+      continue;
+    }
+    const index = assignedSources.findIndex(item => getSourceIdentityKey(item.source) === identity && item.audienceGroups.map(group => group.groupId).sort().join(',') === audienceKey);
+    if (index >= 0) assignedSources[index] = { ...assignedSources[index], ...normalizeAssignmentPolicy(entry.policy) };
+    else assignedSources.push({ ...createAdminAssignedSource(existing?.source || entry.source, groups, existing?.adminSourceId), ...normalizeAssignmentPolicy(entry.policy), allowedOverrides: existing?.allowedOverrides || { ...defaultAllowedOverrides } });
+  }
+  return { ...settings, assignedSources, exchangeMailboxAssignments: rules };
+}
+
+export function getApplicableAdminSources(adminSettings: IAdminWebPartSettings, matched: Set<string>, discoveries: IExchangeMailboxDiscovery[] = [], currentUserMailboxId?: string): ICalendarSource[] {
+  const candidates = adminSettings.assignedSources.filter(item => audienceApplies(item.audienceGroups, matched)).slice();
+  for (const rule of adminSettings.exchangeMailboxAssignments || []) {
+    if (!audienceApplies(rule.audienceGroups, matched)) continue;
+    const discovery = discoveries.find(item => item.mailboxId.toLowerCase() === rule.mailboxId.toLowerCase());
+    if (!discovery || discovery.error) continue;
+    for (const source of discovery.sources) {
+      const exception = rule.exceptions.find(item => item.calendarId === source.exchangeCalendarId);
+      if (exception?.excluded) continue;
+      const definition = (adminSettings.sourceCatalog || []).find(item => getSourceIdentityKey(item.source) === getSourceIdentityKey(source)) ||
+        adminSettings.assignedSources.find(item => getSourceIdentityKey(item.source) === getSourceIdentityKey(source));
+      candidates.push({ adminSourceId: definition?.adminSourceId || 'exchange|' + encodeURIComponent(rule.mailboxId.toLowerCase()) + '|' + encodeURIComponent(source.exchangeCalendarId || ''),
+        source: definition?.source || source, audienceGroups: rule.audienceGroups,
+        allowedOverrides: definition?.allowedOverrides || rule.allowedOverrides,
+        ...normalizeAssignmentPolicy(exception && (exception.isMandatory !== undefined || exception.defaultEnabled !== undefined) ? exception : rule) });
+    }
+  }
+  const result = new Map<string, ICalendarSource>();
+  for (const item of candidates) {
+    const key = getSourceIdentityKey(item.source.sourceType === 'exchange' && !item.source.exchangeMailbox && currentUserMailboxId ? { ...item.source, exchangeMailbox: currentUserMailboxId } : item.source);
+    const policy = normalizeAssignmentPolicy({ isMandatory: item.isMandatory, defaultEnabled: item.defaultEnabled ?? item.source.isEnabled });
+    const names = item.audienceGroups.length ? item.audienceGroups.filter(group => matched.has(group.groupId)).map(group => group.displayName) : ['__everyone__'];
+    const previous = result.get(key);
+    if (previous) {
+      previous.isMandatory = previous.isMandatory || policy.isMandatory;
+      previous.defaultEnabled = previous.isMandatory || previous.defaultEnabled || policy.defaultEnabled;
+      previous.isEnabled = !!previous.defaultEnabled;
+      previous.audienceGroupNames = Array.from(new Set([...(previous.audienceGroupNames || []), ...names]));
+    } else result.set(key, { ...item.source, id: item.adminSourceId, adminSourceId: item.adminSourceId, origin: 'admin',
+      ...policy, isEnabled: policy.defaultEnabled, allowedOverrides: item.allowedOverrides || { ...defaultAllowedOverrides }, audienceGroupNames: names });
+  }
+  return Array.from(result.values()).map(source => {
+    if (source.allowedOverrides?.showSourceLogo !== false || source.showSourceLogo !== undefined) return source;
+    const flag = source.sourceType === 'sharepoint' ? adminSettings.sharePointShowSourceLogo : source.sourceType === 'planner' ? adminSettings.plannerShowSourceLogo : source.sourceType === 'teamsShifts' ? adminSettings.teamsShiftsShowSourceLogo : source.sourceType === 'unifiedGroup' ? adminSettings.unifiedGroupShowSourceLogo : adminSettings.exchangeShowSourceLogo;
+    return { ...source, showSourceLogo: flag };
+  });
+}
+
+export function cleanAdminSourceOverrides(userSettings: IUserCalendarSettings, sources: ICalendarSource[], unresolvedIds: string[] = []): IUserCalendarSettings {
+  const byId = new Map(sources.map(source => [source.id, source]));
+  const overrides: Record<string, IAdminSourceOverride> = {};
+  for (const id of Object.keys(userSettings.adminSourceOverridesById)) {
+    const source = byId.get(id);
+    if (!source) {
+      if (unresolvedIds.indexOf(id) >= 0) overrides[id] = { ...userSettings.adminSourceOverridesById[id] };
+      continue;
+    }
+    const raw = userSettings.adminSourceOverridesById[id];
+    const clean: IAdminSourceOverride = {};
+    if (!source.isMandatory) {
+      if (typeof raw.isEnabled === 'boolean') clean.isEnabled = raw.isEnabled;
+      if (raw.removed) clean.removed = true;
+    }
+    for (const key of Object.keys(defaultAllowedOverrides) as Array<keyof IAdminAllowedOverrides>) {
+      if (source.allowedOverrides?.[key] !== false && raw[key] !== undefined) (clean as Record<string, unknown>)[key] = raw[key];
+    }
+    if (Object.keys(clean).length) overrides[id] = clean;
+  }
+  return { ...userSettings, adminSourceOverridesById: overrides };
+}
+
+export function isAutomaticExchangeCalendarAssigned(settings: ICalendarSettings, calendarId: string): boolean {
+  return (settings.applicableAdminSources || []).some(source => source.sourceType === 'exchange' && source.exchangeCalendarId === calendarId &&
+    (!source.exchangeMailbox || source.exchangeMailbox.toLowerCase() === settings.currentUserMailboxId?.toLowerCase()));
+}
+
+export function applyAdminSourceChanges(source: ICalendarSource, updates: Partial<ICalendarSource>): ICalendarSource {
+  if (source.origin !== 'admin') return { ...source, ...updates };
+  const accepted: Partial<ICalendarSource> = {};
+  for (const key of Object.keys(defaultAllowedOverrides) as Array<keyof IAdminAllowedOverrides>) {
+    if (source.allowedOverrides?.[key] !== false && updates[key] !== undefined) (accepted as Record<string, unknown>)[key] = updates[key];
+  }
+  if (!source.isMandatory && typeof updates.isEnabled === 'boolean') {
+    accepted.isEnabled = updates.isEnabled;
+    accepted.visibilityOverride = updates.isEnabled;
+  }
+  if (!source.isMandatory && Object.prototype.hasOwnProperty.call(updates, 'visibilityOverride') && updates.visibilityOverride === undefined) {
+    accepted.isEnabled = !!source.defaultEnabled;
+    accepted.visibilityOverride = undefined;
+  }
+  return { ...source, ...accepted };
 }
 
 export function generateStableId(prefix: string = 'source'): string {
@@ -200,21 +369,26 @@ export function createUserCalendarSource(source: ICalendarSourceBase, userSource
 
 export function createAdminAssignedSource(source: ICalendarSourceBase, audienceGroups: IAudienceGroup[], adminSourceId?: string): IAdminAssignedSource {
   return {
+    assignmentId: generateStableId('assignment'),
+    isMandatory: false,
+    defaultEnabled: source.isEnabled,
+    allowedOverrides: { ...defaultAllowedOverrides },
     adminSourceId: adminSourceId || generateStableId('adminSource'),
     source: stripRuntimeSource(source),
     audienceGroups: audienceGroups.map(group => ({
       groupId: group.groupId,
-      displayName: group.displayName
+      displayName: group.displayName,
+      groupType: group.groupType
     }))
   };
 }
 
-function getSourceIdentityKey(source: ICalendarSourceBase): string {
+export function getSourceIdentityKey(source: ICalendarSourceBase): string {
   switch (source.sourceType) {
     case 'sharepoint':
       return `${source.sourceType}|${source.sharePointSiteId || ''}|${source.sharePointListId || ''}`;
     case 'exchange':
-      return `${source.sourceType}|${source.exchangeMailbox || 'me'}|${source.exchangeCalendarId || 'calendar'}`;
+      return `${source.sourceType}|${(source.exchangeMailbox || 'me').toLowerCase()}|${source.exchangeCalendarId || 'calendar'}`;
     case 'planner':
       return `${source.sourceType}|${source.plannerPlanId || ''}`;
     case 'unifiedGroup':
@@ -243,6 +417,24 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
     return undefined;
   }
 
+  const groupRegistry = dedupeAudienceGroups(normalizeAudienceGroups(value.audienceGroups));
+  const storedCatalog = Array.isArray(value.sourceCatalog) ? value.sourceCatalog : [];
+  const catalog: IAdminSourceDefinition[] = [];
+  for (const item of storedCatalog) {
+    if (!isRecord(item) || typeof item.adminSourceId !== 'string') continue;
+    const source = normalizeCalendarSourceBase(item.source);
+    if (source) catalog.push({ adminSourceId: item.adminSourceId, source, allowedOverrides: normalizeAllowedOverrides(item.allowedOverrides) });
+  }
+  const readGroups = (item: Record<string, unknown>): IAudienceGroup[] | undefined => {
+    if (Array.isArray(item.audienceGroupIds)) {
+      const ids = item.audienceGroupIds;
+      if (ids.some(id => typeof id !== 'string' || !groupRegistry.some(group => group.groupId === id))) return undefined;
+      return groupRegistry.filter(group => ids.indexOf(group.groupId) >= 0);
+    }
+    if (!Array.isArray(item.audienceGroups)) return undefined;
+    const groups = dedupeAudienceGroups(normalizeAudienceGroups(item.audienceGroups));
+    return item.audienceGroups.length && !groups.length ? undefined : groups;
+  };
   const assignedSources = Array.isArray(value.assignedSources)
     ? value.assignedSources
       .map(item => {
@@ -250,28 +442,60 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
           return undefined;
         }
 
-        const source = normalizeCalendarSourceBase(item.source);
-        const audienceGroups = dedupeAudienceGroups(normalizeAudienceGroups(item.audienceGroups));
-        if (!source || audienceGroups.length === 0) {
+        const definition = catalog.find(entry => entry.adminSourceId === item.adminSourceId);
+        const source = normalizeCalendarSourceBase(item.source) || definition?.source;
+        const audienceGroups = readGroups(item);
+        if (!source || !audienceGroups) {
           return undefined;
         }
 
         return {
           adminSourceId: item.adminSourceId.trim(),
           source,
-          audienceGroups
+          audienceGroups,
+          assignmentId: typeof item.assignmentId === 'string' ? item.assignmentId : 'assignment_' + item.adminSourceId.trim(),
+          isMandatory: item.isMandatory === true,
+          defaultEnabled: item.isMandatory === true || (typeof item.defaultEnabled === 'boolean' ? item.defaultEnabled : source.isEnabled),
+          allowedOverrides: normalizeAllowedOverrides(item.allowedOverrides || definition?.allowedOverrides)
         } as IAdminAssignedSource;
       })
       .filter((item): item is IAdminAssignedSource => !!item && !!item.adminSourceId)
     : [];
 
-  const sourceIdentityKeys = new Set<string>();
-  for (const assignedSource of assignedSources) {
-    const identityKey = getSourceIdentityKey(assignedSource.source);
-    if (sourceIdentityKeys.has(identityKey)) {
-      return undefined;
+  const assignmentKeys = new Set<string>();
+  for (const item of assignedSources) {
+    const identityKey = getSourceIdentityKey(item.source);
+    for (const audienceId of item.audienceGroups.length ? item.audienceGroups.map(group => group.groupId) : ['__everyone__']) {
+      const key = identityKey + '|' + audienceId;
+      if (assignmentKeys.has(key)) return undefined;
+      assignmentKeys.add(key);
     }
-    sourceIdentityKeys.add(identityKey);
+    const definition = catalog.find(entry => getSourceIdentityKey(entry.source) === identityKey);
+    if (definition) {
+      item.adminSourceId = definition.adminSourceId;
+      // Draft changes update all occurrences of the shared source together.
+      if (!Array.isArray(value.sourceCatalog) || isRecord((value.assignedSources as unknown[]).find(raw => isRecord(raw) && raw.adminSourceId === item.adminSourceId && raw.source))) {
+        definition.source = item.source;
+        definition.allowedOverrides = item.allowedOverrides || normalizeAllowedOverrides(undefined);
+      }
+      item.source = definition.source;
+      item.allowedOverrides = definition.allowedOverrides;
+    } else catalog.push({ adminSourceId: item.adminSourceId, source: item.source, allowedOverrides: item.allowedOverrides || normalizeAllowedOverrides(undefined) });
+  }
+
+  const exchangeMailboxAssignments: IExchangeMailboxAssignment[] = [];
+  for (const raw of Array.isArray(value.exchangeMailboxAssignments) ? value.exchangeMailboxAssignments : []) {
+    if (!isRecord(raw) || typeof raw.assignmentId !== 'string' || typeof raw.mailboxId !== 'string' || !raw.mailboxId.trim()) continue;
+    const audienceGroups = readGroups(raw);
+    if (!audienceGroups) continue;
+    exchangeMailboxAssignments.push({
+      assignmentId: raw.assignmentId, mailboxId: raw.mailboxId.trim(),
+      mailboxDisplayName: typeof raw.mailboxDisplayName === 'string' ? raw.mailboxDisplayName : raw.mailboxId,
+      audienceGroups, ...normalizeAssignmentPolicy(raw), allowedOverrides: normalizeAllowedOverrides(raw.allowedOverrides),
+      exceptions: (Array.isArray(raw.exceptions) ? raw.exceptions : []).filter(item => isRecord(item) && typeof item.calendarId === 'string')
+        .map(item => ({ calendarId: item.calendarId as string, excluded: item.excluded === true,
+          ...(typeof item.isMandatory === 'boolean' || typeof item.defaultEnabled === 'boolean' ? normalizeAssignmentPolicy(item) : {}) }))
+    });
   }
 
   const icsCatalog = Array.isArray(value.icsCatalog)
@@ -281,8 +505,8 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
           return undefined;
         }
 
-        const audienceGroups = dedupeAudienceGroups(normalizeAudienceGroups(item.audienceGroups));
-        if (audienceGroups.length === 0 || !item.icsUrl.trim() || !item.displayName.trim()) {
+        const audienceGroups = readGroups(item);
+        if (!audienceGroups || !item.icsUrl.trim() || !item.displayName.trim()) {
           return undefined;
         }
 
@@ -333,6 +557,9 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
     unifiedGroupShowAllCalendars: typeof value.unifiedGroupShowAllCalendars === 'boolean' ? value.unifiedGroupShowAllCalendars : defaultAdminWebPartSettings.unifiedGroupShowAllCalendars,
     teamsShiftsShowAllCalendars: typeof value.teamsShiftsShowAllCalendars === 'boolean' ? value.teamsShiftsShowAllCalendars : defaultAdminWebPartSettings.teamsShiftsShowAllCalendars,
     assignedSources,
+    sourceCatalog: catalog,
+    audienceGroups: dedupeAudienceGroups([...groupRegistry, ...assignedSources.reduce<IAudienceGroup[]>((all, item) => all.concat(item.audienceGroups), []), ...exchangeMailboxAssignments.reduce<IAudienceGroup[]>((all, item) => all.concat(item.audienceGroups), []), ...icsCatalog.reduce<IAudienceGroup[]>((all, item) => all.concat(item.audienceGroups), [])]),
+    exchangeMailboxAssignments,
     icsCatalog
   };
 }
@@ -546,34 +773,6 @@ export function loadAdminWebPartSettings(params: {
   };
 }
 
-function applySourceOverride(source: ICalendarSourceBase, override: IAdminSourceOverride | undefined): ICalendarSourceBase | undefined {
-  if (override?.removed) {
-    return undefined;
-  }
-
-  return {
-    ...source,
-    name: override?.name || source.name,
-    color: override?.color || source.color,
-    isEnabled: typeof override?.isEnabled === 'boolean' ? override.isEnabled : source.isEnabled
-  };
-}
-
-function createResolvedAdminSource(assignedSource: IAdminAssignedSource, override: IAdminSourceOverride | undefined): ICalendarSource | undefined {
-  const source = applySourceOverride(assignedSource.source, override);
-  if (!source) {
-    return undefined;
-  }
-
-  return {
-    id: assignedSource.adminSourceId,
-    origin: 'admin',
-    adminSourceId: assignedSource.adminSourceId,
-    audienceGroupNames: assignedSource.audienceGroups.map(group => group.displayName),
-    ...source
-  };
-}
-
 function createResolvedUserSource(source: IUserCalendarSource): ICalendarSource {
   return {
     id: source.userSourceId,
@@ -588,18 +787,26 @@ export function resolveCalendarSettings(params: {
   userSettings: IUserCalendarSettings;
   matchedGroupIds: Set<string>;
   organizationPrimaryColor?: string;
+  mailboxDiscoveries?: IExchangeMailboxDiscovery[];
+  currentUserMailboxId?: string;
 }): ICalendarSettings {
   const { adminSettings, userSettings, matchedGroupIds, organizationPrimaryColor } = params;
 
-  const resolvedAdminSources = adminSettings.assignedSources
-    .filter(item => item.audienceGroups.some(group => matchedGroupIds.has(group.groupId)))
-    .map(item => createResolvedAdminSource(item, userSettings.adminSourceOverridesById[item.adminSourceId]))
-    .filter((item): item is ICalendarSource => !!item);
-
-  const resolvedUserSources = userSettings.personalSources.map(createResolvedUserSource);
-
-  const availableAdminIcsCatalogItems = adminSettings.icsCatalog
-    .filter(item => item.audienceGroups.some(group => matchedGroupIds.has(group.groupId)));
+  const applicableAdminSources = getApplicableAdminSources(adminSettings, matchedGroupIds, params.mailboxDiscoveries, params.currentUserMailboxId);
+  const cleaned = cleanAdminSourceOverrides(userSettings, applicableAdminSources);
+  const resolvedAdminSources = applicableAdminSources.filter(source => !cleaned.adminSourceOverridesById[source.id]?.removed).map(source => {
+    const override = cleaned.adminSourceOverridesById[source.id];
+    return { ...source, ...override, isEnabled: source.isMandatory ? true : override?.isEnabled ?? source.defaultEnabled ?? true,
+      visibilityOverride: source.isMandatory ? undefined : override?.isEnabled };
+  });
+  const identity = (source: ICalendarSourceBase): string => getSourceIdentityKey(source.sourceType === 'exchange' && !source.exchangeMailbox && params.currentUserMailboxId ? { ...source, exchangeMailbox: params.currentUserMailboxId } : source);
+  const adminIdentities = new Set(applicableAdminSources.map(identity));
+  const resolvedUserSources = userSettings.personalSources.filter(source => !adminIdentities.has(identity(source))).map(createResolvedUserSource);
+  const availableAdminIcsCatalogItems = adminSettings.icsCatalog.filter(item => audienceApplies(item.audienceGroups, matchedGroupIds));
+  const failedMailboxes = (params.mailboxDiscoveries || []).filter(item => item.error);
+  const unresolvedAdminSourceIds = Object.keys(userSettings.adminSourceOverridesById).filter(id => failedMailboxes.some(mailbox =>
+    id.indexOf('exchange|' + encodeURIComponent(mailbox.mailboxId.toLowerCase()) + '|') === 0 ||
+    adminSettings.sourceCatalog?.some(source => source.adminSourceId === id && source.source.exchangeMailbox?.toLowerCase() === mailbox.mailboxId.toLowerCase())));
   const userVisibleHourCount = userSettings.userVisibleHourCount === undefined
     ? undefined
     : normalizeVisibleHourCount(userSettings.userVisibleHourCount);
@@ -614,6 +821,10 @@ export function resolveCalendarSettings(params: {
 
   return {
     ...defaultCalendarSettings,
+    applicableAdminSources,
+    currentUserMailboxId: params.currentUserMailboxId,
+    unresolvedAdminSourceIds,
+    adminExchangeDiscoveryErrors: failedMailboxes.map(item => (adminSettings.exchangeMailboxAssignments?.find(rule => rule.mailboxId === item.mailboxId)?.mailboxDisplayName || item.mailboxId) + ': ' + item.error),
     schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,
     defaultView: userSettings.defaultView || adminSettings.defaultView,
     sources: [...resolvedAdminSources, ...resolvedUserSources],
@@ -642,15 +853,6 @@ export function resolveCalendarSettings(params: {
   };
 }
 
-function createAdminSourceMap(adminSettings: IAdminWebPartSettings, matchedGroupIds: Set<string>): Record<string, ICalendarSourceBase> {
-  return adminSettings.assignedSources.reduce<Record<string, ICalendarSourceBase>>((acc, item) => {
-    if (item.audienceGroups.some(group => matchedGroupIds.has(group.groupId))) {
-      acc[item.adminSourceId] = stripRuntimeSource(item.source);
-    }
-    return acc;
-  }, {});
-}
-
 function copyExchangeCalendarStates(states: { [calendarId: string]: boolean } | undefined): { [calendarId: string]: boolean } {
   return states ? { ...states } : {};
 }
@@ -660,49 +862,42 @@ export function deriveUserCalendarSettings(params: {
   adminSettings: IAdminWebPartSettings;
   matchedGroupIds: Set<string>;
   existingUserSettings?: IUserCalendarSettings;
+  mailboxDiscoveries?: IExchangeMailboxDiscovery[];
+  currentUserMailboxId?: string;
 }): IUserCalendarSettings {
   const { nextResolvedSettings, adminSettings, matchedGroupIds, existingUserSettings } = params;
-  const adminSourceMap = createAdminSourceMap(adminSettings, matchedGroupIds);
-  const seenAdminSourceIds = new Set<string>();
+  const baseline = params.mailboxDiscoveries !== undefined
+    ? getApplicableAdminSources(adminSettings, matchedGroupIds, params.mailboxDiscoveries, params.currentUserMailboxId)
+    : nextResolvedSettings.applicableAdminSources || getApplicableAdminSources(adminSettings, matchedGroupIds);
+  const adminSourceMap = new Map(baseline.map(source => [source.id, source]));
+  const cleaned = cleanAdminSourceOverrides(existingUserSettings || defaultUserCalendarSettings, baseline, nextResolvedSettings.unresolvedAdminSourceIds);
+  const seen = new Set<string>();
   const personalSources: IUserCalendarSource[] = [];
-  const adminSourceOverridesById: { [adminSourceId: string]: IAdminSourceOverride } = {};
-
-  nextResolvedSettings.sources.forEach(source => {
-    if (source.origin === 'admin' && source.adminSourceId) {
-      const baseSource = adminSourceMap[source.adminSourceId];
-      if (!baseSource) {
-        return;
-      }
-
-      seenAdminSourceIds.add(source.adminSourceId);
-      const override: IAdminSourceOverride = {};
-
-      if (source.name !== baseSource.name) {
-        override.name = source.name;
-      }
-      if (source.color !== baseSource.color) {
-        override.color = source.color;
-      }
-      if (source.isEnabled !== baseSource.isEnabled) {
-        override.isEnabled = source.isEnabled;
-      }
-
-      if (Object.keys(override).length > 0) {
-        adminSourceOverridesById[source.adminSourceId] = override;
-      }
-      return;
+  const adminSourceOverridesById: Record<string, IAdminSourceOverride> = {};
+  for (const id of nextResolvedSettings.unresolvedAdminSourceIds || []) {
+    if (cleaned.adminSourceOverridesById[id]) adminSourceOverridesById[id] = cleaned.adminSourceOverridesById[id];
+  }
+  for (const source of nextResolvedSettings.sources) {
+    if (source.origin !== 'admin') { personalSources.push(createUserCalendarSource(stripRuntimeSource(source), source.userSourceId || source.id)); continue; }
+    const base = adminSourceMap.get(source.id);
+    if (!base) continue;
+    seen.add(source.id);
+    const override: IAdminSourceOverride = {};
+    for (const key of Object.keys(defaultAllowedOverrides) as Array<keyof IAdminAllowedOverrides>) {
+      if (base.allowedOverrides?.[key] !== false && source[key] !== base[key] && source[key] !== undefined) (override as Record<string, unknown>)[key] = source[key];
     }
-
-    if (source.origin !== 'admin') {
-      personalSources.push(createUserCalendarSource(stripRuntimeSource(source), source.userSourceId || source.id));
-    }
-  });
-
-  Object.keys(adminSourceMap).forEach(adminSourceId => {
-    if (!seenAdminSourceIds.has(adminSourceId)) {
-      adminSourceOverridesById[adminSourceId] = { removed: true };
-    }
-  });
+    if (!base.isMandatory && (source.visibilityOverride !== undefined || source.isEnabled !== base.defaultEnabled)) override.isEnabled = source.isEnabled;
+    if (Object.keys(override).length) adminSourceOverridesById[source.id] = override;
+  }
+  for (const base of baseline) {
+    if (!seen.has(base.id) && !base.isMandatory) adminSourceOverridesById[base.id] = { ...cleaned.adminSourceOverridesById[base.id], removed: true };
+  }
+  // Preserve personal entries suppressed by a matching administrator source.
+  const identity = (source: ICalendarSourceBase): string => getSourceIdentityKey(source.sourceType === 'exchange' && !source.exchangeMailbox && nextResolvedSettings.currentUserMailboxId ? { ...source, exchangeMailbox: nextResolvedSettings.currentUserMailboxId } : source);
+  const adminIdentities = new Set(baseline.map(identity));
+  for (const source of existingUserSettings?.personalSources || []) {
+    if (adminIdentities.has(identity(source)) && !personalSources.some(item => item.userSourceId === source.userSourceId)) personalSources.push(source);
+  }
 
   return {
     schemaVersion: CALENDAR_SETTINGS_SCHEMA_VERSION,

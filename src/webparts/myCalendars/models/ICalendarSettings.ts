@@ -3,7 +3,7 @@ export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' |
 export type CalendarSourceOrigin = 'admin' | 'user';
 export type CalendarSlotDuration = 15 | 30 | 60;
 
-export const CALENDAR_SETTINGS_SCHEMA_VERSION = 6;
+export const CALENDAR_SETTINGS_SCHEMA_VERSION = 7;
 
 export interface ISharePointFieldMapping {
   titleField?: string;
@@ -38,12 +38,62 @@ export interface IUserCalendarSource extends ICalendarSourceBase {
   userSourceId: string;
 }
 
+export type AudienceGroupType = 'microsoft365' | 'security' | 'mailEnabledSecurity';
+
+export interface IAdminAllowedOverrides {
+  name: boolean;
+  color: boolean;
+  showSourceLogo: boolean;
+  plannerAssignedToMeOnly: boolean;
+  showCompletedTasks: boolean;
+}
+
+export const defaultAllowedOverrides: IAdminAllowedOverrides = {
+  name: true, color: true, showSourceLogo: true, plannerAssignedToMeOnly: true, showCompletedTasks: true
+};
+
+export interface IAdminSourceDefinition {
+  adminSourceId: string;
+  source: ICalendarSourceBase;
+  allowedOverrides: IAdminAllowedOverrides;
+}
+
+export interface IAssignmentPolicy {
+  isMandatory: boolean;
+  defaultEnabled: boolean;
+}
+
+export interface IExchangeCalendarException extends Partial<IAssignmentPolicy> {
+  calendarId: string;
+  excluded?: boolean;
+}
+
+export interface IExchangeMailboxAssignment extends IAssignmentPolicy {
+  assignmentId: string;
+  mailboxId: string;
+  mailboxDisplayName: string;
+  audienceGroups: IAudienceGroup[];
+  allowedOverrides: IAdminAllowedOverrides;
+  exceptions: IExchangeCalendarException[];
+}
+
+export interface IExchangeMailboxDiscovery {
+  mailboxId: string;
+  sources: ICalendarSourceBase[];
+  error?: string;
+}
+
 export interface IAudienceGroup {
   groupId: string;
   displayName: string;
+  groupType?: AudienceGroupType;
 }
 
 export interface IAdminAssignedSource {
+  assignmentId?: string;
+  isMandatory?: boolean;
+  defaultEnabled?: boolean;
+  allowedOverrides?: IAdminAllowedOverrides;
   adminSourceId: string;
   source: ICalendarSourceBase;
   audienceGroups: IAudienceGroup[];
@@ -57,6 +107,9 @@ export interface IAdminIcsCatalogItem {
 }
 
 export interface IAdminSourceOverride {
+  showSourceLogo?: boolean;
+  plannerAssignedToMeOnly?: boolean;
+  showCompletedTasks?: boolean;
   removed?: boolean;
   isEnabled?: boolean;
   name?: string;
@@ -83,6 +136,9 @@ export interface IAdminWebPartSettings {
   unifiedGroupShowAllCalendars: boolean;
   teamsShiftsShowAllCalendars: boolean;
   assignedSources: IAdminAssignedSource[];
+  sourceCatalog?: IAdminSourceDefinition[];
+  audienceGroups?: IAudienceGroup[];
+  exchangeMailboxAssignments?: IExchangeMailboxAssignment[];
   icsCatalog: IAdminIcsCatalogItem[];
 }
 
@@ -107,6 +163,10 @@ export interface IUserCalendarSettings {
 }
 
 export interface ICalendarSource extends ICalendarSourceBase {
+  isMandatory?: boolean;
+  defaultEnabled?: boolean;
+  allowedOverrides?: IAdminAllowedOverrides;
+  visibilityOverride?: boolean;
   id: string;
   origin: CalendarSourceOrigin;
   adminSourceId?: string;
@@ -115,6 +175,10 @@ export interface ICalendarSource extends ICalendarSourceBase {
 }
 
 export interface ICalendarSettings {
+  currentUserMailboxId?: string;
+  applicableAdminSources?: ICalendarSource[];
+  adminExchangeDiscoveryErrors?: string[];
+  unresolvedAdminSourceIds?: string[];
   schemaVersion: number;
   defaultView: CalendarViewType;
   sources: ICalendarSource[];
@@ -188,6 +252,9 @@ export const defaultAdminWebPartSettings: IAdminWebPartSettings = {
   plannerShowAllAssignedToMeOnly: false,
   unifiedGroupShowAllCalendars: true,
   teamsShiftsShowAllCalendars: true,
+  sourceCatalog: [],
+  audienceGroups: [],
+  exchangeMailboxAssignments: [],
   assignedSources: [],
   icsCatalog: []
 };

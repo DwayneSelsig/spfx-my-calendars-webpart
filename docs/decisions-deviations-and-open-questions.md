@@ -142,7 +142,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Configured Exchange mailboxes accept UPN, object ID and primary SMTP (`mail`). Secondary aliases remain outside scope; delegated `User.ReadBasic.All` supports the needed basic-field identity resolution.
 - Identity resolution is separate from calendar access. Zero/multiple identity matches and request failures are distinct; discovery/event 404 does not prove a missing mailbox.
 - Active settings discovery completes loading on success and failure, clears stale results, ignores obsolete requests and shows localized error/empty feedback. Audience selections survive discovery failures and changes to search results.
-- Audience discovery follows all result pages and sorts locally without Graph `$orderby`. Group-type restrictions and membership semantics are unchanged (DEV-002).
+- Audience discovery follows all result pages and sorts locally without Graph `$orderby`. Membership semantics remain unchanged; DEC-024 expands discovery to the confirmed group types and Everyone.
 - LimitedDetails support has no unverified fallback; existing event fields/endpoints remain in use and tenant validation is required.
 
 ### INT-001 — Mandatory-source failure records
@@ -155,9 +155,8 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### DEV-004 — Per-source logo precedence is inconsistent
 
-- **Current state:** a configured manual Exchange source can override the source-type logo value.
-- **Current state:** SharePoint, Planner, Unified Group, and Teams Shifts ignore entry-level `showSourceLogo` at runtime.
-- **Desired state:** type default followed by allowed per-source override, subject to administrator policy.
+- **Status:** Resolved
+- Configured Exchange, SharePoint, Planner, Unified Group and Teams Shifts sources use their per-source logo preference before the source-type default. Automatic discovery keeps its existing type-wide default.
 
 ### DEV-005 — `MailboxSettings.Read` has no current consumer
 
@@ -226,12 +225,12 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 ### DEC-005 — Administrator source policy dimensions
 
 - **Status:** Decision
-- Policy applies to administrator-assigned event-source entries, not scalar defaults or ICS catalog entries.
-- Membership has two states: `optional` and `mandatory`.
+- Policy applies to administrator-assigned event sources, not scalar defaults or ICS subscriptions.
+- Persist isMandatory and defaultEnabled separately; mandatory normalizes to enabled. UI labels are Mandatory, Default and Available.
 - Optional sources can be disabled or removed; mandatory sources cannot.
-- Allowed presentation and source-option overrides are a separate field-level dimension.
-- The combination must represent fully overridable, partially restricted, and mandatory/locked outcomes.
-- The serialized schema is not defined.
+- Source definitions share presentation/options and individual allowedOverrides booleans across audiences. Membership does not imply presentation locking.
+- Allowed keys are name, color, showSourceLogo, plannerAssignedToMeOnly and showCompletedTasks; applicable defaults are true.
+- Schema 7 sourceCatalog/audienceGroups store shared metadata; persisted assignments reference their IDs. Hydrated editor/runtime records preserve existing component contracts.
 
 ### DEC-012 — Audience target model
 
@@ -248,6 +247,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - A disallowed or orphaned override stops affecting effective settings immediately.
 - It is removed from personal storage on the next successful personal-settings save.
 - A policy change does not restore a previously disallowed stale value later.
+- An observed Default/Available to Mandatory transition restores a previously removed or disabled applicable source immediately, including when loading an older personal settings file. It requires no personal save/reset; the next successful personal save persists the removal/visibility cleanup while retaining permitted presentation overrides.
 
 ### DEC-014 — Administrator configuration fields
 
@@ -258,25 +258,51 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 ### DEC-021 — Persisted settings version compatibility
 
 - **Status:** Decision
-- Current administrator and personal settings accept integer schema versions 2 through 6 and normalize every accepted payload to version 6.
-- Current settings locations reject missing, non-integer, older unknown, and future schema versions.
-- Unversioned data is accepted only through the explicit legacy administrator property or legacy OneDrive file.
-- Rejection follows the existing recovery order: administrator current → backup → legacy → defaults; personal current → legacy → defaults. A rejected personal current file is not automatically deleted.
-- Persistence-failure UX and historical administrator backup rotation remain unresolved under OQ-004 and OQ-005.
+- Integer administrator/personal schema versions 2–7 normalize to version 7. Missing, non-integer, older unknown and future versions are rejected in current locations.
+- Versions 2–6 preserve administrator source IDs, user source IDs and permitted personal choices. Existing optional source visibility becomes defaultEnabled. Migration creates no automatic mailbox rules.
+- Unversioned data is accepted only through explicit legacy locations. Existing recovery order and same-save backup semantics remain.
+- Persistence-failure UX and historical backup rotation remain unresolved under OQ-004 and OQ-005.
+
+### DEC-024 — Grouped assignments and automatic Exchange mailbox rules
+
+- **Status:** Decision
+- Administrator means the person authorized to edit web-part properties.
+- Exchange/SharePoint configuration starts with a supported Entra group or explicit Everyone, then a mailbox/site, then selected calendars and policy.
+- Exchange supports an opt-in all-calendar rule including future calendars, discovered on initialization, accepted administrator changes and manual refresh. No polling is introduced.
+- Rule exceptions inherit policy, replace it or exclude a calendar only from that rule. SharePoint remains explicit selection with per-list field mapping.
+- This opt-in rule replaces the earlier blanket requirement that new mailbox calendars never become assigned; explicit selection retains that original behavior.
+- Stable mailbox/calendar and site/list identities deduplicate matching assignments; Mandatory > Default > Available. Each effective calendar loads once.
+- Name, color, options and override capabilities are shared per calendar. Group policies are independent.
+- Personal settings show one row; sources matching several audiences appear under Multiple groups with their provenance. Explicit visibility choices remain until reset or an observed policy disallows them.
+- Cleanup follows observed changes in memory and the next successful personal save; no revision history covers missed policy intervals. Discovery failure is not confirmed absence.
+- Audience selection never grants or implies Exchange/SharePoint authorization. Mandatory failures remain visible.
+
+### DEC-025 — Administrator property change hand-off
+
+- **Status:** Decision
+- Normalize and serialize a draft, notify SPFx of current and backup property changes, then synchronize the local property bag and accept runtime settings.
+- Do not prewrite both properties before their callbacks: a freshly reset SPFx host snapshot can treat the already-complete state as its baseline and fail to deliver a changed state to the page.
+- Current and backup remain identical same-save mirrors. Schema, assignment/source IDs, recovery order and personal choices are unchanged.
+- Obsolete save completions do not refresh the administrator property pane over a newer accepted save.
+
+### DEV-014 — Administrator edits disappear after page reload
+
+- **Status:** Repair implemented; tenant verification pending
+- **Reported behavior:** an existing Exchange assignment changes from Default to Mandatory in the current session but reverts after republishing and reloading.
+- **Local evidence:** the policy JSON round-trip succeeds. Prewriting both properties reproduces lost host delivery in a focused model of the installed SPFx snapshot-reset behavior; notification-first delivery passes that regression.
+- **Removal scenario evidence:** `MandatoryCalendarRestoration.test.ts` exercises Default assignment, personal removal, saved Mandatory promotion, old personal-file reload and subsequent cleanup. The current local policy implementation passes for explicit Exchange/SharePoint assignments, mailbox rules and supported older personal schemas. This verifies settings resolution and JSON round-trips, not the deployed bundle or published tenant page.
+- **Remaining verification:** confirm the active deployed bundle, compare accepted/callback/published assignment values and repeat the page publication/reload flow in SharePoint. The reported tenant failure's exact cause has not been observed directly.
 
 ### DEV-001 — Administrator source policy is not implemented
 
-- **Current state:** `IAdminAssignedSource` has no membership or allowed-override policy.
-- **Current state:** users can rename, recolor, disable, or remove every applicable administrator source.
-- **Desired state:** enforce DEC-005 and DEC-013.
-- **Missing decision:** persisted schema and migration defaults.
+- **Status:** Resolved
+- Schema 7 implements visibility policy, shared field-level override permissions, personal controls and observed-change stale-override cleanup under DEC-005, DEC-013 and DEC-024.
 
 ### DEV-002 — Audience support is narrower than the confirmed model
 
-- **Current state:** discovery returns only mail-disabled security groups.
-- **Current state:** entries require at least one group; normalization drops entries with no groups.
-- **Desired state:** support DEC-012 group types and empty-means-everyone.
-- **Compatible behavior:** selected groups use OR semantics and failures are fail-closed.
+- **Status:** Resolved
+- Discovery supports Microsoft 365, security and mail-enabled security groups. Explicit Everyone applies without membership.
+- OR matching, paging, stale-request protection and fail-closed evaluation are retained. Invalid references do not become Everyone.
 
 ### DEV-003 — Administrator settings UI is incomplete
 
@@ -298,10 +324,9 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### OQ-001 — Persisted administrator source-policy schema
 
-- **Status:** Open question
-- What names and migration represent membership and allowed overrides?
-- What policy applies to existing administrator sources after migration?
-- How are source-specific capabilities versioned as models evolve?
+- **Status:** Resolved by DEC-005, DEC-021 and DEC-024
+- Schema 7 separates shared source/audience definitions and assignment policies. Existing assignments retain their visibility default and permit supported presentation overrides.
+- Supported capability keys are explicit normalized booleans; future keys require a confirmed contract/schema change.
 
 ### OQ-004 — Personal persistence failure UX
 

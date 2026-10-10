@@ -31,7 +31,7 @@ The current implementation resolves settings in this order:
 3. Audience membership filters administrator-assigned sources and ICS catalog entries.
 4. Personal sources are appended after applicable administrator sources.
 5. Supported personal values replace administrator scalar defaults.
-6. Personal administrator-source overrides replace name, color, and enabled state or remove the source.
+6. Applicable assignments are combined by stable identity and strongest visibility policy; permitted personal administrator-source overrides then customize or remove optional sources.
 7. The current theme primary color replaces the administrator organization color at runtime when present.
 
 Precedence is not uniform for every field:
@@ -50,7 +50,7 @@ Precedence is not uniform for every field:
 
 | Setting | Scope/default | Admin UI | User UI/current override | Effective precedence | Used by | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | Current settings contracts; `6` | No | No | Versions 2–6 normalize to 6 | Settings service | Missing, invalid, older unknown, and future versions are rejected outside explicit legacy paths |
+| `schemaVersion` | Current settings contracts; `7` | No | No | Versions 2–7 normalize to 7 | Settings service | Missing, invalid, older unknown, and future versions are rejected outside explicit legacy paths |
 | `defaultView` | Admin `month` | Yes | Toolbar; full override | Personal → admin → default | Web part/coordinator | Scalar, not source-lockable |
 | `showWeekends` | Admin `true` | Yes | Optional personal override | Personal → admin → default | Week/range logic | Override can be removed |
 | `preferredStartMinutes` | Admin `480` | Yes | Optional personal override | Renderer: personal → admin | Day/Week | Clamped and snapped to admin slot duration |
@@ -65,10 +65,10 @@ Precedence is not uniform for every field:
 | `plannerShowAllAssignedToMeOnly` | Admin `false` | **No, deviation** | Yes in auto mode | Personal → admin → default | Planner auto filter | Does not affect explicit sources |
 | `unifiedGroupShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Group auto mode | Suppresses explicit sources |
 | `teamsShiftsShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Shifts auto mode | Suppresses explicit sources |
-| `assignedSources` | Admin list | Yes | Currently modifiable/removable | Audience → personal override | Resolver/coordinator | Confirmed policy is unenforced |
+| `assignedSources` | Admin list | Yes | Currently modifiable/removable | Audience → personal override | Resolver/coordinator | Per-assignment visibility and shared per-field override permissions are enforced |
 | `icsCatalog` | Admin list | Yes | Prefills subscription flow | Audience filter only | Settings panel | Not a runtime event source |
 | `personalSources` | Personal list | No | Yes | Appended after admin sources | Resolver/coordinator | User-owned |
-| `adminSourceOverridesById` | Personal map | No | Derived | Stable `adminSourceId` | Resolver/save derivation | Current shape lacks policy |
+| `adminSourceOverridesById` | Personal map | No | Derived | Stable `adminSourceId` | Resolver/save derivation | Shared administrator source ID; explicit visibility intent and permitted field overrides |
 | `sources` | Effective list | Indirect | Personal management | Admin, then personal | Coordinator | Not persisted directly |
 | `firstDayOfWeek` | Legacy only | No | No | Ignored in migration | None | Renderers use fixed rules |
 
@@ -99,80 +99,55 @@ Source-type logo fields are `exchangeShowSourceLogo`, `sharePointShowSourceLogo`
 
 ## Administrator source policy
 
-**Read when:** changing administrator-assigned event-source membership, disable/remove behavior, user override permissions, source locking, or stale override cleanup. Related records: DEC-005, DEC-013, DEC-015, DEV-001, DEV-004, and OQ-001.
+**Read when:** changing administrator-assigned event-source membership, visibility defaults, per-field overrides, or stale-override cleanup. Related records: DEC-005, DEC-013, DEC-015 and DEC-024.
 
-This section defines confirmed product requirements. The policy is not implemented. It applies only to administrator-assigned event-source entries, not to scalar administrator defaults, automatic-source flags, personal sources, or ICS catalog entries.
+### Membership and visibility
 
-### Two independent dimensions
+Assignments persist two booleans, not a policy enum:
 
-1. Membership is `optional` or `mandatory`.
-2. Allowed presentation and source-option overrides are controlled separately for each supported field.
+| UI label | isMandatory | defaultEnabled |
+| --- | --- | --- |
+| Mandatory / Verplicht | true | true |
+| Default / Standaard | false | true |
+| Available / Beschikbaar | false | false |
 
-Conceptual outcomes are combinations, not necessarily serialized enum values:
+- Mandatory sources **MUST** remain enabled and **MUST NOT** be removed by users. Normalization **MUST** force their defaultEnabled to true.
+- When an applicable Default or Available source becomes Mandatory, it **MUST** reappear enabled even if the user's saved override contains `removed: true` or `isEnabled: false`. Restoration **MUST NOT** require resetting or saving personal settings first. Those now-disallowed membership overrides follow the observed-change cleanup rules below; permitted presentation overrides remain applicable.
+- Optional sources **MAY** be disabled or removed. Their effective visibility **MUST** use an explicit user override when present, otherwise defaultEnabled.
+- An explicit user visibility choice **MUST** survive administrator-default changes, even when the saved choice equals the default. Untouched sources **MUST NOT** acquire visibility overrides. Following the administrator default removes the explicit choice.
+- When multiple applicable assignments identify the same calendar, the resolver **MUST** create one effective source. Mandatory takes precedence over Default, which takes precedence over Available.
+- Mailbox-rule exclusions apply only to that rule; another matching assignment can still provide the calendar.
 
-| Outcome | Membership | Allowed overrides | Meaning |
-| --- | --- | --- | --- |
-| Fully overridable | Optional | All supported presentation/source-option overrides | Administrator pushes a default that the user can disable, remove, and customize |
-| Partially restricted | Optional or mandatory | Administrator-selected subset | Membership follows its own rule; some presentation or source options are protected |
-| Mandatory/locked | Mandatory | No personal source overrides | User cannot disable, remove, rename, recolor, or change protected source options |
+### Shared presentation and override capabilities
 
-### Membership requirements
+Source definitions share name, color, source options and allowedOverrides across all audiences. Assignments retain independent visibility policies.
 
-- An optional source **MUST** be removable and disableable by the user.
-- A mandatory source **MUST NOT** be removed or disabled by the user.
-- Mandatory membership does not by itself lock name, color, logo, or source-specific filters.
-- A mandatory source **MAY** remain customizable when the applicable overrides are allowed.
+The allowedOverrides booleans independently control name, color, showSourceLogo, plannerAssignedToMeOnly and showCompletedTasks where supported. Defaults are true, including during migration. SharePoint field mapping remains administrator configuration. Mandatory membership **MUST NOT** automatically lock presentation. A disallowed logo override with no configured per-source value uses the administrator type-wide logo default, so a personal type-wide toggle cannot bypass the lock.
 
-### Override capabilities
+The settings service enforces permissions during effective resolution, draft updates and personal-override derivation. UI controls reflect those same permissions. Bulk visibility actions **MUST NOT** disable mandatory sources.
 
-The policy **MUST** be able to control these independently where the source supports them:
+### Policy changes and cleanup
 
-- name;
-- color;
-- source-logo visibility; and
-- source-specific filters or options, including Planner assignment/completion filters.
-
-Disable and remove behavior comes from membership and is not duplicated in the override capability set.
-
-The exact persisted schema, field names, default capability set, and migration representation are unresolved. They **MUST NOT** be invented during an unrelated implementation.
-
-### Policy changes and stale overrides
-
-- A newly disallowed override **MUST** stop affecting effective settings immediately.
-- An override for a removed, inaccessible, or no-longer-applicable administrator source is orphaned and **MUST** stop affecting runtime settings.
-- Disallowed and orphaned overrides **MUST** be removed on the next successful personal-settings save.
-- A policy change **MUST NOT** restore a previously disallowed stale value later.
-
-### Current deviation
-
-`IAdminAssignedSource` has no membership or allowed-override policy. Every applicable administrator source can currently be renamed, recolored, disabled, or removed. Current code ignores overrides whose administrator source is not resolved, but can retain them on disk until a later user save.
+- Disallowed and orphaned overrides **MUST** stop affecting effective settings immediately upon an observed change.
+- Composition **MUST** clear those values from its in-memory personal settings, and the next successful personal save **MUST** persist the cleanup, including toolbar saves.
+- Discarded values **MUST NOT** revive when observed policies are relaxed later.
+- Failed automatic-mailbox discovery **MUST NOT** be treated as successful absence; unresolved dynamic-source overrides are retained for retry.
+- No policy-revision history is stored. A mandatory interval never observed by the user cannot invalidate a previously saved override. This is the accepted boundary of the observed-change cleanup guarantee.
 
 ## Audiences
 
-**Read when:** changing administrator targeting, group discovery, group membership evaluation, empty audiences, audience caching, or fail-closed behavior. Related records: DEC-012 and DEV-002.
+**Read when:** changing audience discovery, membership, empty targeting, paging, caching or fail-closed behavior. Related records: DEC-012 and DEC-024.
 
-### Targeting contract
+- Targets **MUST** be Microsoft 365 groups, security groups or mail-enabled security groups. Distribution and dynamic distribution groups **MUST NOT** be selectable.
+- The explicit Everyone audience is represented by an empty audience reference list. Missing or invalid audience references **MUST NOT** become Everyone.
+- Multiple group references use OR membership. Targeted evaluation failure **MUST** remain fail-closed.
+- Audience assignment **MUST NOT** grant or imply source permissions; delegated Exchange and SharePoint access remains authoritative.
+- Discovery selects groupTypes, mailEnabled and securityEnabled, retains the classified type, follows every result page, deduplicates IDs and sorts locally. Advanced group filtering uses ConsistencyLevel: eventual and count; it does not use orderby.
+- Search escapes OData literals. Loading, successful empty results and failures remain distinct. Obsolete requests are discarded; selected metadata survives search errors and empty results.
+- Membership uses /me/checkMemberGroups in batches of twenty, with transitive behavior and a five-minute positive/negative session cache. Failed batches write no cache result and can retry.
+- Existing untyped groups remain valid after migration; successful administrator discovery enriches known group types.
 
-- Audience targets **MUST** be groups, not individual users.
-- Supported targets **MUST** include security groups, mail-enabled security groups, and Microsoft 365 groups.
-- An assignment with no audience targets **MUST** apply to everyone.
-- Multiple groups **MUST** use OR semantics: membership in any selected group grants the assignment.
-- Group-targeted evaluation failure **MUST** be fail-closed.
-- Audience targeting applies to administrator-assigned event sources and administrator ICS catalog entries.
-- `AudienceService` **MUST** own discovery and membership evaluation but **MUST NOT** decide the effect of source policy.
-
-### Current implementation
-
-- `AudienceService.getSecurityGroups` returns only `mailEnabled eq false and securityEnabled eq true` groups. It requests pages of 50, follows every `@odata.nextLink` with `ConsistencyLevel: eventual`, deduplicates IDs and sorts the complete result locally by `displayName`, then ID. The query does not use `$orderby` or add `$count` solely for sorting.
-- Prefix searches trim text and escape apostrophes as OData literals. Discovery errors propagate to the panel rather than becoming an empty successful result.
-- Source/ICS audience initialization and search distinguish loading, successful empty results and errors. Results from old requests are ignored after a new query, edited input, navigation, dialog close or unmount. Selected IDs and names are independent of search results and survive successful empty searches and discovery failures.
-- The UI cannot create or retain an assignment with no groups; normalization drops such entries.
-- `/me/checkMemberGroups` evaluates up to 20 IDs per batch and supports transitive membership.
-- Positive and negative results use session storage for five minutes.
-- A failed batch contributes no matches and writes no result for those IDs, so the next evaluation can retry.
-- The cache key contains the group ID but not tenant or user identity.
-
-The restricted group types and rejection of empty audiences conflict with the confirmed target model (DEV-002). The cache-key scope is a current implementation risk and is not a confirmed policy change.
+AudienceService owns discovery and membership; CalendarSettingsService owns their policy effects. ICS catalog entries use the same targeting contract and remain subscription deep links.
 
 ## Storage and migration
 
@@ -194,32 +169,38 @@ The restricted group types and rejection of empty audiences conflict with the co
 | Legacy `settings` | Current forms unavailable/invalid; legacy shape parses | Migrated subset with notice |
 | Hardcoded defaults | No recoverable input | Used; notice shown after invalid current/backup data |
 
-Administrator normalization drops malformed list entries. It rejects the complete payload when two assigned sources have the same source identity or two ICS catalog items have the same case-insensitive URL.
+Administrator normalization drops malformed entries. The persisted schema separates sourceCatalog and audienceGroups from assignment records referencing their IDs. Runtime/editor assignments hydrate those references for the existing panels. Duplicate source/audience combinations and case-insensitive duplicate ICS URLs reject the payload; the same source may be assigned to different audiences. Mailbox rules persist stable mailbox identity, policy, default override capabilities and calendar-ID exceptions.
 
-Current administrator and personal locations accept only integer schema versions 2 through 6. Versions 2–5 are normalized to version 6; version 6 is accepted directly. A missing version, non-integer version, version below 2, or future version is rejected. Unversioned input is accepted only from the explicit legacy `settings` property or legacy OneDrive filename, after those locations have been selected by the recovery flow.
+Current administrator and personal locations accept only integer schema versions 2 through 7. Versions 2–6 are normalized to version 7; version 7 is accepted directly. A missing version, non-integer version, version below 2, or future version is rejected. Unversioned input is accepted only from the explicit legacy `settings` property or legacy OneDrive filename, after those locations have been selected by the recovery flow.
 
 ### Administrator save
 
 1. `AdminSettingsPanel` edits a deep-cloned draft.
 2. Saving calls `MyCalendarsWebPart.handleAdminSettingsSave`.
-3. The web part serializes the accepted value into both properties, after which the custom property-field adapter reports that same JSON to SPFx through its change callback for `adminSettings` and `adminSettingsBackup`.
-4. It reevaluates audiences, rebuilds effective settings, refreshes the property pane, and renders React.
+3. The web part normalizes and serializes the draft. The custom property-field adapter reports that same JSON to SPFx for `adminSettings`, then `adminSettingsBackup`, before the helper synchronizes its local property bag. Each callback can therefore observe its own property transition.
+4. After the notifications succeed, the web part accepts the normalized in-memory administrator settings, reevaluates audiences and rebuilds effective settings. Only the latest administrator save refreshes the property pane and renders its completion.
 
-**Fact:** backup is a same-save mirror, not a rotated previous revision. The save callback does not re-run normalization before assigning the in-memory draft.
+**Requirement:** accepted administrator changes **MUST** be reported through the SPFx property-pane callback before local synchronization overwrites both old property values. The final current and backup JSON **MUST** be identical. Existing assignment/source IDs and per-assignment policy **MUST** survive that hand-off. See DEC-025.
+
+**Fact:** backup is a same-save mirror, not a rotated previous revision. Accepted drafts are normalized before serialization. A thrown notification prevents accepting the draft in runtime settings. A completed callback is an SPFx hand-off, not proof that a SharePoint page was published; page save/publication and reload remain host verification.
 
 ### Personal save and reset
 
 1. `SettingsPanel` edits a deep clone of effective settings.
-2. `deriveUserCalendarSettings` produces minimal personal values relative to applicable administrator settings.
+2. `deriveUserCalendarSettings` produces personal values relative to applicable administrator settings. Explicit optional-source visibility choices are retained even when they equal the administrator default; other fields remain minimal permitted overrides.
 3. The web part resolves settings immediately and asks `SettingsStorageService` to save asynchronously.
 4. The UI renders the in-memory result before persistence success is known.
 5. Save failure is logged only; there is no user-visible error or rollback.
 
 Reset deletes current and legacy personal files. In-memory reset occurs only after both deletions report success. A failure leaves current in-memory settings unchanged and is logged.
 
+### Administrator assignment migration
+
+Version 2–6 assignments become optional with defaultEnabled taken from their existing source.isEnabled. Existing adminSourceId, source IDs, audience IDs, SharePoint mappings and permitted personal values remain stable. Migration never creates an automatic mailbox rule. Mailbox aliases are resolved to object IDs during composition/editor discovery without changing source IDs; unsuccessful identity resolution retains the original identifier.
+
 ### Personal migration
 
-Current personal settings use schema version 6. Known versions 2–5 migrate through the same normalizer and are emitted as version 6. Normalization:
+Current personal settings use schema version 7. Known versions 2–6 migrate through the same normalizer and are emitted as version 7. Normalization:
 
 - drops malformed personal sources and overrides;
 - migrates legacy `userStartHour` to minutes;
@@ -261,7 +242,8 @@ The current administrator panel exposes:
 - visible-hour count;
 - appointment-cache enablement and duration from 1–60 minutes;
 - assigned Exchange, SharePoint, Planner, Unified Group/Team, and Teams Shifts sources;
-- source name, color, enabled state, source-specific creation options, and audiences; and
+- group-first Exchange/SharePoint configuration, per-calendar Mandatory/Default/Available policy, shared source presentation and individual override permissions;
+- Exchange all-calendar rules including future calendars and calendar-specific exceptions; and
 - audience-targeted ICS catalog entries.
 
 Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
@@ -278,11 +260,11 @@ The current personal panel exposes:
 - automatic Planner, Unified Group/Team, and Teams Shifts loading;
 - Planner automatic assigned-to-me filtering;
 - creation and management of personal sources;
-- current modification/removal of applicable administrator sources;
+- policy-aware modification/removal of applicable administrator sources, grouped by audience without duplicate rows;
 - ICS subscription links, optionally prefilled from the administrator catalog; and
 - reset of current and legacy personal-settings files.
 
-The Outlook and SharePoint section headers expose a tri-state bulk visibility control derived entirely from their individual states. Outlook combines `exchangeCalendarStates` with configured/effective Exchange `isEnabled`; SharePoint uses configured/effective `isEnabled`. Mixed or hidden groups become fully visible when activated, while fully visible groups become hidden. The controls do not store group state and do not alter Planner, Unified Group, or Teams Shifts automatic-mode fields.
+The Outlook and SharePoint section headers expose a tri-state bulk visibility control derived entirely from their individual states. Outlook combines `exchangeCalendarStates` with configured/effective Exchange `isEnabled`; SharePoint uses configured/effective `isEnabled`. Mixed or hidden groups become fully visible when activated, while fully visible groups hide only their optional calendars. Mandatory calendars remain enabled. The controls do not store group state and do not alter Planner, Unified Group, or Teams Shifts automatic-mode fields.
 
 SharePoint rows display site name separately from calendar name. Missing legacy names are resolved best-effort when a panel opens and are persisted only when the owning personal or administrator draft is explicitly saved.
 
@@ -296,11 +278,6 @@ Both active panels **MUST** end mailbox discovery loading after success or failu
 
 ### Current interface gaps
 
-- Optional/mandatory membership and allowed-override policy have no schema or controls.
-- Every applicable administrator source can currently be removed, disabled, renamed, and recolored.
-- Empty-audience assignments are impossible instead of applying to everyone.
-- Audience discovery excludes mail-enabled security groups and Microsoft 365 groups.
 - Confirmed administrator fields listed above are absent from the panel.
-- Per-source logo behavior is implemented only for manual Exchange sources.
 - Personal storage failure is not visible and does not roll back in-memory changes.
-- Administrator settings normalization and property-persistence hand-off have focused automated coverage; panel rendering, personal settings, policy, and host integration remain uncovered.
+- Administrator settings normalization and property-persistence hand-off have focused automated coverage; pure policy, personal derivation, migration, dynamic mailbox expansion and bulk visibility also have coverage; panel rendering and host integration remain manual.
