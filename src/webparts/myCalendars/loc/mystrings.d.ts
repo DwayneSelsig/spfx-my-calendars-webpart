@@ -272,6 +272,9 @@ declare interface IMyCalendarsWebPartStrings {
   SelectAdminAudienceGroupsLabel: string;
   ViaLabel: string;
   MailboxInputHelpLabel: string;
+  MailboxPickerSuggestionsLabel: string;
+  MailboxPickerNoResultsLabel: string;
+  MailboxPickerLoadingLabel: string;
   MailboxRequiredLabel: string;
   MailboxNotFoundLabel: string;
   MailboxAmbiguousLabel: string;

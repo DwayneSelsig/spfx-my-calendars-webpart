@@ -12,6 +12,15 @@ export interface IResolvedMailbox {
   userPrincipalName: string;
 }
 
+export interface IMailboxSearchResult {
+  id: string;
+  displayName: string;
+  mail?: string;
+  userPrincipalName: string;
+  jobTitle?: string;
+  imageUrl: string;
+}
+
 export class ExchangeRequestError extends Error {
   public readonly statusCode?: number;
   public readonly code?: string;
@@ -185,6 +194,41 @@ export class ExchangeCalendarService {
       console.error('Error fetching Exchange calendars:', error);
       throw asExchangeError('discovery', error);
     }
+  }
+
+  /** Search directory users for the administrator mailbox picker. */
+  public async searchMailboxes(query: string, maximumSuggestions: number = 5, webAbsoluteUrl?: string): Promise<IMailboxSearchResult[]> {
+    const normalized = query.trim();
+    if (normalized.length < 2) return [];
+    if (!this.graphClient) throw new Error('GraphClient not initialized');
+
+    const escaped = normalized.replace(/'/g, "''");
+    const data = await this.graphClient.api('/users').query({
+      $select: 'id,displayName,mail,userPrincipalName,jobTitle',
+      $filter: `startswith(displayName,'${escaped}') or startswith(userPrincipalName,'${escaped}') or startswith(mail,'${escaped}')`,
+      $top: maximumSuggestions
+    }).get();
+
+    const results = new Map<string, IMailboxSearchResult>();
+    (data.value || []).forEach((user: Partial<IMailboxSearchResult>) => {
+      if (!user.id || (!user.userPrincipalName && !user.mail)) return;
+      const identity = (user.userPrincipalName || user.mail || user.id).toLowerCase();
+      if (results.has(identity)) return;
+      const address = user.mail || user.userPrincipalName || user.id;
+      const photoBaseUrl = (webAbsoluteUrl || '').replace(/\/$/, '');
+      results.set(identity, {
+        id: user.id,
+        displayName: user.displayName || user.mail || user.userPrincipalName || user.id,
+        mail: user.mail || undefined,
+        userPrincipalName: user.userPrincipalName || user.mail || user.id,
+        jobTitle: user.jobTitle || undefined,
+        imageUrl: `${photoBaseUrl}/_layouts/15/userphoto.aspx?accountname=${encodeURIComponent(address)}&size=M`
+      });
+    });
+
+    return Array.from(results.values())
+      .sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userPrincipalName.localeCompare(b.userPrincipalName))
+      .slice(0, maximumSuggestions);
   }
 
   /**

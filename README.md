@@ -27,7 +27,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - A previously removed or hidden assigned calendar reappears enabled when its applicable policy becomes Mandatory, including in an already open personal settings panel. Other personal draft edits and permitted presentation choices remain. The old removal/visibility override is discarded on observing that policy and cleaned from storage on the next successful personal save.
 - Select multiple Exchange calendars, or opt into all current and future mailbox calendars with individual policy exceptions. SharePoint calendars remain explicitly selected with their own field mapping. Matching assignments produce one effective calendar using the strongest policy.
 
-- Configure shared Exchange calendars using a UPN, object ID or primary SMTP address, with clear discovery errors and empty-result feedback. Secondary aliases are not supported.
+- Configure shared Exchange calendars with a local people picker that suggests directory users by display name, UPN or primary SMTP address. Manual UPN, object ID and primary SMTP input remains available, with clear discovery errors and empty-result feedback. Secondary aliases are not supported.
 - Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
 - Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
 - Use optimized search and settings flows. Search covers event titles and locations while the active calendar remains mounted.

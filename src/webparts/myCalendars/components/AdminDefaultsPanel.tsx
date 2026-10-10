@@ -31,7 +31,7 @@ import {
 } from '../models/ICalendarSettings';
 import { calendarSourceRegistry } from '../models/CalendarSourceRegistry';
 import * as strings from 'MyCalendarsWebPartStrings';
-import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar } from '../services/ExchangeCalendarService';
+import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar, IMailboxSearchResult } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointList, ISharePointSite } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
@@ -41,6 +41,7 @@ import { getSourceTypeDescription, getSourceTypeDisplayName } from '../utils/sou
 import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
 import { formatCalendarTime } from './views/calendarFormatting';
+import { MailboxPeoplePicker } from './MailboxPeoplePicker';
 
 type AdminAddStep =
   | 'initial'
@@ -71,6 +72,7 @@ export interface IAdminDefaultsPanelProps {
   httpClient?: HttpClient;
   graphClient?: MSGraphClientV3;
   locale?: string;
+  webAbsoluteUrl?: string;
 }
 
 interface IAdminDefaultsPanelState {
@@ -107,6 +109,7 @@ interface IAdminDefaultsPanelState {
   exchangeCalendarsLoading: boolean;
   exchangeDiscoveryError?: string;
   exchangeMailbox: string;
+  exchangeMailboxPerson?: IMailboxSearchResult;
   exchangeMailboxResolved: boolean;
   exchangeSelectedCalendarId: string | undefined;
   spAvailableFields: IDropdownOption[];
@@ -176,6 +179,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   private sharePointFieldsGeneration = 0;
   private readonly mailboxDiscovery = new LatestDiscovery();
   private readonly audienceDiscovery = new LatestDiscovery();
+  private mailboxSuggestionGeneration = 0;
 
   constructor(props: IAdminDefaultsPanelProps) {
     super(props);
@@ -250,6 +254,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       exchangeCalendars: [],
       exchangeCalendarsLoading: false,
       exchangeMailbox: '',
+      exchangeMailboxPerson: undefined,
       exchangeMailboxResolved: false,
       exchangeSelectedCalendarId: undefined,
       spAvailableFields: [],
@@ -354,6 +359,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       exchangeCalendars: [],
       exchangeCalendarsLoading: false,
       exchangeMailbox: '',
+      exchangeMailboxPerson: undefined,
       exchangeMailboxResolved: false,
       exchangeSelectedCalendarId: undefined,
       spAvailableFields: [],
@@ -702,9 +708,45 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   private handleExchangeMailboxChange = (value?: string): void => {
     this.mailboxDiscovery.invalidate();
     this.setSessionState(this.editSession, {
-      exchangeMailbox: value || '', exchangeCalendars: [], exchangeCalendarsLoading: false,
+      exchangeMailbox: value || '', exchangeMailboxPerson: undefined, exchangeCalendars: [], exchangeCalendarsLoading: false,
       exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
     });
+  };
+
+  private handleExchangeMailboxPersonChange = (mailbox?: IMailboxSearchResult): void => {
+    if (!mailbox) {
+      this.handleExchangeMailboxChange('');
+      return;
+    }
+
+    this.mailboxDiscovery.invalidate();
+    this.setSessionState(this.editSession, {
+      exchangeMailbox: mailbox.userPrincipalName || mailbox.mail || mailbox.id,
+      exchangeMailboxPerson: mailbox,
+      exchangeCalendars: [], exchangeCalendarsLoading: false,
+      exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
+    });
+  };
+
+  private handleExchangeMailboxInputChange = (value: string): void => {
+    // NormalPeoplePicker clears its input after selecting a persona. Keep the selected
+    // mailbox in that case; actual typed input still replaces the current selection.
+    if (!value && this.state.exchangeMailboxPerson) return;
+    this.handleExchangeMailboxChange(value);
+  };
+
+  private resolveExchangeMailboxSuggestions = async (query: string): Promise<IMailboxSearchResult[]> => {
+    const session = this.editSession;
+    const generation = ++this.mailboxSuggestionGeneration;
+    if (!this.exchangeService || query.trim().length < 2) return [];
+
+    try {
+      const results = await this.exchangeService.searchMailboxes(query, 5, this.props.webAbsoluteUrl);
+      return this.isCurrentSession(session) && generation === this.mailboxSuggestionGeneration ? results : [];
+    } catch (error) {
+      console.error('Exchange mailbox search failed:', error);
+      return [];
+    }
   };
 
   private handleExchangeLookupMailbox = async (): Promise<void> => {
@@ -1259,8 +1301,16 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     return (
       <Stack tokens={{ childrenGap: 12 }}>
         <Label>{strings.EnterMailboxEmailLabel}</Label>
-        <TextField description={strings.MailboxInputHelpLabel} placeholder={strings.MailboxPlaceholder} value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
-        <PrimaryButton text={strings.LoadCalendarsLabel} onClick={() => this.handleExchangeLookupMailbox().catch(err => console.error(err))} />
+        <MailboxPeoplePicker
+          selectedMailbox={this.state.exchangeMailboxPerson}
+          placeholder={strings.MailboxPlaceholder}
+          disabled={exchangeCalendarsLoading}
+          onResolveSuggestions={this.resolveExchangeMailboxSuggestions}
+          onInputChange={this.handleExchangeMailboxInputChange}
+          onChange={this.handleExchangeMailboxPersonChange}
+        />
+        <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.MailboxInputHelpLabel}</div>
+        <PrimaryButton text={strings.LoadCalendarsLabel} disabled={!exchangeMailbox.trim() || exchangeCalendarsLoading} onClick={() => this.handleExchangeLookupMailbox().catch(err => console.error(err))} />
       </Stack>
     );
   }

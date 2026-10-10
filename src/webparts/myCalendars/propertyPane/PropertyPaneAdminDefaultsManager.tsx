@@ -110,6 +110,7 @@ class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerC
           graphClient={graphClient}
           loadNotice={adminLoadNotice}
           locale={context.pageContext.cultureInfo.currentCultureName}
+          webAbsoluteUrl={context.pageContext.web?.absoluteUrl}
         />
       </div>
     );

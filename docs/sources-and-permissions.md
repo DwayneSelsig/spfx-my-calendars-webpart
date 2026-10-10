@@ -83,6 +83,7 @@ Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping.
 
 - Current-user calendars are always discovered from `GET /me/calendars`.
 - A configured mailbox accepts a trimmed UPN, object ID or primary SMTP address. Secondary aliases are not resolved.
+- Administrator mailbox suggestions search directory display names, UPNs and primary SMTP addresses through the existing delegated Graph client. The persona photo uses the current SharePoint web's `/_layouts/15/userphoto.aspx` endpoint. Suggestions are convenience data only; the selected or manually entered identifier still goes through authoritative identity resolution before calendar discovery.
 - `resolveMailbox` returns `{ id, userPrincipalName }` or throws. Object IDs use `GET /users/{id}`; address input uses `GET /users` with exact `userPrincipalName`/`mail` equality and selects only `id,userPrincipalName`. OData literals are escaped, identity-query pages are followed, and zero/multiple distinct matches are rejected.
 - The resolved object ID is used for `GET /users/{id}/calendars` and `GET /users/{id}/calendars/{calendarId}/calendarView`. Identity resolution **MUST NOT** be presented as proof of calendar access.
 - Only an omitted mailbox argument selects `/me`; an explicitly empty/whitespace identifier is invalid. URL path identifiers are encoded separately. Existing stored primary SMTP addresses resolve during runtime without a schema migration.

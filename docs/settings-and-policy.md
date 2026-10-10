@@ -252,6 +252,8 @@ The current administrator panel exposes:
 - Exchange all-calendar rules including future calendars and calendar-specific exceptions; and
 - audience-targeted ICS catalog entries.
 
+The administrator Exchange flow uses a local Fluent UI people-picker wrapper for mailbox suggestions. It searches display names, UPNs and primary SMTP addresses through the existing Exchange service, keeps manual UPN/object-ID/primary-SMTP input available, and still performs authoritative identity resolution and calendar discovery only after the administrator chooses **Load calendars**.
+
 Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
 
 `PropertyPaneAdminDefaultsManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and provides the sole SPFx property writer to the webpart and reads current values through getters.

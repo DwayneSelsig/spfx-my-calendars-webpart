@@ -84,7 +84,7 @@ describe('administrator editor to SPFx property hand-off', () => {
     check('EveryoneAudienceLabel');
     click('NextLabel');
     const mailbox = document.querySelector('input[placeholder="MailboxPlaceholder"]') as HTMLInputElement;
-    act(() => { mailbox.value = 'mailbox@example.com'; Simulate.change(mailbox); });
+    act(() => { mailbox.value = 'mailbox@example.com'; Simulate.input(mailbox); });
     await act(async () => { Simulate.click(button('LoadCalendarsLabel')); });
     check('New Exchange calendar');
     click('AddItemLabel');

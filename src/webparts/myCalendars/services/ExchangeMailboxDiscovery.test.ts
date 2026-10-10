@@ -29,6 +29,32 @@ describe('Exchange identity and calendar access', () => {
     expect(paged.api).toHaveBeenCalledWith('next');
   });
 
+  it('searches mailbox suggestions by display name, UPN or primary SMTP address', async () => {
+    const client = graph([{
+      value: [
+        { id: 'two', displayName: 'Zoe Mailbox', mail: 'zoe@contoso.com', userPrincipalName: 'zoe@contoso.com', jobTitle: 'Support' },
+        { id: 'one', displayName: 'Alice Mailbox', mail: 'alice@contoso.com', userPrincipalName: 'alice@contoso.com' },
+        { id: 'duplicate', displayName: 'Alice Mailbox', mail: 'alice@contoso.com', userPrincipalName: 'alice@contoso.com' }
+      ]
+    }]);
+    const results = await new ExchangeCalendarService(client).searchMailboxes(" al' ", 5, 'https://contoso.sharepoint.com/sites/calendar/');
+
+    expect(client.api).toHaveBeenCalledWith('/users');
+    expect(client.request.query).toHaveBeenCalledWith({
+      $select: 'id,displayName,mail,userPrincipalName,jobTitle',
+      $filter: "startswith(displayName,'al''') or startswith(userPrincipalName,'al''') or startswith(mail,'al''')",
+      $top: 5
+    });
+    expect(results.map(item => item.id)).toEqual(['one', 'two']);
+    expect(results[0]).toMatchObject({ displayName: 'Alice Mailbox', userPrincipalName: 'alice@contoso.com', imageUrl: 'https://contoso.sharepoint.com/sites/calendar/_layouts/15/userphoto.aspx?accountname=alice%40contoso.com&size=M' });
+  });
+
+  it('does not query Graph for a short mailbox picker term', async () => {
+    const client = graph([]);
+    expect(await new ExchangeCalendarService(client).searchMailboxes('a')).toEqual([]);
+    expect(client.api).not.toHaveBeenCalled();
+  });
+
   it('rejects empty, missing and ambiguous identities instead of returning false or choosing arbitrarily', async () => {
     const empty = graph([]);
     await expect(new ExchangeCalendarService(empty).getCalendars('  ')).rejects.toMatchObject({ stage: 'identity', reason: 'empty' });
