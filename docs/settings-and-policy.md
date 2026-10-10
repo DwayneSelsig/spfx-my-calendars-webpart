@@ -239,6 +239,8 @@ Personal settings are the only current product data written to OneDrive. When en
 
 ### Administrator interface
 
+The administrator calendar area **MUST** use one shared bordered container headed by **Admin default calendars**, containing **Add Admin Default**, the grouped calendar assignments, and the ICS catalog under its **Admin ICS catalog** subheading. Individual ICS URL groups **MUST NOT** have their own border. Empty sections remain inside the shared container. See DEC-027.
+
 The current administrator panel exposes:
 
 - default Day, Week, or Month;

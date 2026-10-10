@@ -373,6 +373,13 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - **Status:** Resolved by removal under DEC-025
 - No mirror, rotation or backup-promotion behavior remains. Existing mirror data is ignored and omitted from subsequent page serialization.
 
+### DEC-027 — Shared administrator calendar container
+
+- **Status:** Decision
+- One bordered area groups all administrator calendars beneath **Admin default calendars**, including the **Add Admin Default** button and the ICS catalog with its own subheading.
+- ICS entries retain their URL grouping and audience actions without separate URL-group borders. Empty sections remain within the shared area.
+- This is a presentation change; settings contracts and persistence remain unchanged.
+
 ## Project and delivery
 
 ### DEC-006 — Test strategy baseline

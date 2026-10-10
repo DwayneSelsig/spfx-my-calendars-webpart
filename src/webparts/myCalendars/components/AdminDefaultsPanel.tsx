@@ -1721,7 +1721,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       groups.set(key, entries);
     });
     return Array.from(groups.entries()).map(([key, items]) => (
-      <Stack key={key} tokens={{ childrenGap: 4 }} style={{ border: '1px solid #edebe9', borderRadius: 4, padding: 8 }}>
+      <Stack key={key} tokens={{ childrenGap: 4 }} style={{ padding: 8 }}>
         <div style={{ fontSize: 12, color: '#605e5c', overflowWrap: 'anywhere' }}>{items[0].icsUrl}</div>
         {items.map((item, index) => this.renderIcsCatalogItem(item, index))}
         <DefaultButton text={strings.AddIcsAudienceLabel} iconProps={{ iconName: 'Add' }} onClick={() => {
@@ -1834,27 +1834,25 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
               }}
             />
 
-            <div>
-              <PrimaryButton text={strings.AddAdminDefaultLabel} iconProps={{ iconName: 'Add' }} onClick={this.handleOpenAddDialog} />
-            </div>
-
-            <div>
+            <Stack tokens={{ childrenGap: 16 }} style={{ border: '1px solid #edebe9', borderRadius: 4, padding: 8 }}>
               <Label>{strings.AdminDefaultCalendarsLabel}</Label>
+              <div>
+                <PrimaryButton text={strings.AddAdminDefaultLabel} iconProps={{ iconName: 'Add' }} onClick={this.handleOpenAddDialog} />
+              </div>
               <Stack tokens={{ childrenGap: 8 }}>
                 {settings.assignedSources.length > 0 || (settings.exchangeMailboxAssignments || []).length > 0
                   ? this.renderGroupedAssignments()
                   : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminDefaultCalendarsLabel}</div>}
               </Stack>
-            </div>
-
-            <div>
-              <Label>{strings.AdminIcsCatalogLabel}</Label>
-              <Stack tokens={{ childrenGap: 8 }}>
-                {settings.icsCatalog.length > 0
-                  ? this.renderIcsCatalog()
-                  : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminIcsCatalogItemsLabel}</div>}
-              </Stack>
-            </div>
+              <div>
+                <Label>{strings.AdminIcsCatalogLabel}</Label>
+                <Stack tokens={{ childrenGap: 8 }}>
+                  {settings.icsCatalog.length > 0
+                    ? this.renderIcsCatalog()
+                    : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminIcsCatalogItemsLabel}</div>}
+                </Stack>
+              </div>
+            </Stack>
           </Stack>
         )}
         </fieldset>

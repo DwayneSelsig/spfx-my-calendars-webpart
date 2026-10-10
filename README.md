@@ -79,6 +79,8 @@ https://learn.microsoft.com/sharepoint/use-app-catalog
 
 Web part editors can set administrator defaults in the property pane. Users can set personal preferences in the settings panel.
 
+The administrator panel groups its calendar assignments, Add Admin Default button, and ICS catalog in one bordered area under **Admin default calendars**. ICS subscriptions retain their URL groups and audience actions without separate borders.
+
 The administrator settings model includes:
 
 - default calendar view and display values;
