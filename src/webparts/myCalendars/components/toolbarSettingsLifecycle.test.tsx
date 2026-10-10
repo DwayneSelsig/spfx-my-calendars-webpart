@@ -43,7 +43,7 @@ describe('toolbar preference rollback against current policy', () => {
       settings: { ...defaultCalendarSettings, defaultView: 'month' }, isSettingsWritePending: false,
       onSettingsChange: async () => undefined, onPreviewSettings: () => undefined, onCancelSettingsPreview: () => undefined,
       onResetSettings: async () => undefined, onDefaultViewChange: () => pending,
-      context: { msGraphClientFactory: { getClient: async () => undefined } } as unknown as WebPartContext
+      context: { msGraphClientFactory: { getClient: async () => undefined }, pageContext: { web: { absoluteUrl: 'https://example.com/sites/calendar' } } } as unknown as WebPartContext
     };
     let calendar!: MyCalendars;
     await act(async () => { ReactDOM.render(<MyCalendars {...props} ref={instance => { if (instance) calendar = instance; }} />, host); });

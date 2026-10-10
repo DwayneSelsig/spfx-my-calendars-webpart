@@ -19,6 +19,8 @@ import { defaultAdminWebPartSettings, defaultAllowedOverrides, defaultCalendarSe
 import { resolveCalendarSettings } from '../services/CalendarSettingsService';
 import type { ISharePointList, ISharePointSite } from '../services/SharePointCalendarService';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import type { IMailboxSearchResult } from '../services/ExchangeCalendarService';
+import { MailboxPeoplePicker, type IMailboxPeoplePickerProps } from './MailboxPeoplePicker';
 
 function resultDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let complete!: (value: T) => void;
@@ -527,6 +529,61 @@ describe('settings panels awaited lifecycle', () => {
       await act(async () => { pending.resolve(); await pending.promise; });
       expect(props.onDismiss).not.toHaveBeenCalled();
     }
+  });
+
+  it('keeps a selected personal mailbox when the picker clears input and loads only on request', async () => {
+    const { panel } = user();
+    const mailbox = { id: 'mailbox-id', displayName: 'Shared mailbox', userPrincipalName: 'shared@example.com', mail: 'primary@example.com', imageUrl: '' };
+    const getCalendars = jest.fn(async () => []);
+    const wizard = panel as unknown as {
+      exchangeService: { getCalendars: typeof getCalendars };
+      renderExchangeMailboxPicker: () => React.ReactElement<{ children: React.ReactElement[] }>;
+    };
+    wizard.exchangeService = { getCalendars };
+    act(() => panel.setState({ showAddDialog: true, addingCalendarType: 'exchange', addingCalendarStep: 'exchange-mailbox' }));
+    const pickerProps = (): IMailboxPeoplePickerProps => {
+      const picker = wizard.renderExchangeMailboxPicker().props.children.find(child => child.type === MailboxPeoplePicker)!;
+      return picker.props as IMailboxPeoplePickerProps;
+    };
+    expect(document.querySelector('input[aria-label="EnterMailboxEmailLabel"]')).not.toBeNull();
+    act(() => pickerProps().onChange(mailbox));
+    act(() => pickerProps().onInputChange(''));
+    expect(panel.state.exchangeMailbox).toBe('shared@example.com');
+    expect(pickerProps().selectedMailbox).toEqual(mailbox);
+    expect(getCalendars).not.toHaveBeenCalled();
+    await act(async () => { click('LoadOtherMailboxLabel'); });
+    expect(getCalendars).toHaveBeenCalledWith('shared@example.com');
+    act(() => pickerProps().onInputChange('manual-object-id'));
+    expect(panel.state.exchangeMailboxPerson).toBeUndefined();
+    expect(panel.state.exchangeMailboxResolved).toBe(false);
+    await act(async () => { click('LoadOtherMailboxLabel'); });
+    expect(getCalendars).toHaveBeenLastCalledWith('manual-object-id');
+    act(() => pickerProps().onChange(undefined));
+    expect(panel.state.exchangeMailbox).toBe('');
+    expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'LoadOtherMailboxLabel')?.disabled).toBe(true);
+  });
+
+  it.each(['new input', 'cancel'])('discards personal mailbox suggestions after %s', async reason => {
+    const { panel } = user({ webAbsoluteUrl: 'https://example.com/sites/calendar' });
+    const pending = resultDeferred<IMailboxSearchResult[]>();
+    const searchMailboxes = jest.fn(() => pending.promise);
+    const wizard = panel as unknown as {
+      exchangeService: { searchMailboxes: typeof searchMailboxes };
+      resolveExchangeMailboxSuggestions: (query: string) => Promise<IMailboxSearchResult[]>;
+      handleExchangeMailboxInputChange: (query: string) => void;
+      handleCloseAddDialog: () => void;
+    };
+    wizard.exchangeService = { searchMailboxes };
+    expect(await wizard.resolveExchangeMailboxSuggestions('a')).toEqual([]);
+    expect(searchMailboxes).not.toHaveBeenCalled();
+    const loading = wizard.resolveExchangeMailboxSuggestions('shared');
+    expect(searchMailboxes).toHaveBeenCalledWith('shared', 5, 'https://example.com/sites/calendar');
+    act(() => {
+      if (reason === 'cancel') wizard.handleCloseAddDialog();
+      else wizard.handleExchangeMailboxInputChange('different');
+    });
+    pending.resolve([{ id: 'old', displayName: 'Old mailbox', userPrincipalName: 'old@example.com', imageUrl: '' }]);
+    expect(await loading).toEqual([]);
   });
 
   it('ignores administrator group discovery after closing and reopening the draft', async () => {

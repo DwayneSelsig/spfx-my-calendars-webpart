@@ -155,6 +155,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - Configured Exchange mailboxes accept UPN, object ID and primary SMTP (`mail`). Secondary aliases remain outside scope; delegated `User.ReadBasic.All` supports the needed basic-field identity resolution.
+- Administrator and personal mailbox entry use the same people-picker with display-name, UPN and primary-SMTP suggestions plus manual identifier input. Selection retains the chosen mailbox when Fluent UI clears input. Calendar discovery requires the load button; obsolete personal suggestion responses are discarded after input changes or dialog-session changes.
 - Identity resolution is separate from calendar access. Zero/multiple identity matches and request failures are distinct; discovery/event 404 does not prove a missing mailbox.
 - Active settings discovery completes loading on success and failure, clears stale results, ignores obsolete requests and shows localized error/empty feedback. Audience selections survive discovery failures and changes to search results.
 - Audience discovery follows all result pages and sorts locally without Graph `$orderby`. Membership semantics remain unchanged; DEC-024 expands discovery to the confirmed group types and Everyone.

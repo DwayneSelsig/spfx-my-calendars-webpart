@@ -3,6 +3,7 @@ import { AssignmentGroup, assignmentPolicyLabel } from './AssignmentControls';
 import { applyAdminSourceChanges, isAutomaticExchangeCalendarAssigned, restoreMandatoryAdminSourcesInDraft } from '../services/CalendarSettingsService';
 import * as React from 'react';
 import { LatestDiscovery } from './latestDiscovery';
+import { MailboxPeoplePicker } from './MailboxPeoplePicker';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
 import { TextField } from '@fluentui/react/lib/TextField';
 import { PrimaryButton, DefaultButton, IconButton } from '@fluentui/react/lib/Button';
@@ -18,7 +19,7 @@ import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
 import { ICalendarSource, ICalendarSettings, CalendarSourceType } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
-import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar } from '../services/ExchangeCalendarService';
+import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar, IMailboxSearchResult } from '../services/ExchangeCalendarService';
 import { SharePointCalendarService, ISharePointSite, ISharePointList } from '../services/SharePointCalendarService';
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
@@ -35,6 +36,7 @@ export interface IUserSettingsPanelProps {
   onReset: () => Promise<void>;
   httpClient?: HttpClient;
   graphClient?: MSGraphClientV3;
+  webAbsoluteUrl?: string;
   locale?: string;
 }
 interface IUserSettingsPanelState {
@@ -64,6 +66,7 @@ interface IUserSettingsPanelState {
   exchangeCalendarsLoading: boolean;
   exchangeDiscoveryError?: string;
   exchangeMailbox: string;
+  exchangeMailboxPerson?: IMailboxSearchResult;
   exchangeMailboxResolved: boolean;
   exchangeSelectedCalendarId: string | undefined;
   // SharePoint field mapping
@@ -141,6 +144,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
 
   private readonly SITES_PER_PAGE = 20;
   private readonly mailboxDiscovery = new LatestDiscovery();
+  private mailboxSuggestionGeneration = 0;
   private readonly userCalendarDiscovery = new LatestDiscovery();
 
   constructor(props: IUserSettingsPanelProps) {
@@ -235,6 +239,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
 
   private invalidateDialogDiscovery(): void {
     this.mailboxDiscovery.invalidate();
+    this.mailboxSuggestionGeneration++;
   }
 
   public componentWillUnmount(): void {
@@ -308,7 +313,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     this.setSessionState(this.editSession, {
       showAddDialog: false, addingCalendarType: undefined, addingCalendarStep: 'initial',
       spSites: [], spSiteFilter: '', spCurrentPage: 0, spSelectedSite: undefined,
-      spLists: [], spSelectedList: undefined, exchangeCalendars: [], exchangeMailbox: '',
+      spLists: [], spSelectedList: undefined, exchangeCalendars: [], exchangeMailbox: '', exchangeMailboxPerson: undefined,
       exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, icsUrl: '',
       teamsShiftsShowLogo: true, unifiedGroups: [], unifiedGroupsLoading: false,
       unifiedGroupsSelection: {}, newCalendarColor: this.props.settings.organizationPrimaryColor || '#0078d4', newCalendarName: ''
@@ -367,7 +372,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     this.setSessionState(this.editSession, {
       addingCalendarStep: 'initial', spSites: [], spSitesLoading: false, spSiteFilter: '', spCurrentPage: 0,
       spSelectedSite: undefined, spLists: [], spListsLoading: false, spSelectedList: undefined,
-      exchangeCalendars: [], exchangeCalendarsLoading: false, exchangeMailbox: '', exchangeMailboxResolved: false,
+      exchangeCalendars: [], exchangeCalendarsLoading: false, exchangeMailbox: '', exchangeMailboxPerson: undefined, exchangeMailboxResolved: false,
       exchangeSelectedCalendarId: undefined, icsUrl: '', plannerPlans: [], plannerPlansLoading: false,
       plannerSelectedPlanId: undefined, plannerAssignedToMeOnly: false, plannerShowCompleted: true,
       plannerShowLogo: true, teamsShiftsShowLogo: true, unifiedGroups: [], unifiedGroupsLoading: false,
@@ -604,10 +609,45 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   // Exchange flow
   private handleExchangeMailboxChange = (value?: string): void => {
     this.mailboxDiscovery.invalidate();
+    this.mailboxSuggestionGeneration++;
     this.setSessionState(this.editSession, {
-      exchangeMailbox: value || '', exchangeCalendars: [], exchangeCalendarsLoading: false,
+      exchangeMailbox: value || '', exchangeMailboxPerson: undefined, exchangeCalendars: [], exchangeCalendarsLoading: false,
       exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
     });
+  };
+
+  private handleExchangeMailboxPersonChange = (mailbox?: IMailboxSearchResult): void => {
+    if (!mailbox) {
+      this.handleExchangeMailboxChange('');
+      return;
+    }
+    this.mailboxDiscovery.invalidate();
+    this.mailboxSuggestionGeneration++;
+    this.setSessionState(this.editSession, {
+      exchangeMailbox: mailbox.userPrincipalName || mailbox.mail || mailbox.id,
+      exchangeMailboxPerson: mailbox,
+      exchangeCalendars: [], exchangeCalendarsLoading: false,
+      exchangeMailboxResolved: false, exchangeSelectedCalendarId: undefined, exchangeDiscoveryError: undefined
+    });
+  };
+
+  private handleExchangeMailboxInputChange = (value: string): void => {
+    // Fluent UI clears the input after selecting a persona; retain that selection.
+    if (!value && this.state.exchangeMailboxPerson) return;
+    this.handleExchangeMailboxChange(value);
+  };
+
+  private resolveExchangeMailboxSuggestions = async (query: string): Promise<IMailboxSearchResult[]> => {
+    const session = this.editSession;
+    const generation = ++this.mailboxSuggestionGeneration;
+    if (!this.exchangeService || query.trim().length < 2) return [];
+    try {
+      const results = await this.exchangeService.searchMailboxes(query, 5, this.props.webAbsoluteUrl);
+      return this.isCurrentSession(session) && generation === this.mailboxSuggestionGeneration ? results : [];
+    } catch (error) {
+      console.error('Exchange mailbox search failed:', error);
+      return [];
+    }
   };
 
   private handleExchangeLookupMailbox = async (): Promise<void> => {
@@ -979,6 +1019,21 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     );
   };
 
+  private renderExchangeMailboxPicker = (): React.ReactElement => (
+    <Stack tokens={{ childrenGap: 4 }}>
+      <Label>{strings.EnterMailboxEmailLabel}</Label>
+      <MailboxPeoplePicker
+        selectedMailbox={this.state.exchangeMailboxPerson}
+        placeholder={strings.MailboxPlaceholder}
+        disabled={this.state.exchangeCalendarsLoading}
+        onResolveSuggestions={this.resolveExchangeMailboxSuggestions}
+        onInputChange={this.handleExchangeMailboxInputChange}
+        onChange={this.handleExchangeMailboxPersonChange}
+      />
+      <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.MailboxInputHelpLabel}</div>
+    </Stack>
+  );
+
   private renderExchangeFlow = (): React.ReactElement => {
     const { exchangeMailbox, exchangeMailboxResolved, exchangeCalendars, exchangeCalendarsLoading, exchangeSelectedCalendarId } = this.state;
 
@@ -1048,14 +1103,9 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
 
           {/* Option to search another mailbox */}
           <div style={{ borderTop: '1px solid #edebe9', paddingTop: 12, marginTop: 8 }}>
-            <Label>{strings.EnterMailboxEmailLabel}</Label>
-            <TextField
-              description={strings.MailboxInputHelpLabel} placeholder={strings.MailboxPlaceholder}
-              value={exchangeMailbox}
-              onChange={(_, value) => this.handleExchangeMailboxChange(value)}
-            />
+            {this.renderExchangeMailboxPicker()}
             <div style={{ marginTop: 8 }}>
-              <PrimaryButton text={strings.LoadOtherMailboxLabel} onClick={this.handleExchangeLookupMailbox} />
+              <PrimaryButton text={strings.LoadOtherMailboxLabel} disabled={!exchangeMailbox.trim()} onClick={this.handleExchangeLookupMailbox} />
             </div>
           </div>
         </Stack>
@@ -1065,8 +1115,8 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     // Default: Show instructions to open Outlook
     return (
       <Stack tokens={{ childrenGap: 16 }}>
-        <TextField label={strings.EnterMailboxEmailLabel} description={strings.MailboxInputHelpLabel} placeholder={strings.MailboxPlaceholder} value={exchangeMailbox} onChange={(_, value) => this.handleExchangeMailboxChange(value)} />
-        <PrimaryButton text={strings.LoadOtherMailboxLabel} onClick={this.handleExchangeLookupMailbox} />
+        {this.renderExchangeMailboxPicker()}
+        <PrimaryButton text={strings.LoadOtherMailboxLabel} disabled={!exchangeMailbox.trim()} onClick={this.handleExchangeLookupMailbox} />
         <Label>{strings.OutlookCalendarDescription}</Label>
         <div style={{
           padding: '16px',

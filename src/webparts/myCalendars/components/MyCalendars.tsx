@@ -1341,6 +1341,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           onReset={this.props.onResetSettings}
           httpClient={this.props.context.httpClient}
           graphClient={this.state.graphClient}
+          webAbsoluteUrl={this.props.context.pageContext.web.absoluteUrl}
           locale={this.props.locale}
         />
       </div>
