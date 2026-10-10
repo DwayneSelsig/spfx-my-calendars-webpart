@@ -252,7 +252,7 @@ The current administrator panel exposes:
 - assigned Exchange, SharePoint, Planner, Unified Group/Team, and Teams Shifts sources;
 - group-first Exchange/SharePoint configuration, per-calendar Mandatory/Default/Available policy, shared source presentation and individual override permissions;
 - Exchange all-calendar rules including future calendars and calendar-specific exceptions; and
-- audience-first ICS catalog creation: one supported Entra group or explicit Everyone, then a required title and URL, added to the draft and persisted on Save. The administrator catalog groups entries by case-insensitive URL, displays that URL once with its titled audience entries, and provides Add audience using the group's first entry's title and URL. Each entry remains independently editable; editing its URL moves it to the corresponding URL group.
+- audience-first ICS catalog creation: one supported Entra group or explicit Everyone, then a required title and URL, added to the draft and persisted on Save. The administrator catalog groups entries by case-insensitive URL and displays that URL once with its titled audience entries. Audiences are edited through **Groups** when editing an entry; URL groups do not expose an **Add audience** button. Each entry remains independently editable; editing its URL moves it to the corresponding URL group.
 
 The administrator Exchange flow uses a local Fluent UI people-picker wrapper for mailbox suggestions. It searches display names, UPNs and primary SMTP addresses through the existing Exchange service, keeps manual UPN/object-ID/primary-SMTP input available, and still performs authoritative identity resolution and calendar discovery only after the administrator chooses **Load calendars**.
 

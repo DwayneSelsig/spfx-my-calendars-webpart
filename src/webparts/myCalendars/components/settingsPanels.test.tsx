@@ -113,7 +113,7 @@ describe('settings panels awaited lifecycle', () => {
     expect(panel.state.settings.icsCatalog).toEqual([]);
   });
 
-  it('shows a shared ICS URL once and adds an audience without re-entering its title or URL', async () => {
+  it('shows a shared ICS URL once and edits audiences through Groups without an Add audience button', async () => {
     const url = 'https://example.com/holidays';
     const catalog = [
       { adminIcsId: 'all', displayName: 'Holidays', icsUrl: url, audienceGroups: [] },
@@ -124,13 +124,14 @@ describe('settings panels awaited lifecycle', () => {
     expect(document.body.textContent).toContain('AudiencesLabel: EveryoneAudienceLabel');
     expect(document.body.textContent).toContain('AudiencesLabel: MT');
     expect(document.querySelectorAll('button[aria-label="EditLabel"]')).toHaveLength(2);
-    await act(async () => { click('AddIcsAudienceLabel'); });
+    expect(document.body.textContent).not.toContain('AddIcsAudienceLabel');
+    act(() => { Simulate.click(document.querySelectorAll<HTMLButtonElement>('button[aria-label="EditLabel"]')[1]); });
+    await act(async () => { click('GroupsLabel'); });
     expect(panel.state.addingCalendarStep).toBe('admin-audience-select');
-    expect(panel.state.pendingAdminIcs).toEqual({ displayName: 'Holidays', icsUrl: url });
-    act(() => { panel.setState({ selectedAudienceGroups: { hr: 'HR' } }); });
-    click('AddItemLabel');
-    expect(panel.state.settings.icsCatalog.slice(0, 2)).toEqual(catalog);
-    expect(panel.state.settings.icsCatalog[2]).toMatchObject({ displayName: 'Holidays', icsUrl: url, audienceGroups: [{ groupId: 'hr', displayName: 'HR' }] });
+    expect(panel.state.pendingAdminIcs).toEqual({ adminIcsId: 'mt', displayName: 'MT holidays', icsUrl: url });
+    act(() => { panel.setState({ selectedAudienceGroups: { hr: 'HR' }, everyone: false }); });
+    click('ApplyGroupsLabel');
+    expect(panel.state.settings.icsCatalog).toEqual([catalog[0], { ...catalog[1], audienceGroups: [{ groupId: 'hr', displayName: 'HR' }] }]);
     expect(panel.state.showAddDialog).toBe(false);
     expect(Array.from(document.querySelectorAll('div')).filter(element => element.textContent === url)).toHaveLength(1);
   });

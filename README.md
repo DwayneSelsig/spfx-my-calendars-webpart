@@ -79,7 +79,7 @@ https://learn.microsoft.com/sharepoint/use-app-catalog
 
 Web part editors can set administrator defaults in the property pane. Users can set personal preferences in the settings panel.
 
-The administrator panel groups its calendar assignments, Add Admin Default button, and ICS catalog in one bordered area under **Admin default calendars**. ICS subscriptions retain their URL groups and audience actions without separate borders.
+The administrator panel groups its calendar assignments, Add Admin Default button, and ICS catalog in one bordered area under **Admin default calendars**. ICS subscriptions retain their URL groups without separate borders; edit an entry and choose **Groups** to change its audiences.
 
 The administrator settings model includes:
 
@@ -88,7 +88,7 @@ The administrator settings model includes:
 - organization color and source-logo defaults;
 - audience-assigned calendar sources;
 - Exchange mailbox headings showing the mailbox name and primary email address;
-- audience-assigned ICS catalog entries grouped under one URL, with a direct action to add audiences without re-entering the subscription URL;
+- audience-assigned ICS catalog entries grouped under one URL, with audience editing through **Groups** on each entry;
 - automatic loading defaults for Planner, Groups and Teams, and Teams Shifts;
 
 The current administrator panel does not expose every modeled field. Organization color, service-level source-logo defaults, automatic source-loading defaults, and the Planner assigned-to-me default are registered implementation gaps.

@@ -1724,11 +1724,6 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
       <Stack key={key} tokens={{ childrenGap: 4 }} style={{ padding: 8 }}>
         <div style={{ fontSize: 12, color: '#605e5c', overflowWrap: 'anywhere' }}>{items[0].icsUrl}</div>
         {items.map((item, index) => this.renderIcsCatalogItem(item, index))}
-        <DefaultButton text={strings.AddIcsAudienceLabel} iconProps={{ iconName: 'Add' }} onClick={() => {
-          this.setSessionState(this.editSession, { showAddDialog: true, addingCalendarType: 'ics' }, () => {
-            this.beginAudienceSelectionForIcs({ displayName: items[0].displayName, icsUrl: items[0].icsUrl }).catch(error => console.error(error));
-          });
-        }} />
       </Stack>
     ));
   }

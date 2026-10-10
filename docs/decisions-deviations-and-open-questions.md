@@ -111,7 +111,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - The administrator ICS catalog publishes approved subscription links to audiences; it is not an event-source catalog.
 - New administrator ICS entries start with one supported Entra group or explicit Everyone, then a required title and URL. Add updates the draft; Save persists through the existing SPFx property bridge.
 - The same case-insensitive ICS URL is allowed for different audience sets, including Everyone alongside targeted groups. Entries retain independent IDs/titles and each applicable entry is shown. Duplicate URL/audience-set combinations are rejected regardless of group order.
-- The administrator catalog shows one URL block containing its audience entries. Add audience reuses that block's first entry's title and URL; existing entries remain independently editable and retain their IDs.
+- The administrator catalog shows one URL block containing its audience entries. Audiences are edited through Groups on the individual entry, without a separate Add audience button on the URL block. Entries remain independently editable and retain their IDs.
 - Selecting an applicable administrator entry opens the generated Outlook subscription link directly and closes the add dialog. Manual subscription input remains available. Outlook completes the subscription; the web part does not record completion.
 
 ### DEC-004 — Independent source loading
