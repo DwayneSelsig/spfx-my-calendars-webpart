@@ -113,6 +113,7 @@ Assignments persist two booleans, not a policy enum:
 
 - Mandatory sources **MUST** remain enabled and **MUST NOT** be removed by users. Normalization **MUST** force their defaultEnabled to true.
 - When an applicable Default or Available source becomes Mandatory, it **MUST** reappear enabled even if the user's saved override contains `removed: true` or `isEnabled: false`. Restoration **MUST NOT** require resetting or saving personal settings first. Those now-disallowed membership overrides follow the observed-change cleanup rules below; permitted presentation overrides remain applicable.
+- An open personal settings draft **MUST** also restore sources when it receives the effective Mandatory policy, retaining unrelated edits and permitted source presentation edits. A pending Save snapshot **MUST NOT** be changed; the panel reconciles after that operation finishes.
 - Optional sources **MAY** be disabled or removed. Their effective visibility **MUST** use an explicit user override when present, otherwise defaultEnabled.
 - An explicit user visibility choice **MUST** survive administrator-default changes, even when the saved choice equals the default. Untouched sources **MUST NOT** acquire visibility overrides. Following the administrator default removes the explicit choice.
 - When multiple applicable assignments identify the same calendar, the resolver **MUST** create one effective source. Mandatory takes precedence over Default, which takes precedence over Available.
@@ -176,11 +177,11 @@ Current administrator and personal locations accept only integer schema versions
 
 1. `AdminDefaultsPanel` opens an isolated complete draft from the latest accepted administrator settings. Incoming props never replace an open draft. Reset replaces only the draft with the complete defaults; Cancel persists nothing.
 2. The panel snapshots the draft and awaits its `Promise<void>` callback through `PropertyPaneAdminDefaultsManager` to `MyCalendarsWebPart`.
-3. The web part validates and serializes once. Its required SPFx commit callback hands the JSON to `adminSettings`. SPFx is the sole property writer; there is no additional local assignment or notification path.
+3. The web part validates and serializes once. Its required SPFx commit callback hands the JSON to `adminSettings`. The web part verifies that the property contains that JSON before accepting the configuration; a callback that silently ignores the transfer rejects Save. SPFx is the sole property writer; there is no additional local assignment or notification path.
 4. The web part accepts the configuration, then attempts audience/mailbox resolution and runtime rebuilding. Post-transfer failures are logged and exposed separately; they do not reject successful property transfer.
 5. Save closes the panel only after completion. The adapter reads current settings/notices through getters and updates its summary without `propertyPane.refresh()`.
 
-**Requirements:** administrator settings **MUST** remain a complete `IAdminWebPartSettings`. Non-exposed fields, stable identities and policy **MUST** survive edits. UI-only wizard state **MUST NOT** be persisted. The panel and composition owner **MUST** prevent concurrent Save operations. A rejected transfer **MUST** retain the draft and restore controls; a partially changed property is restored through the same callback, with any restoration failure logged separately.
+**Requirements:** administrator settings **MUST** remain a complete `IAdminWebPartSettings`. Non-exposed fields, stable identities and policy **MUST** survive edits. UI-only wizard state **MUST NOT** be persisted. The panel and composition owner **MUST** prevent concurrent Save operations. A rejected transfer **MUST** retain the draft and restore controls; a partially changed property is restored and checked through the same callback, with any restoration failure logged separately.
 
 **SPFx caveat:** the custom field's `onRender` callback supplies the supported framework change bridge. A successful callback is an SPFx hand-off, not proof of SharePoint page publication. Save/publication/reload remains host verification. `onDispose` unmounts the adapter; async completions never update disposed controls. No timers or internal SPFx APIs are used.
 

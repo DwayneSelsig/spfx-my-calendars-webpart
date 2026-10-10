@@ -347,6 +347,19 @@ export function applyAdminSourceChanges(source: ICalendarSource, updates: Partia
   return { ...source, ...accepted };
 }
 
+/** An open personal draft must observe Mandatory membership without losing other edits. */
+export function restoreMandatoryAdminSourcesInDraft(draft: ICalendarSettings, effective: ICalendarSettings): ICalendarSettings {
+  const mandatory = new Map(effective.sources.filter(source => source.origin === 'admin' && source.isMandatory).map(source => [source.id, source]));
+  const sources = draft.sources.map(source => {
+    const current = source.origin === 'admin' ? mandatory.get(source.id) : undefined;
+    if (!current) return source;
+    mandatory.delete(source.id);
+    return applyAdminSourceChanges(current, source);
+  });
+  mandatory.forEach(source => sources.push({ ...source }));
+  return JSON.stringify(sources) === JSON.stringify(draft.sources) ? draft : { ...draft, sources };
+}
+
 export function generateStableId(prefix: string = 'source'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }

@@ -8,13 +8,14 @@ jest.mock('./services/SettingsStorageService', () => ({}));
 
 import MyCalendarsWebPart from './MyCalendarsWebPart';
 import { defaultAdminWebPartSettings, defaultCalendarSettings, defaultUserCalendarSettings, type IAdminWebPartSettings, type ICalendarSettings, type IUserCalendarSettings } from './models/ICalendarSettings';
-import { loadAdminWebPartSettings, serializeAdminWebPartSettings } from './services/CalendarSettingsService';
+import { loadAdminWebPartSettings, normalizeUserCalendarSettings, serializeAdminWebPartSettings } from './services/CalendarSettingsService';
 
 interface Harness {
   properties: { adminSettings?: string };
   _adminSettings: IAdminWebPartSettings;
   _adminLoadNotice?: string;
   _userSettings: IUserCalendarSettings;
+  _audienceService: { getMatchingGroupIds: jest.Mock };
   _resolvedSettings: ICalendarSettings;
   _storageService: { saveUserSettings: jest.Mock; deleteUserSettings: jest.Mock };
   _userSavePending: boolean;
@@ -54,11 +55,65 @@ describe('settings composition ownership', () => {
     expect(Object.keys(webpart.properties)).toEqual(['adminSettings']);
   });
 
-  it('does not perform an additional direct property write', async () => {
+  it('restores a removed Exchange assignment through administrator Save and reload without a personal reset', async () => {
+    const rebuild = (MyCalendarsWebPart.prototype as unknown as { rebuildResolvedSettings: () => Promise<void> }).rebuildResolvedSettings;
+    const audience = { getMatchingGroupIds: jest.fn(async () => new Set(['target-group'])) };
+    webpart._audienceService = audience;
+    webpart.rebuildResolvedSettings = jest.fn(rebuild.bind(webpart));
+    const optional = loadAdminWebPartSettings({ current: serializeAdminWebPartSettings({
+      ...structuredClone(defaultAdminWebPartSettings),
+      assignedSources: [{
+        assignmentId: 'assignment-id', adminSourceId: 'source-id',
+        source: { sourceType: 'exchange', exchangeMailbox: 'mailbox-id', exchangeCalendarId: 'calendar-id',
+          name: 'Assigned calendar', color: '#0078d4', isEnabled: true },
+        audienceGroups: [{ groupId: 'target-group', displayName: 'Target group' }],
+        isMandatory: false, defaultEnabled: true
+      }]
+    }) }).settings;
+    webpart._adminSettings = optional;
+    await webpart.rebuildResolvedSettings();
+    expect(webpart._resolvedSettings.sources).toHaveLength(1);
+
+    await webpart.handleUserSettingsChange({ ...webpart._resolvedSettings, sources: [] });
+    const removedFile = JSON.stringify(webpart._storageService.saveUserSettings.mock.calls[0][0]);
+    expect(JSON.parse(removedFile).adminSourceOverridesById).toEqual({ 'source-id': { removed: true } });
+    expect(webpart._resolvedSettings.sources).toEqual([]);
+    webpart._storageService.saveUserSettings.mockClear();
+
+    await webpart.handleAdminSettingsSave({ ...optional,
+      assignedSources: optional.assignedSources.map(item => ({ ...item, isMandatory: true }))
+    }, json => { webpart.properties.adminSettings = json; });
+    expect(webpart._resolvedSettings.sources).toHaveLength(1);
+    expect(webpart._resolvedSettings.sources[0]).toMatchObject({ id: 'source-id', isMandatory: true, isEnabled: true });
+    expect(webpart._userSettings.adminSourceOverridesById).toEqual({});
+    expect(webpart._storageService.saveUserSettings).not.toHaveBeenCalled();
+
+    // Start another instance with the accepted administrator JSON and the old OneDrive file.
+    const reloaded = new MyCalendarsWebPart() as unknown as Harness;
+    reloaded.render = jest.fn();
+    reloaded._adminSettings = loadAdminWebPartSettings({ current: webpart.properties.adminSettings }).settings;
+    reloaded._userSettings = normalizeUserCalendarSettings(JSON.parse(removedFile))!;
+    reloaded._audienceService = audience;
+    reloaded._storageService = webpart._storageService;
+    await rebuild.call(reloaded);
+    expect(reloaded._resolvedSettings.sources).toHaveLength(1);
+    expect(reloaded._resolvedSettings.sources[0]).toMatchObject({ id: 'source-id', isMandatory: true, isEnabled: true });
+    expect(reloaded._storageService.saveUserSettings).not.toHaveBeenCalled();
+
+    await reloaded.handleDefaultViewChange('week');
+    expect(reloaded._storageService.saveUserSettings).toHaveBeenCalledTimes(1);
+    expect(reloaded._storageService.saveUserSettings.mock.calls[0][0]).toMatchObject({
+      defaultView: 'week', adminSourceOverridesById: {}
+    });
+  });
+
+  it('rejects a callback that does not transfer the property instead of accepting an unsaved configuration', async () => {
     const commit = jest.fn();
-    await webpart.handleAdminSettingsSave(defaultAdminWebPartSettings, commit);
+    await expect(webpart.handleAdminSettingsSave({ ...defaultAdminWebPartSettings, defaultView: 'day' }, commit)).rejects.toThrow('SPFx did not accept');
     expect(commit).toHaveBeenCalledTimes(1);
     expect(webpart.properties).toEqual({});
+    expect(webpart._adminSettings.defaultView).toBe('month');
+    expect(webpart.rebuildResolvedSettings).not.toHaveBeenCalled();
   });
 
   it('keeps accepted settings on transfer failure and restores a partial write through the same route', async () => {
@@ -77,7 +132,7 @@ describe('settings composition ownership', () => {
   it('rejects concurrent administrator saves and classifies runtime failure after transfer separately', async () => {
     let finish!: () => void;
     webpart.rebuildResolvedSettings.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
-    const commit = jest.fn();
+    const commit = jest.fn((json: string | undefined) => { webpart.properties.adminSettings = json; });
     const pending = webpart.handleAdminSettingsSave(defaultAdminWebPartSettings, commit);
     await expect(webpart.handleAdminSettingsSave(defaultAdminWebPartSettings, commit)).rejects.toThrow('already in progress');
     expect(commit).toHaveBeenCalledTimes(1);
@@ -106,6 +161,20 @@ describe('settings composition ownership', () => {
     expect(commit).toHaveBeenCalledTimes(2);
     expect(webpart._adminLoadNotice).toContain('could not be restored');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Could not restore'), expect.any(Error));
+  });
+
+  it('detects a mismatched transfer and a silently ignored restoration through the same callback', async () => {
+    const previous = serializeAdminWebPartSettings(defaultAdminWebPartSettings);
+    webpart.properties.adminSettings = previous;
+    const commit = jest.fn((json: string | undefined) => {
+      if (json !== previous) webpart.properties.adminSettings = 'unexpected host value';
+    });
+    await expect(webpart.handleAdminSettingsSave({ ...defaultAdminWebPartSettings, defaultView: 'day' }, commit)).rejects.toThrow('SPFx did not accept');
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(commit).toHaveBeenLastCalledWith(previous);
+    expect(webpart._adminSettings.defaultView).toBe('month');
+    expect(webpart._adminLoadNotice).toContain('could not be restored');
+    expect(webpart.rebuildResolvedSettings).not.toHaveBeenCalled();
   });
 
   it('previews and cancels personal settings without any storage or administrator writes', () => {

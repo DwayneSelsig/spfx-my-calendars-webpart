@@ -349,9 +349,17 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       const previous = this.properties.adminSettings;
       try {
         commitProperty(serialized);
+        if (this.properties.adminSettings !== serialized) {
+          throw new Error('SPFx did not accept the administrator settings property.');
+        }
       } catch (error) {
         if (this.properties.adminSettings !== previous) {
-          try { commitProperty(previous); }
+          try {
+            commitProperty(previous);
+            if (this.properties.adminSettings !== previous) {
+              throw new Error('SPFx did not restore the administrator settings property.');
+            }
+          }
           catch (restoreError) {
             console.error('Could not restore administrator properties after a rejected save.', restoreError);
             this._adminLoadNotice = strings.AdminSettingsRestoreErrorLabel;

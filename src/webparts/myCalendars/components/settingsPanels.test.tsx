@@ -15,7 +15,8 @@ import { act, Simulate } from 'react-dom/test-utils';
 import { setIconOptions } from '@fluentui/react/lib/Styling';
 import { AdminDefaultsPanel, type IAdminDefaultsPanelProps } from './AdminDefaultsPanel';
 import { UserSettingsPanel, type IUserSettingsPanelProps } from './UserSettingsPanel';
-import { defaultAdminWebPartSettings, defaultCalendarSettings } from '../models/ICalendarSettings';
+import { defaultAdminWebPartSettings, defaultAllowedOverrides, defaultCalendarSettings, defaultUserCalendarSettings } from '../models/ICalendarSettings';
+import { resolveCalendarSettings } from '../services/CalendarSettingsService';
 import type { ISharePointList, ISharePointSite } from '../services/SharePointCalendarService';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 
@@ -142,6 +143,39 @@ describe('settings panels awaited lifecycle', () => {
     expect(panel.state.isSaving).toBe(false);
     expect(props.onDismiss).not.toHaveBeenCalled();
     expectError(panel, 'UserSettingsSaveErrorLabel');
+  });
+
+  it.each(['removed', 'disabled'])('restores a %s Exchange row when current policy becomes Mandatory in an open personal panel', choice => {
+    const optional = { ...structuredClone(defaultAdminWebPartSettings), assignedSources: [{
+      assignmentId: 'assignment-id', adminSourceId: 'source-id', isMandatory: false, defaultEnabled: true,
+      source: { sourceType: 'exchange' as const, exchangeMailbox: 'mailbox-id', exchangeCalendarId: 'calendar-id',
+        name: 'Assigned calendar', color: '#0078d4', isEnabled: true },
+      audienceGroups: [{ groupId: 'target-group', displayName: 'Target group' }]
+    }] };
+    const matchedGroupIds = new Set(['target-group']);
+    const settings = resolveCalendarSettings({ adminSettings: optional, userSettings: defaultUserCalendarSettings, matchedGroupIds });
+    const { panel, props } = user({ settings });
+    act(() => {
+      panel.setState(previous => ({ settings: { ...previous.settings, userShowWeekends: false,
+        sources: choice === 'removed' ? [] : previous.settings.sources.map(source => ({ ...source, name: 'Draft name', color: '#ffffff', isEnabled: false, visibilityOverride: false }))
+      } }));
+    });
+    const mandatory = { ...optional, assignedSources: optional.assignedSources.map(item => ({ ...item, isMandatory: true,
+      allowedOverrides: { ...defaultAllowedOverrides, color: false }
+    })) };
+    const restored = resolveCalendarSettings({ adminSettings: mandatory, userSettings: {
+      ...defaultUserCalendarSettings, adminSourceOverridesById: { 'source-id': { removed: true, isEnabled: false, name: 'Stored name', color: '#ffffff' } }
+    }, matchedGroupIds });
+    act(() => { ReactDOM.render(<UserSettingsPanel {...props} settings={restored} />, host); });
+    expect(panel.state.settings.sources).toHaveLength(1);
+    expect(panel.state.settings.sources[0]).toMatchObject({ id: 'source-id', isMandatory: true, isEnabled: true,
+      name: choice === 'removed' ? 'Stored name' : 'Draft name', color: '#0078d4'
+    });
+    expect(panel.state.settings.sources[0].visibilityOverride).toBeUndefined();
+    expect(panel.state.settings.userShowWeekends).toBe(false);
+    expect(document.body.textContent).toContain(choice === 'removed' ? 'Stored name' : 'Draft name');
+    expect(document.body.textContent).toContain('MandatoryPolicyLabel');
+    expect(props.onSave).not.toHaveBeenCalled();
   });
 
   it('awaits personal Reset, preserves the draft on failure and permits retry', async () => {

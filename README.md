@@ -24,7 +24,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 ## Main features
 
 - Assign Exchange and SharePoint calendars to Microsoft 365, security or mail-enabled security groups, or Everyone, through group-first administrator settings. Choose Mandatory, Default or Available per calendar and independently control personal name, color, logo and supported option changes. Group assignment does not grant source permissions.
-- A previously removed or hidden assigned calendar reappears enabled when its applicable policy becomes Mandatory. The old removal/visibility override is discarded on observing that policy and cleaned from storage on the next successful personal save, while permitted personal presentation choices remain.
+- A previously removed or hidden assigned calendar reappears enabled when its applicable policy becomes Mandatory, including in an already open personal settings panel. Other personal draft edits and permitted presentation choices remain. The old removal/visibility override is discarded on observing that policy and cleaned from storage on the next successful personal save.
 - Select multiple Exchange calendars, or opt into all current and future mailbox calendars with individual policy exceptions. SharePoint calendars remain explicitly selected with their own field mapping. Matching assignments produce one effective calendar using the strongest policy.
 
 - Configure shared Exchange calendars using a UPN, object ID or primary SMTP address, with clear discovery errors and empty-result feedback. Secondary aliases are not supported.
@@ -100,7 +100,7 @@ Personal settings include:
 
 Date and time labels follow the current SharePoint page culture. This includes the regional 12- or 24-hour time format.
 
-Administrator assignments use Mandatory (always enabled), Default (initially enabled) or Available (initially disabled). Complete administrator drafts are handed to SPFx through one callback writing one property; save and republish the SharePoint page to persist them for readers. Mandatory sources cannot be disabled or removed. Personal name, color, logo and supported source-option permissions are configured separately. Explicit optional-calendar visibility choices persist until reset or an observed policy disallows them. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
+Administrator assignments use Mandatory (always enabled), Default (initially enabled) or Available (initially disabled). Complete administrator drafts are handed to SPFx through one callback writing one property. Save verifies the property transfer and retains the draft with an error if it fails; save and republish the SharePoint page to persist settings for readers. Mandatory sources cannot be disabled or removed. Personal name, color, logo and supported source-option permissions are configured separately. Explicit optional-calendar visibility choices persist until reset or an observed policy disallows them. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
 
 ## Documentation
 

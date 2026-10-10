@@ -68,6 +68,7 @@ Documentation-only changes still require a targeted check of relevant source. Co
 
 - Keep one persistence owner per domain: the webpart owns callbacks, SPFx writes administrator properties, and SettingsStorageService performs personal OneDrive I/O.
 - Do not combine direct webpart-property writes with callbacks for the same change. Preserve the required SPFx bridge, not duplicate persistence wrappers.
+- Check that the SPFx property contains the submitted snapshot before accepting administrator Save; a no-op callback is not successful transfer. Keep draft/error behavior covered through the panel and adapter together.
 - Await lifecycle-dependent writes, prevent concurrent Save operations, and do not refresh/unmount controls during unfinished saves.
 - Persist complete administrator drafts, preserving non-visible fields and excluding wizard state.
 - Prefer optimistic personal preview; Cancel/failure restores confirmed effective settings, while failed Save retains the editable draft and shows a localized error.

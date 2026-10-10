@@ -248,6 +248,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - It is removed from personal storage on the next successful personal-settings save.
 - A policy change does not restore a previously disallowed stale value later.
 - An observed Default/Available to Mandatory transition restores a previously removed or disabled applicable source immediately, including when loading an older personal settings file. It requires no personal save/reset; the next successful personal save persists the removal/visibility cleanup while retaining permitted presentation overrides.
+- Open personal drafts also restore Mandatory membership from incoming effective settings while preserving unrelated and permitted edits. Reconciliation waits for an unfinished Save snapshot.
 
 ### DEC-014 — Administrator configuration fields
 
@@ -281,6 +282,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision; replaces the former two-property hand-off.
 - MyCalendarsWebPart owns accepted persistence callbacks. Administrator drafts are validated and serialized once, then one required SPFx change bridge writes adminSettings. No duplicate direct property writes are allowed.
+- Successful transfer requires the SPFx property to contain the submitted JSON. A silent callback is rejected; any attempted property restoration is checked as well. This verifies the in-memory hand-off, not durable host storage.
 - The former administrator mirror is removed. Current -> explicit legacy -> defaults is the loading order. Deserialization retains only supported webpart properties; retired values are not promoted.
 - Complete isolated drafts preserve non-visible fields and stable IDs. Reset changes the administrator draft only; Cancel persists nothing.
 - Panels await Save/Reset, block concurrent operations and close only after success. The adapter reads current values and updates its summary without propertyPane.refresh. Mount/session guards ignore obsolete async results.
@@ -301,7 +303,24 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - **Reported behavior:** an existing Exchange assignment changes from Default to Mandatory in the current session but reverts after republishing and reloading.
 - **Local evidence:** the policy JSON round-trip succeeds. The earlier regression used a simplified two-property host snapshot model. DEC-025 replaces that implementation with a single SPFx writer; this does not establish tenant publication/reload success.
 - **Removal scenario evidence:** `MandatoryCalendarRestoration.test.ts` exercises Default assignment, personal removal, saved Mandatory promotion, old personal-file reload and subsequent cleanup. The current local policy implementation passes for explicit Exchange/SharePoint assignments, mailbox rules and supported older personal schemas. This verifies settings resolution and JSON round-trips, not the deployed bundle or published tenant page.
+- **Composition evidence:** `settingsLifecycle.test.ts` also exercises Exchange removal through the personal Save callback, Mandatory promotion through the administrator Save callback and real settings rebuild, then a new webpart instance using the accepted administrator JSON and the old personal file. The source reappears enabled without a personal write/reset, and the next toolbar save persists override cleanup. The SPFx writer, audience result and OneDrive I/O are stubbed; this does not establish page publication or deployed Exchange retrieval.
 - **Remaining verification:** confirm the active deployed bundle, compare accepted/callback/published assignment values and repeat the page publication/reload flow in SharePoint. The reported tenant failure's exact cause has not been observed directly.
+
+### DEV-015 — Mandatory source is absent from personal settings
+
+- **Status:** Open-panel repair implemented; reported reload case verification pending
+- **Reported behavior:** an explicitly selected Exchange calendar removed personally remains absent from personal settings after its administrator policy becomes Mandatory. The user confirms Mandatory remains in administrator settings after publication/reload.
+- **Reproduced conflict:** an already open `UserSettingsPanel` retained its old source draft when effective settings changed. Removed rows stayed absent and disabled rows retained optional membership, contrary to DEC-013.
+- **Repair:** the settings service reconciles Mandatory sources in the personal draft; the panel invokes it before preview, preserves unrelated/permitted edits and leaves pending Save snapshots untouched. React regressions cover removed/disabled rows, restored policy, preserved personal names and rejected locked color overrides.
+- **Remaining verification:** the open-panel reproduction does not establish the cause after a complete reload. Compare the deployed administrator assignment/catalog, applicable audience result and personal override to reproduce that case with actual saved settings.
+
+### DEV-016 — New Exchange assignment disappears immediately after Save
+
+- **Status:** Transfer validation implemented; workbench reproduction pending.
+- **Reported behavior:** a newly selected Exchange calendar appears in the administrator draft but disappears after Save or reopening, in the hosted SharePoint workbench using a localhost debug bundle.
+- **Local evidence:** React interaction tests exercise mailbox lookup, Everyone selection, individual-calendar selection, Add, Save and reopen through the real panel/adapter/webpart composition. A separate existing-assignment test also triggers a custom-control rerender during transfer. Both pass with narrow Graph and SPFx writer stubs; this does not reproduce the hosted failure.
+- **Confirmed gap and repair:** the composition owner previously accepted callbacks that returned without updating the property. Save now checks the property before accepting settings, retains the new-calendar draft on an ignored transfer and checks restoration after partial failure. A regression formerly treated a no-op callback as success; it now requires rejection.
+- **Remaining verification:** reproduce with the active debug bundle and inspect the submitted/property values at the SPFx boundary. The provided workbench cannot be opened from the current session because no browser provider is available. The exact cause of the reported disappearance remains unconfirmed.
 
 ### DEV-001 — Administrator source policy is not implemented
 

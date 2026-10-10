@@ -1,6 +1,6 @@
 /* eslint max-lines: ["warn", { "max": 2000, "skipBlankLines": true, "skipComments": true }] -- Keep the established panel intact during the settings lifecycle correction. */
 import { AssignmentGroup, assignmentPolicyLabel } from './AssignmentControls';
-import { applyAdminSourceChanges, isAutomaticExchangeCalendarAssigned } from '../services/CalendarSettingsService';
+import { applyAdminSourceChanges, isAutomaticExchangeCalendarAssigned, restoreMandatoryAdminSourcesInDraft } from '../services/CalendarSettingsService';
 import * as React from 'react';
 import { LatestDiscovery } from './latestDiscovery';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
@@ -212,8 +212,10 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
   }
 
   public componentDidUpdate(prevProps: IUserSettingsPanelProps, prevState: IUserSettingsPanelState): void {
-    if (this.props.isOpen && prevProps.isOpen && !this.savePending && prevState.settings !== this.state.settings) {
-      this.props.onPreview(this.state.settings);
+    if (this.props.isOpen && prevProps.isOpen && !this.savePending) {
+      const settings = restoreMandatoryAdminSourcesInDraft(this.state.settings, this.props.settings);
+      if (settings !== this.state.settings) this.setState({ settings });
+      else if (prevState.settings !== this.state.settings) this.props.onPreview(this.state.settings);
     }
     if (this.props.graphClient && !prevProps.graphClient) this.initializeGraphClient(this.props.graphClient);
     if (prevProps.isOpen !== this.props.isOpen) {
