@@ -133,6 +133,7 @@ define([], function() {
     ,"ShowAllGroupsAndTeamsLabel": "Al mijn groeps- en teamagenda's weergeven"
     ,"ShowAllTeamsShiftsLabel": "Al mijn Teams Shifts weergeven"
     ,"ManageLabel": "Beheren"
+    ,"ManageAllCalendarsLabel": "Alle agenda's beheren"
     ,"AddFromPlannerLabel": "Taken uit een Planner-plan toevoegen"
     ,"AddGroupCalendarDescription": "Een agenda uit een Microsoft 365-groep toevoegen"
     ,"AddTeamCalendarDescription": "Een agenda uit een Team toevoegen"

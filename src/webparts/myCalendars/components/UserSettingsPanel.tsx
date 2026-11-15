@@ -1643,10 +1643,10 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     visibilityState?: GroupVisibilityState;
     visibilityDisabled?: boolean;
     onVisibilityChange?: () => void;
-    headerActions?: React.ReactNode;
+    sourceActions?: React.ReactNode;
     children: React.ReactNode;
   }): React.ReactElement => {
-    const { sectionKey, icon, iconBg, iconColor, title, subtitle, showLogoValue, onShowLogoChange, visibilityState, visibilityDisabled, onVisibilityChange, headerActions, children } = params;
+    const { sectionKey, icon, iconBg, iconColor, title, subtitle, showLogoValue, onShowLogoChange, visibilityState, visibilityDisabled, onVisibilityChange, sourceActions, children } = params;
     const isExpanded = this.state.expandedSections[sectionKey] !== false;
     const toggleExpanded = (): void => {
       this.setSessionState(this.editSession, prev => ({
@@ -1685,26 +1685,6 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
             <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
             <div style={{ fontSize: 11, opacity: 0.55, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 1 }}>{subtitle}</div>
           </div>
-          {(headerActions !== undefined || showLogoValue !== undefined || visibilityState !== undefined) && (
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-              onClick={e => e.stopPropagation()}
-            >
-              {headerActions}
-              {showLogoValue !== undefined && onShowLogoChange && (
-                <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', opacity: 0.6 }}>{strings.ShowLogosLabel}</span>
-                  <Toggle
-                    checked={showLogoValue}
-                    onChange={(_, checked) => onShowLogoChange(!!checked)}
-                    onText={strings.OnLabel}
-                    offText={strings.OffLabel}
-                    styles={{ root: { margin: 0 } }}
-                  />
-                </Stack>
-              )}
-            </div>
-          )}
           <Icon
             iconName="ChevronDown"
             style={{
@@ -1734,7 +1714,23 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
         {/* Expandable content */}
         {isExpanded && (
           <div style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {showLogoValue !== undefined && onShowLogoChange && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12, padding: '4px 0 8px' }}>
+                <Toggle
+                  label={strings.ShowLogosLabel}
+                  checked={showLogoValue}
+                  onChange={(_, checked) => onShowLogoChange(!!checked)}
+                  onText={strings.OnLabel}
+                  offText={strings.OffLabel}
+                />
+              </div>
+            )}
             {children}
+            {sourceActions !== undefined && (
+              <div style={{ paddingTop: 8 }}>
+                {sourceActions}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2004,9 +2000,9 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
                   ]),
                   visibilityDisabled: userExchangeCalendarsLoading || userExchangeCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(settings, calendar.id)).length + settings.sources.filter(source => source.sourceType === 'exchange' && !source.isMandatory).length === 0,
                   onVisibilityChange: this.handleToggleOutlookGroupVisibility,
-                  headerActions: (
+                  sourceActions: (
                     <DefaultButton
-                      text={strings.ManageLabel}
+                      text={strings.ManageAllCalendarsLabel}
                       iconProps={{ iconName: 'OpenInNewWindow' }}
                       onClick={() => window.open('https://outlook.cloud.microsoft/calendar/', '_blank', 'noopener,noreferrer')}
                       styles={{ root: { height: 28, minWidth: 0, padding: '0 8px', fontSize: 12 } }}

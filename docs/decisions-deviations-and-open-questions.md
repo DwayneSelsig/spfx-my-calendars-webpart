@@ -96,6 +96,14 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Outlook bulk visibility updates current-user `exchangeCalendarStates` and configured/effective Exchange `isEnabled`; SharePoint updates configured/effective `isEnabled`.
 - Planner, Microsoft 365 Group/Team, and Teams Shifts discovery-mode settings are not visibility controls and receive no group visibility control in this scope.
 
+### DEC-029 — Personal source settings placement
+
+- **Status:** Decision
+- Source-type **Show logos** toggles for Outlook, SharePoint, Planner, Groups and Teams, and Teams Shifts appear directly below the gray section header, before the section's calendar rows and automatic-loading options.
+- Outlook's **Manage all calendars** / **Alle agenda's beheren** button appears at the bottom of its expanded section, below all calendar rows; the logo toggle remains at the top. Other sources do not gain a Manage button.
+- Logo toggles use the same standard Fluent UI labeled layout as automatic-loading and assigned-to-me toggles, with the label above the switch and On/Off alongside it.
+- The controls are vertically stacked, have no additional border, and collapse with their source section. Header collapse and bulk visibility controls retain their existing positions and behavior.
+
 ### DEC-023 — Responsive search and action bar
 
 - **Status:** Decision

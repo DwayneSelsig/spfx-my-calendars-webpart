@@ -134,6 +134,7 @@ define([], function() {
     ,"ShowAllGroupsAndTeamsLabel": "Show all my group & team calendars"
     ,"ShowAllTeamsShiftsLabel": "Show all my Teams Shifts"
     ,"ManageLabel": "Manage"
+    ,"ManageAllCalendarsLabel": "Manage all calendars"
     ,"AddFromPlannerLabel": "Add tasks from a Planner plan"
     ,"AddGroupCalendarDescription": "Add a calendar from a Microsoft 365 group"
     ,"AddTeamCalendarDescription": "Add a calendar from a Team"

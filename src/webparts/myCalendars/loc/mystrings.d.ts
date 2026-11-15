@@ -132,6 +132,7 @@ declare interface IMyCalendarsWebPartStrings {
   ShowAllGroupsAndTeamsLabel: string;
   ShowAllTeamsShiftsLabel: string;
   ManageLabel: string;
+  ManageAllCalendarsLabel: string;
   AddFromPlannerLabel: string;
   AddGroupCalendarDescription: string;
   AddTeamCalendarDescription: string;

@@ -291,6 +291,8 @@ The Outlook and SharePoint section headers expose a tri-state bulk visibility co
 
 The bulk visibility control **MUST** be an eye icon at the far right of the section header, after the collapse indicator. Visible groups use an open eye, hidden groups use a muted hidden-eye icon, and mixed groups use a muted open eye with an accessible mixed pressed state. Activating the eye **MUST NOT** collapse or expand the section. See DEC-020.
 
+Personal source-type logo toggles **MUST** appear at the top of each expanded source section, directly below its header and before calendar rows or automatic-loading options. They **MUST** use the same standard labeled toggle layout as the automatic-loading and assigned-to-me options: label above the switch, with On/Off alongside it. Outlook **MUST** show **Manage all calendars** / **Alle agenda's beheren** at the bottom of its section, below all calendar rows. These controls collapse with the section; no additional border is displayed. See DEC-029.
+
 SharePoint rows display site name separately from calendar name. Missing legacy names are resolved best-effort when a panel opens and are persisted only when the owning personal or administrator draft is explicitly saved.
 
 The panel clones effective settings when opened, emits live `onPreview` changes, and awaits `onSave` or `onReset`. Cancel discards preview. It does not write storage.
