@@ -11,6 +11,39 @@ function client(pages: unknown[]): { graph: MSGraphClientV3; api: jest.Mock; req
 }
 
 describe('audience discovery', () => {
+  it('counts users through nested membership and isolates failed or malformed batch results', async () => {
+    const post = jest.fn().mockResolvedValue({ responses: [
+      { id: '2', status: 200, body: '0' }, { id: '0', status: 200, body: '17' },
+      { id: '1', status: 403, body: 'Forbidden' }, { id: '3', status: 200, body: null },
+      { id: '4', status: 429, body: 'Too many requests' }
+    ] });
+    const api = jest.fn().mockReturnValue({ post });
+    const service = new AudienceService({ api } as unknown as MSGraphClientV3);
+    expect(await service.getAudienceMemberCounts(['nested', 'hidden', 'empty', 'invalid', 'throttled', 'nested'])).toEqual({
+      nested: 17, hidden: undefined, empty: 0, invalid: undefined, throttled: undefined
+    });
+    expect(api).toHaveBeenCalledWith('/$batch');
+    expect(post.mock.calls[0][0].requests).toHaveLength(5);
+    expect(post.mock.calls[0][0].requests[0]).toEqual({ id: '0', method: 'GET',
+      url: '/groups/nested/transitiveMembers/microsoft.graph.user/$count', headers: { ConsistencyLevel: 'eventual' } });
+  });
+
+  it('limits batches to twenty and preserves successful counts when another batch fails', async () => {
+    const post = jest.fn().mockResolvedValueOnce({ responses: [{ id: '0', status: 200, body: 9 }] })
+      .mockRejectedValueOnce(new Error('network'));
+    const service = new AudienceService({ api: jest.fn().mockReturnValue({ post }) } as unknown as MSGraphClientV3);
+    const log = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const ids = Array.from({ length: 21 }, (_, index) => `group${index}`);
+    const result = await service.getAudienceMemberCounts(ids);
+    expect(post.mock.calls.map(call => call[0].requests.length)).toEqual([20, 1]);
+    expect(result.group0).toBe(9);
+    expect(result.group20).toBeUndefined();
+    expect(Object.keys(result)).toHaveLength(21);
+    log.mockRestore();
+    expect(await service.getAudienceMemberCounts([])).toEqual({});
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
   it('retains supported group types and excludes distribution groups', async () => {
     const { graph } = client([{ value: [
       { id: 'm365', displayName: 'Microsoft 365', groupTypes: ['Unified'], mailEnabled: true, securityEnabled: false },

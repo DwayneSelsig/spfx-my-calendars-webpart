@@ -47,6 +47,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
 - Use organization theme colors and support light and dark themes.
 - Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.
+- Choose Everyone or specific groups in the administrator Fluent UI audience picker for calendars and ICS subscriptions. Filter a paged grid immediately by typing any part of a group name, with group types and user counts including nested members. Counts load independently and do not imply permission to read the source calendar.
 - Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation. Create an admin ICS entry by selecting its audience first, then entering its title and URL; eligible users open its Outlook subscription flow with one click, while manual ICS entry remains available.
 - Preview personal settings live in the calendar before saving. Cancel restores saved settings; failed Save retains your draft and restores the calendar with an error message.
 - Store personal settings and per-source visibility choices in the OneDrive App Folder. Save and Reset wait for storage; toolbar view preferences update optimistically and roll back on failure.

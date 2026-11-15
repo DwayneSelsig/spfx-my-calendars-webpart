@@ -25,6 +25,33 @@ export class AudienceService {
     this.graphClient = graphClient;
   }
 
+  /** Counts users once, including users reached through nested groups. No member data is downloaded. */
+  public async getAudienceMemberCounts(groupIds: string[]): Promise<Record<string, number | undefined>> {
+    const ids = Array.from(new Set(groupIds.filter(Boolean)));
+    const counts: Record<string, number | undefined> = {};
+    for (let offset = 0; offset < ids.length; offset += 20) {
+      const batch = ids.slice(offset, offset + 20);
+      batch.forEach(id => { counts[id] = undefined; });
+      try {
+        const response = await this.graphClient.api('/$batch').post({ requests: batch.map((id, index) => ({
+          id: String(index), method: 'GET',
+          url: `/groups/${encodeURIComponent(id)}/transitiveMembers/microsoft.graph.user/$count`,
+          headers: { ConsistencyLevel: 'eventual' }
+        })) });
+        (response.responses || []).forEach((item: { id: string; status: number; body: unknown }) => {
+          const index = Number(item.id);
+          const value = typeof item.body === 'number' ? item.body
+            : typeof item.body === 'string' && /^\d+$/.test(item.body.trim()) ? Number(item.body) : undefined;
+          if (Number.isInteger(index) && index >= 0 && index < batch.length && item.status === 200
+            && value !== undefined && Number.isSafeInteger(value) && value >= 0) counts[batch[index]] = value;
+        });
+      } catch (error) {
+        console.error('Failed to count audience members:', error);
+      }
+    }
+    return counts;
+  }
+
   public async getAudienceGroups(searchText?: string): Promise<IEntraSecurityGroup[]> {
     const normalizedSearch = (searchText || '').trim().replace(/'/g, "''");
     const filterSegments = ["(securityEnabled eq true or groupTypes/any(c:c eq 'Unified'))"];

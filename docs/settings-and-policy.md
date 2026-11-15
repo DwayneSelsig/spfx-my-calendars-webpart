@@ -147,8 +147,11 @@ The settings service enforces permissions during effective resolution, draft upd
 - Search escapes OData literals. Loading, successful empty results and failures remain distinct. Obsolete requests are discarded; selected metadata survives search errors and empty results.
 - Membership uses /me/checkMemberGroups in batches of twenty, with transitive behavior and a five-minute positive/negative session cache. Failed batches write no cache result and can retry.
 - Existing untyped groups remain valid after migration; successful administrator discovery enriches known group types.
+- The administrator audience picker displays a single Members count: unique users including transitive (nested) group members, matching the shared audience membership semantics for all source families and ICS. Counts are informational, may lag directory changes, and do not establish source authorization. AudienceService requests user counts only for the displayed ten-row page through Graph batching. Successful counts are reused while the picker remains mounted; counts are never persisted. Unavailable counts remain distinct from zero and never block selection. No additional permissions or automatic retry policy are introduced.
 
 AudienceService owns discovery and membership; CalendarSettingsService owns their policy effects. ICS catalog entries use the same targeting contract and remain subscription deep links.
+
+Pending member counts use an extra-tiny Fluent spinner without visible loading text, retaining a localized accessible name and fitting within the small DataGrid rows.
 
 ## Storage and migration
 
@@ -238,6 +241,8 @@ Personal settings are the only current product data written to OneDrive. When en
 **Read when:** changing `UserSettingsPanel`, `AdminDefaultsPanel`, property-pane integration, settings source-creation flows, exposed controls, or toolbar preference persistence. Related records: DEC-014, DEV-001, DEV-002, and DEV-003.
 
 ### Administrator interface
+
+The shared audience step **MUST** use the available Fluent UI v9 SearchBox, DataGrid and RadioGroup inside a local theme-aware FluentProvider. Explicit Everyone and Specific group(s) are mutually exclusive choices; new additions default to the group choice without a selection. Everyone clears group selection and hides discovery controls. The group-first addition route retains single selection; other existing routes, including editing, retain multiple selection and OR semantics. Search filters all discovered groups immediately as the administrator types, matching text anywhere in the group name without case sensitivity. It requires no submit action or extra group-discovery requests; clearing search restores the full discovered list and changing search resets pagination. Typing does not clear discovery results or invalidate an initial discovery still in progress. Results have Name, Group type and Members columns, ten rows per page, and selection retained across searches and pages. Group discovery, empty results, count loading and failures remain distinct. See DEC-030.
 
 The administrator calendar area **MUST** use one shared bordered container headed by **Admin default calendars**, containing **Add calendar**, the grouped calendar assignments, and the ICS catalog under its **Admin ICS catalog** subheading. Individual ICS URL groups **MUST NOT** have their own border. The empty default-calendar message remains inside the shared container. The ICS section **MUST NOT** be displayed when its catalog has no entries. See DEC-027.
 

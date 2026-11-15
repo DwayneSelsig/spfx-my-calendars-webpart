@@ -304,6 +304,15 @@ declare interface IMyCalendarsWebPartStrings {
   NoMailboxCalendarsLabel: string;
   SecurityGroupsLoadErrorLabel: string;
   NoSecurityGroupsLabel: string;
+  AudienceGroupTypeLabel: string;
+  AudienceMembersLabel: string;
+  AudienceMemberCountHelpLabel: string;
+  AudienceCountUnavailableLabel: string;
+  AudienceCountLoadingLabel: string;
+  SpecificAudienceGroupLabel: string;
+  SpecificAudienceGroupsLabel: string;
+  AudiencePreviousPageLabel: string;
+  AudiencePageLabel: string;
 }
 
 declare module 'MyCalendarsWebPartStrings' {

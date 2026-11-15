@@ -41,6 +41,7 @@ import { getSourceTypeDescription, getSourceTypeDisplayName } from '../utils/sou
 import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
 import { formatCalendarTime } from './views/calendarFormatting';
+import { AudienceSelection } from './AudienceSelection';
 import { MailboxPeoplePicker } from './MailboxPeoplePicker';
 import { getId } from '@fluentui/react/lib/Utilities';
 
@@ -1048,29 +1049,8 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     if (!this.isCurrentSession(session)) return;
   };
 
-  private handleSecurityGroupSearch = async (): Promise<void> => {
-    const session = this.editSession;
-    if (!this.isCurrentSession(session)) return;
-    await this.loadSecurityGroups(this.state.securityGroupSearch);
-    if (!this.isCurrentSession(session)) return;
-  };
-
   private handleSecurityGroupSearchChange = (value?: string): void => {
-    this.audienceDiscovery.invalidate();
-    this.setSessionState(this.editSession, prev => ({ ...updateAudienceDiscovery(prev, { type: 'input' }), securityGroupSearch: value || '' }));
-  };
-
-  private handleToggleAudienceGroup = (group: IEntraSecurityGroup, checked?: boolean): void => {
-    this.setSessionState(this.editSession, prev => {
-      const selectedAudienceGroups = { ...prev.selectedAudienceGroups };
-      if (checked) {
-        selectedAudienceGroups[group.id] = group.displayName;
-      } else {
-        delete selectedAudienceGroups[group.id];
-      }
-      return { selectedAudienceGroups: prev.audienceFirst && checked ? { [group.id]: group.displayName } : selectedAudienceGroups,
-        everyone: false, selectedAudienceMetadata: { ...prev.selectedAudienceMetadata, [group.id]: { groupId: group.id, displayName: group.displayName, groupType: group.groupType } } };
-    });
+    this.setSessionState(this.editSession, { securityGroupSearch: value || '' });
   };
 
   private handleApplyAudienceSelection = (): void => {
@@ -1423,35 +1403,22 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   }
 
   private renderAudienceSelectionFlow(): React.ReactElement {
-    const selectedCount = Object.keys(this.state.selectedAudienceGroups).length;
-    const selectedGroupNames = Object.keys(this.state.selectedAudienceGroups).map(groupId => this.state.selectedAudienceGroups[groupId]);
-
-    return (
-      <Stack tokens={{ childrenGap: 12 }}>
-        <Label>{strings.SelectAdminAudienceGroupsLabel}</Label>
-        <MessageBar>{strings.AudiencePermissionsHelpLabel}</MessageBar>
-        <Checkbox label={strings.EveryoneAudienceLabel} checked={!!this.state.everyone} onChange={(_, checked) => this.setSessionState(this.editSession, { everyone: !!checked, selectedAudienceGroups: {} })} />
-        <TextField placeholder={strings.SearchSecurityGroupsPlaceholder} value={this.state.securityGroupSearch} onChange={(_, value) => this.handleSecurityGroupSearchChange(value)} />
-        <PrimaryButton text={strings.SearchLabel} onClick={() => this.handleSecurityGroupSearch().catch(err => console.error(err))} />
-        {selectedCount > 0 && (
-          <MessageBar messageBarType={MessageBarType.info}>
-            {formatLocalizedString(strings.SelectedGroupsLabel, selectedGroupNames.join(', '))}
-          </MessageBar>
-        )}
-        {this.state.securityGroupsError && <MessageBar messageBarType={MessageBarType.error}>{this.state.securityGroupsError}</MessageBar>}
-        {this.state.securityGroupsLoaded && !this.state.securityGroupsLoading && !this.state.securityGroupsError && this.state.securityGroups.length === 0 && <MessageBar>{strings.NoSecurityGroupsLabel}</MessageBar>}
-        {this.state.securityGroupsLoading ? (
-          <Spinner size={SpinnerSize.medium} label={strings.LoadingSecurityGroupsLabel} />
-        ) : (
-          <Stack tokens={{ childrenGap: 8 }}>
-            {this.state.securityGroups.map(group => (
-              <Checkbox key={group.id} label={group.displayName + (group.groupType ? ' — ' + audienceTypeLabel({ groupId: group.id, displayName: group.displayName, groupType: group.groupType }) : '')} checked={!!this.state.selectedAudienceGroups[group.id]} onChange={(_, checked) => this.handleToggleAudienceGroup(group, checked)} />
-            ))}
-          </Stack>
-        )}
-        <PrimaryButton text={this.state.audienceFirst ? strings.NextLabel : this.state.audienceEditTarget ? strings.ApplyGroupsLabel : strings.AddItemLabel} onClick={this.handleApplyAudienceSelection} disabled={selectedCount === 0 && !this.state.everyone} />
-      </Stack>
-    );
+    return <AudienceSelection key={this.editSession} groups={this.state.securityGroups}
+      loading={this.state.securityGroupsLoading} loaded={this.state.securityGroupsLoaded}
+      error={this.state.securityGroupsError} search={this.state.securityGroupSearch}
+      everyone={!!this.state.everyone} single={!!this.state.audienceFirst}
+      selected={this.state.selectedAudienceGroups} service={this.audienceService || undefined}
+      actionLabel={this.state.audienceFirst ? strings.NextLabel : this.state.audienceEditTarget ? strings.ApplyGroupsLabel : strings.AddItemLabel}
+      onSearchChange={this.handleSecurityGroupSearchChange}
+      onEveryoneChange={everyone => this.setSessionState(this.editSession, { everyone, selectedAudienceGroups: {} })}
+      onSelectionChange={selectedAudienceGroups => this.setSessionState(this.editSession, previous => {
+        const selectedAudienceMetadata = { ...previous.selectedAudienceMetadata };
+        previous.securityGroups.forEach(group => {
+          if (selectedAudienceGroups[group.id]) selectedAudienceMetadata[group.id] = { groupId: group.id, displayName: group.displayName, groupType: group.groupType };
+        });
+        return { selectedAudienceGroups, selectedAudienceMetadata, everyone: false };
+      })}
+      onApply={this.handleApplyAudienceSelection} />;
   }
 
   private renderAddFlow(): React.ReactElement {

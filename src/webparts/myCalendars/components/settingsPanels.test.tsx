@@ -282,6 +282,25 @@ describe('settings panels awaited lifecycle', () => {
     await act(async () => { pending.resolve(); await pending.promise; });
   });
 
+  it('keeps discovered groups and selection while typing and lets initial discovery finish', async () => {
+    const { panel } = admin();
+    const groups = [{ id: 'sales', displayName: 'Inside Sales' }, { id: 'hr', displayName: 'HR' }];
+    await act(async () => { panel.setState({ showAddDialog: true, addingCalendarStep: 'admin-audience-select',
+      audienceFirst: true, securityGroups: groups, securityGroupsLoaded: true,
+      selectedAudienceGroups: { hr: 'HR' } }); });
+    const input = document.querySelector('input[type="search"]') as HTMLInputElement;
+    await act(async () => { Simulate.change(input, { target: { value: 'sales' } as unknown as EventTarget }); });
+    expect(panel.state.securityGroups).toEqual(groups);
+    expect(panel.state.selectedAudienceGroups).toEqual({ hr: 'HR' });
+    expect(document.querySelector('[role="grid"]')?.textContent).toContain('Inside Sales');
+    expect(document.querySelector('[role="grid"]')?.textContent).not.toContain('HR');
+    act(() => { panel.setState({ securityGroups: [], securityGroupsLoading: true, securityGroupsLoaded: false }); });
+    act(() => { Simulate.change(input, { target: { value: 'ide' } as unknown as EventTarget }); });
+    expect(panel.state.securityGroupsLoading).toBe(true);
+    await act(async () => { panel.setState({ securityGroups: groups, securityGroupsLoading: false, securityGroupsLoaded: true }); });
+    expect(document.querySelector('[role="grid"]')?.textContent).toContain('Inside Sales');
+  });
+
   it('selects an ICS audience first, preserves input on Back and adds only a complete item', async () => {
     const { panel } = admin();
     const wizard = panel as unknown as {

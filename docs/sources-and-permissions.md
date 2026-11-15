@@ -52,6 +52,8 @@ All current runtime calls use delegated user context because the web part obtain
 
 The requests are duplicated in `config/package-solution.json` and `MyCalendarsWebPart.manifest.json`. Both lists **MUST** remain aligned when permissions change.
 
+Administrator audience counts also use the existing `Group.Read.All` permission through AudienceService: `/groups/{id}/transitiveMembers/microsoft.graph.user/$count`, with `ConsistencyLevel: eventual`, batched for the visible picker page. These count users including nested members, not users with verified calendar access. Hidden membership or other access failures display an unavailable count; no extra permission is requested.
+
 ### Pagination, retry, and throttling
 
 The code follows `@odata.nextLink` for Unified-group discovery, joined-Team discovery, and Shifts retrieval. Exchange calendar discovery follows paging; Exchange events, SharePoint items and Planner group/plan/task discovery retain their existing paging limitations. Audience search and configured Exchange identity resolution follow all returned `@odata.nextLink` pages.

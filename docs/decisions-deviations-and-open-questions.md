@@ -403,6 +403,16 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Exchange and SharePoint use the central **Add calendar** button rather than audience-scoped **Add more calendars** buttons. Other source sections retain their audience-scoped addition actions.
 - This is a presentation change; settings contracts and persistence remain unchanged.
 
+### DEC-030 — Fluent administrator audience picker
+
+- **Status:** Decision
+- The shared audience step for event sources and ICS uses Fluent UI v9 SearchBox, DataGrid and RadioGroup from the dependencies already available through SPFx; no package installation or framework upgrade is required.
+- Everyone is an explicit targeting mode, separate from group search. Existing group-first single selection and other routes' multiple selection remain unchanged.
+- Audience search filters the complete discovered list locally and immediately by case-insensitive substring. Typing preserves the discovery data and selections, resets pagination, and requires no Enter, search button or additional group-discovery request.
+- One Members column counts unique users including nested group membership, consistently with the common transitive audience evaluation. It does not promise calendar access or count users with verified source permissions.
+- Counts load independently for the ten displayed rows using Graph batches, with successful values reused during the mounted picker lifetime. Missing access or failed counts display Not available rather than zero. No stored schema, additional permission, or automatic retry policy is introduced.
+- Standard Fluent controls and theme tokens provide presentation; custom layout is limited to spacing, sizing and overflow. Host integration remains a manual verification layer.
+
 ## Project and delivery
 
 ### DEC-006 — Test strategy baseline

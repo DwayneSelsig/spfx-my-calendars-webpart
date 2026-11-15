@@ -306,5 +306,14 @@ define([], function() {
     ,"NoMailboxCalendarsLabel": "No calendars were returned for this mailbox."
     ,"SecurityGroupsLoadErrorLabel": "Unable to load groups. Try again."
     ,"NoSecurityGroupsLabel": "No supported groups found."
+    ,"AudienceGroupTypeLabel": "Group type"
+    ,"AudienceMembersLabel": "Members"
+    ,"AudienceMemberCountHelpLabel": "Users including members of nested groups. Calendar access still depends on source permissions. Counts may reflect recent changes with a delay."
+    ,"AudienceCountUnavailableLabel": "Not available"
+    ,"AudienceCountLoadingLabel": "Loading member count"
+    ,"SpecificAudienceGroupLabel": "Specific group"
+    ,"SpecificAudienceGroupsLabel": "Specific groups"
+    ,"AudiencePreviousPageLabel": "Previous"
+    ,"AudiencePageLabel": "Page {0} of {1}"
   }
 });

@@ -305,5 +305,14 @@ define([], function() {
     ,"NoMailboxCalendarsLabel": "Er zijn geen agenda’s teruggegeven voor deze mailbox."
     ,"SecurityGroupsLoadErrorLabel": "Groepen kunnen niet worden geladen. Probeer opnieuw."
     ,"NoSecurityGroupsLabel": "Geen ondersteunde groepen gevonden."
+    ,"AudienceGroupTypeLabel": "Groepstype"
+    ,"AudienceMembersLabel": "Leden"
+    ,"AudienceMemberCountHelpLabel": "Gebruikers inclusief leden van onderliggende groepen. Toegang tot de agenda blijft afhankelijk van bronmachtigingen. Recente wijzigingen kunnen met vertraging zichtbaar zijn."
+    ,"AudienceCountUnavailableLabel": "Niet beschikbaar"
+    ,"AudienceCountLoadingLabel": "Ledenaantal laden"
+    ,"SpecificAudienceGroupLabel": "Specifieke groep"
+    ,"SpecificAudienceGroupsLabel": "Specifieke groepen"
+    ,"AudiencePreviousPageLabel": "Vorige"
+    ,"AudiencePageLabel": "Pagina {0} van {1}"
   };
 });
