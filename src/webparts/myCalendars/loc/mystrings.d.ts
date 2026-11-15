@@ -100,6 +100,14 @@ declare interface IMyCalendarsWebPartStrings {
   PreferredStartTimeLabel: string;
   UsePersonalVisibleHoursLabel: string;
   VisibleHoursLabel: string;
+  AdminConfigurationTransferLabel: string;
+  AdminConfigurationTransferDescriptionLabel: string;
+  AdminConfigurationExportLabel: string;
+  AdminConfigurationImportLabel: string;
+  AdminConfigurationImportingLabel: string;
+  AdminConfigurationImportedLabel: string;
+  AdminConfigurationImportErrorLabel: string;
+  AdminConfigurationExportErrorLabel: string;
   ResetDraftToDefaultsLabel: string;
   AddAdminDefaultLabel: string;
   AdminCalendarDefaultsTitle: string;

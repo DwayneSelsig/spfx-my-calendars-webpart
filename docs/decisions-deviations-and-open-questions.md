@@ -247,6 +247,15 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ## Settings and policy
 
+### DEC-032 — Administrator configuration export/import
+
+- **Status:** Decision
+- Export the complete current administrator draft as `my-calendars-admin-settings.json`, using the existing administrator JSON representation and settings version compatibility (2–7).
+- Import validates the administrator domain and references, then replaces the isolated draft. Save applies the draft through the existing SPFx bridge; Cancel discards it. No merge, selective import, personal backup or direct cross-site configuration lookup is added.
+- Retain source and audience identities for reuse within the same tenant. No automatic SharePoint site/list remapping or permission grants occur.
+- Export includes non-exposed settings and unsaved changes, excluding personal preferences, event data, caches and editor state. File-reading/export errors are localized, and pending operations obey existing lifecycle boundaries.
+- Personal settings already use one OneDrive file per user rather than per site; automatic loading remains unchanged.
+
 ### DEC-005 — Administrator source policy dimensions
 
 - **Status:** Decision

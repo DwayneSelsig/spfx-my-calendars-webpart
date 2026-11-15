@@ -164,6 +164,16 @@ Pending member counts use an extra-tiny Fluent spinner without visible loading t
 - `SettingsStorageService` **MUST** own personal-settings access to the OneDrive App Folder and **MUST NOT** resolve policy.
 - Settings panels **MAY** edit isolated drafts but **MUST NOT** write persistence directly.
 
+### Administrator configuration transfer
+
+Administrator panels **MUST** offer local JSON export/import of the complete current administrator draft, including non-exposed fields and unsaved changes. Export uses the existing administrator serialization format, with no transfer envelope or additional schema version. Personal settings, runtime events, caches and wizard state **MUST NOT** be exported. See DEC-032.
+
+Import **MUST** validate the administrator domain and supported settings version before replacing the entire isolated draft. Invalid JSON, malformed administrator collections, invalid audience references and unsupported versions **MUST** leave the draft unchanged and show a localized error. Invalid audiences **MUST NOT** become Everyone. Supported versions 2–7 normalize through CalendarSettingsService; malformed entries that would be silently discarded are rejected by the import boundary.
+
+Import replaces rather than merges; Save remains the only transfer to the existing SPFx persistence callback. Cancel discards the imported draft, and a failed Save retains it. Import/export and Save **MUST** be blocked during file reading or an unfinished Save. Closing/reopening or unmounting the panel invalidates unfinished file reads; successful import invalidates older discovery results and resets temporary editor state.
+
+Transfer targets web parts within the same tenant. Source, list, audience and policy identities remain stable, without automatic site remapping or access grants. Personal OneDrive settings are shared across sites for the same user; this feature adds no personal backup or import controls.
+
 ### Administrator loading and recovery
 
 | Input | Condition | Result |

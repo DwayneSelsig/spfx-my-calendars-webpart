@@ -16,7 +16,7 @@ import { setIconOptions } from '@fluentui/react/lib/Styling';
 import { AdminDefaultsPanel, type IAdminDefaultsPanelProps } from './AdminDefaultsPanel';
 import { UserSettingsPanel, type IUserSettingsPanelProps } from './UserSettingsPanel';
 import { defaultAdminWebPartSettings, defaultAllowedOverrides, defaultCalendarSettings, defaultUserCalendarSettings } from '../models/ICalendarSettings';
-import { resolveCalendarSettings } from '../services/CalendarSettingsService';
+import { resolveCalendarSettings, serializeAdminWebPartSettings } from '../services/CalendarSettingsService';
 import type { ISharePointList, ISharePointSite } from '../services/SharePointCalendarService';
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import type { IMailboxSearchResult } from '../services/ExchangeCalendarService';
@@ -76,6 +76,110 @@ describe('settings panels awaited lifecycle', () => {
     act(() => { root.render(<UserSettingsPanel {...props} ref={instance => { if (instance) panel = instance; }} />); });
     return { panel, props };
   }
+
+  async function importFile(text: () => Promise<string>): Promise<void> {
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { configurable: true, value: [{ text }] });
+    await act(async () => { Simulate.change(input); });
+  }
+
+  it('imports into an isolated draft, cancels without saving and retains an imported draft after save failure', async () => {
+    const { panel, props } = admin({ onSave: jest.fn(async () => { throw new Error('transfer failed'); }) });
+    const imported = { ...defaultAdminWebPartSettings, defaultView: 'week' as const, organizationPrimaryColor: '#123456' };
+    await importFile(async () => serializeAdminWebPartSettings(imported));
+    expect(panel.state.settings).toMatchObject(imported);
+    expect(panel.state.importSucceeded).toBe(true);
+    expect(props.onSave).not.toHaveBeenCalled();
+    expect(props.settings.defaultView).toBe('month');
+    await act(async () => { click('SaveLabel'); });
+    expect(props.onSave).toHaveBeenCalledWith(panel.state.settings);
+    expectError(panel, 'AdminSettingsSaveErrorLabel');
+    expect(panel.state.settings.defaultView).toBe('week');
+    click('CancelLabel');
+    expect(props.onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the draft on an invalid or unreadable file and allows retry', async () => {
+    const { panel, props } = admin();
+    for (const text of [async () => '{', async () => { throw new Error('read failed'); }]) {
+      await importFile(text);
+      expect(panel.state.settings).toEqual(props.settings);
+      expect(panel.state.transferError).toBe('AdminConfigurationImportErrorLabel');
+      expect(panel.state.isImporting).toBe(false);
+    }
+    await importFile(async () => serializeAdminWebPartSettings({ ...defaultAdminWebPartSettings, showWeekends: false }));
+    expect(panel.state.transferError).toBeUndefined();
+    expect(panel.state.settings.showWeekends).toBe(false);
+  });
+
+  it('blocks competing actions during file reading and ignores a result after closing and reopening', async () => {
+    const { panel, props } = admin();
+    const read = resultDeferred<string>();
+    await importFile(() => read.promise);
+    expect(panel.state.isImporting).toBe(true);
+    for (const label of ['SaveLabel', 'ResetDraftToDefaultsLabel', 'AdminConfigurationImportLabel', 'AdminConfigurationExportLabel']) {
+      const button = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === label)!;
+      expect(button.disabled).toBe(true);
+    }
+    act(() => { root.render(<AdminDefaultsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} />); });
+    await act(async () => { read.resolve(serializeAdminWebPartSettings({ ...defaultAdminWebPartSettings, showWeekends: false })); });
+    expect(panel.state.settings).toEqual(props.settings);
+    expect(panel.state.isImporting).toBe(false);
+    expect(props.onSave).not.toHaveBeenCalled();
+  });
+
+  it('exports the current unsaved complete draft without saving', async () => {
+    const { panel, props } = admin();
+    act(() => { panel.setState({ settings: { ...panel.state.settings, organizationPrimaryColor: '#123456', defaultView: 'day' } }); });
+    const createUrl = jest.fn((_blob: Blob) => 'blob:configuration');
+    const revokeUrl = jest.fn();
+    const originalCreate = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const originalRevoke = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeUrl });
+    const download = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function(this: HTMLAnchorElement) {
+      expect(this.download).toBe('my-calendars-admin-settings.json');
+    });
+    try {
+      click('AdminConfigurationExportLabel');
+      const json = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(createUrl.mock.calls[0][0]);
+      });
+      expect(JSON.parse(json)).toMatchObject({ organizationPrimaryColor: '#123456', defaultView: 'day' });
+      expect(download).toHaveBeenCalledTimes(1);
+      expect(revokeUrl).toHaveBeenCalledWith('blob:configuration');
+      expect(props.onSave).not.toHaveBeenCalled();
+    } finally {
+      if (originalCreate) Object.defineProperty(URL, 'createObjectURL', originalCreate);
+      else delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+      if (originalRevoke) Object.defineProperty(URL, 'revokeObjectURL', originalRevoke);
+      else delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+    }
+  });
+
+  it('discards old discovery after import and saves the imported snapshot through the existing callback', async () => {
+    const { panel, props } = admin();
+    const groups = resultDeferred<Array<{ id: string; displayName: string }>>();
+    const loader = panel as unknown as {
+      unifiedGroupService: { getUnifiedGroups: () => typeof groups.promise; getJoinedTeamIds: () => Promise<Set<string>> };
+      loadUnifiedGroups: () => Promise<void>;
+    };
+    loader.unifiedGroupService = { getUnifiedGroups: () => groups.promise, getJoinedTeamIds: async () => new Set() };
+    let loading!: Promise<void>;
+    act(() => { loading = loader.loadUnifiedGroups(); });
+    await importFile(async () => serializeAdminWebPartSettings({ ...defaultAdminWebPartSettings, defaultView: 'day' }));
+    await act(async () => { groups.resolve([{ id: 'old', displayName: 'Stale group' }]); await loading; });
+    expect(panel.state.unifiedGroups).toEqual([]);
+    expect(panel.state.unifiedGroupsLoading).toBe(false);
+    await act(async () => { click('SaveLabel'); });
+    expect(props.onSave).toHaveBeenCalledWith(panel.state.settings);
+    expect(panel.state.settings.defaultView).toBe('day');
+    expect(props.onDismiss).toHaveBeenCalledTimes(1);
+  });
 
   function setGrouping(type: string, mode: 'audience' | 'container'): void {
     const containerLabels: Record<string, string> = {

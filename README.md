@@ -51,6 +51,7 @@ The web part does not create, change, or delete events or tasks in a source syst
 - Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation. Create an admin ICS entry by selecting its audience first, then entering its title and URL; eligible users open its Outlook subscription flow with one click, while manual ICS entry remains available.
 - Preview personal settings live in the calendar before saving. Cancel restores saved settings; failed Save retains your draft and restores the calendar with an error message.
 - Store personal settings and per-source visibility choices in the OneDrive App Folder. Save and Reset wait for storage; toolbar view preferences update optimistically and roll back on failure.
+- Export the complete administrator draft to a JSON file and import it into another web part within the same tenant. Import replaces the draft and takes effect only after Save; calendar, list and audience references remain unchanged and require existing permissions. Personal settings already follow the same user across sites through OneDrive.
 - Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
 - Open exact Outlook and Microsoft 365 Group calendar events, SharePoint list events, and Planner tasks from Event Details. Sources without a reliable exact item link, including Teams Shifts, do not receive a general application fallback.
 

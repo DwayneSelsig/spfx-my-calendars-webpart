@@ -589,6 +589,47 @@ export function parseAdminWebPartSettingsJson(raw: string | undefined): IAdminWe
   }
 }
 
+/** Explicit file import: reject other domains and entries that normalization would discard. */
+export function importAdminWebPartSettingsJson(raw: string): IAdminWebPartSettings | undefined {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value) || !Array.isArray(value.assignedSources) || !Array.isArray(value.icsCatalog)
+      || 'personalSources' in value || 'adminSourceOverridesById' in value
+      || ['day', 'week', 'month'].indexOf(value.defaultView as string) < 0 || typeof value.showWeekends !== 'boolean') return undefined;
+    for (const key of ['sourceCatalog', 'audienceGroups', 'exchangeMailboxAssignments']) {
+      if (value[key] !== undefined && !Array.isArray(value[key])) return undefined;
+    }
+    if (Array.isArray(value.exchangeMailboxAssignments) && value.exchangeMailboxAssignments.some(rule => !isRecord(rule)
+      || (rule.exceptions !== undefined && (!Array.isArray(rule.exceptions) || rule.exceptions.some(exception => !isRecord(exception)
+        || typeof exception.calendarId !== 'string' || !exception.calendarId.trim()))))) return undefined;
+    const entries = [...value.assignedSources, ...value.icsCatalog,
+      ...(Array.isArray(value.exchangeMailboxAssignments) ? value.exchangeMailboxAssignments : [])];
+    for (const entry of entries) {
+      if (!isRecord(entry)) return undefined;
+      if (entry.audienceGroupIds !== undefined && !Array.isArray(entry.audienceGroupIds)) return undefined;
+      if (Array.isArray(entry.audienceGroupIds)) {
+        if (entry.audienceGroupIds.some(id => typeof id !== 'string' || !id.trim()
+          || !Array.isArray(value.audienceGroups) || !value.audienceGroups.some(group => isRecord(group) && group.groupId === id))) return undefined;
+      } else if (!Array.isArray(entry.audienceGroups)
+        || entry.audienceGroups.some(group => !isRecord(group) || typeof group.groupId !== 'string'
+          || !group.groupId.trim() || typeof group.displayName !== 'string' || !group.displayName.trim())) return undefined;
+    }
+    const settings = normalizeAdminWebPartSettings(value);
+    if (!settings || settings.assignedSources.length !== value.assignedSources.length
+      || settings.icsCatalog.length !== value.icsCatalog.length
+      || (settings.exchangeMailboxAssignments || []).length !== (Array.isArray(value.exchangeMailboxAssignments) ? value.exchangeMailboxAssignments.length : 0)) return undefined;
+    // Validate unused definitions too; a broken reference must not silently disappear.
+    if (Array.isArray(value.sourceCatalog) && value.sourceCatalog.some(item => !isRecord(item)
+      || typeof item.adminSourceId !== 'string' || !item.adminSourceId.trim() || !normalizeCalendarSourceBase(item.source))) return undefined;
+    if (Array.isArray(value.audienceGroups) && value.audienceGroups.some(group => !isRecord(group)
+      || typeof group.groupId !== 'string' || !group.groupId.trim()
+      || typeof group.displayName !== 'string' || !group.displayName.trim())) return undefined;
+    return settings;
+  } catch {
+    return undefined;
+  }
+}
+
 export function normalizeUserCalendarSettings(value: unknown): IUserCalendarSettings | undefined {
   if (!isRecord(value) || !hasSupportedSettingsSchemaVersion(value)) {
     return undefined;

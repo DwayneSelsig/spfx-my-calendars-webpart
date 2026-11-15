@@ -36,7 +36,7 @@ import { SharePointCalendarService, ISharePointList, ISharePointSite } from '../
 import { PlannerTaskService, IPlannerPlan } from '../services/PlannerTaskService';
 import { UnifiedGroupCalendarService, IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
 import { AudienceService, IEntraSecurityGroup } from '../services/AudienceService';
-import { generateStableId, addAdministratorAssignments, addExchangeMailboxAssignment, canonicalizeExchangeSourceIdentities, getSourceIdentityKey } from '../services/CalendarSettingsService';
+import { generateStableId, addAdministratorAssignments, addExchangeMailboxAssignment, canonicalizeExchangeSourceIdentities, getSourceIdentityKey, importAdminWebPartSettingsJson, serializeAdminWebPartSettings } from '../services/CalendarSettingsService';
 import { getSourceTypeDescription, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 import { formatLocalizedString } from '../utils/localization';
 import { findBestMatchingFieldKey, getFieldCandidates } from '../utils/sharePointFieldCandidates';
@@ -82,6 +82,9 @@ interface IAdminDefaultsPanelState {
   expandedSections: Partial<Record<CalendarSourceType, boolean>>;
   settings: IAdminWebPartSettings;
   isSaving: boolean;
+  isImporting: boolean;
+  transferError?: string;
+  importSucceeded: boolean;
   saveError?: string;
   audienceFirst?: boolean;
   audiencePreset?: boolean;
@@ -159,6 +162,8 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   private audienceService: AudienceService | null = null;
   private mounted = false;
   private savePending = false;
+  private importPending = false;
+  private readonly importInput = React.createRef<HTMLInputElement>();
   private editSession = 0;
 
   private isCurrentSession(session: number): boolean {
@@ -219,6 +224,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
 
     if (prevProps.isOpen !== this.props.isOpen) {
       this.editSession++;
+      this.importPending = false;
       this.invalidateDialogDiscovery();
       this.setState({ exchangeCalendarsLoading: false, exchangeDiscoveryError: undefined });
     }
@@ -240,7 +246,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     return {
       groupingModes: {}, expandedSections: {},
       settings: structuredClone(props.settings),
-      isSaving: false, saveError: undefined,
+      isSaving: false, saveError: undefined, isImporting: false, importSucceeded: false, transferError: undefined,
       audienceFirst: false, audiencePreset: false, everyone: false, resolvedMailboxId: undefined,
       selectedSharePointLists: [], pendingSharePointSources: [],
       selectedExchangeCalendars: {}, exchangeAll: false, exchangeAllPolicy: { isMandatory: false, defaultEnabled: true },
@@ -397,7 +403,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   };
 
   private handleResetDraft = (): void => {
-    if (this.savePending) return;
+    if (this.savePending || this.importPending) return;
     this.editSession++;
     if (confirm(strings.ResetAdminDraftConfirmationLabel)) {
       this.invalidateDialogDiscovery();
@@ -409,7 +415,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
   };
 
   private handleSave = async (): Promise<void> => {
-    if (this.savePending) return;
+    if (this.savePending || this.importPending) return;
     this.savePending = true;
     const session = ++this.editSession;
     this.invalidateDialogDiscovery();
@@ -1778,11 +1784,56 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     }))) : <div style={{ fontSize: 12, color: '#605e5c' }}>{strings.NoAdminIcsCatalogItemsLabel}</div>);
   }
 
+  private handleExport = (): void => {
+    if (this.savePending || this.importPending) return;
+    let url: string | undefined;
+    const link = document.createElement('a');
+    try {
+      const json = serializeAdminWebPartSettings(this.state.settings);
+      url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      link.href = url;
+      link.download = 'my-calendars-admin-settings.json';
+      document.body.appendChild(link);
+      link.click();
+      this.setState({ transferError: undefined });
+    } catch {
+      this.setState({ transferError: strings.AdminConfigurationExportErrorLabel });
+    } finally {
+      link.remove();
+      if (url) URL.revokeObjectURL(url);
+    }
+  };
+
+  private handleImport = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file || this.savePending || this.importPending) return;
+    this.importPending = true;
+    const session = this.editSession;
+    this.setState({ isImporting: true, transferError: undefined, importSucceeded: false });
+    try {
+      const settings = importAdminWebPartSettingsJson(await file.text());
+      if (!this.isCurrentSession(session)) return;
+      if (!settings) throw new Error('Invalid administrator configuration file.');
+      this.invalidateDialogDiscovery();
+      this.editSession++;
+      this.importPending = false;
+      this.setState({ ...this.createStateFromProps({ ...this.props, settings }), importSucceeded: true });
+    } catch {
+      if (this.isCurrentSession(session)) this.setState({ transferError: strings.AdminConfigurationImportErrorLabel });
+    } finally {
+      if (this.isCurrentSession(session)) {
+        this.importPending = false;
+        this.setState({ isImporting: false });
+      }
+    }
+  };
+
   private onRenderFooterContent = (): React.ReactElement => (
     <Stack horizontal tokens={{ childrenGap: 8 }}>
-      <PrimaryButton onClick={this.handleSave} disabled={this.state.isSaving} text={this.state.isSaving ? strings.SavingLabel : strings.SaveLabel} />
+      <PrimaryButton onClick={this.handleSave} disabled={this.state.isSaving || this.state.isImporting} text={this.state.isSaving ? strings.SavingLabel : strings.SaveLabel} />
       <DefaultButton onClick={this.handleDismiss} disabled={this.state.isSaving} text={strings.CancelLabel} />
-      <DefaultButton onClick={this.handleResetDraft} disabled={this.state.isSaving} text={strings.ResetDraftToDefaultsLabel} />
+      <DefaultButton onClick={this.handleResetDraft} disabled={this.state.isSaving || this.state.isImporting} text={strings.ResetDraftToDefaultsLabel} />
     </Stack>
   );
 
@@ -1799,12 +1850,24 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     return (
     <Panel isOpen={isOpen} onDismiss={this.handleDismiss} isBlocking={this.state.isSaving} isLightDismiss={false} hasCloseButton={!this.state.isSaving} type={PanelType.medium} headerText={showAddDialog ? strings.AddAdminDefaultLabel : strings.AdminCalendarDefaultsTitle} onRenderFooterContent={!showAddDialog ? this.onRenderFooterContent : undefined} isFooterAtBottom={true}>
         {this.state.saveError && <MessageBar messageBarType={MessageBarType.error}>{this.state.saveError}</MessageBar>}
-        <fieldset disabled={this.state.isSaving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <fieldset disabled={this.state.isSaving || this.state.isImporting} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
 
         {showAddDialog ? (
           this.renderAddFlow()
         ) : (
           <Stack tokens={{ childrenGap: 16 }}>
+            <Stack tokens={{ childrenGap: 8 }}>
+              <Label>{strings.AdminConfigurationTransferLabel}</Label>
+              <div>{strings.AdminConfigurationTransferDescriptionLabel}</div>
+              <Stack horizontal wrap tokens={{ childrenGap: 8 }}>
+                <DefaultButton text={strings.AdminConfigurationExportLabel} onClick={this.handleExport} disabled={this.state.isSaving || this.state.isImporting} />
+                <DefaultButton text={strings.AdminConfigurationImportLabel} onClick={() => this.importInput.current?.click()} disabled={this.state.isSaving || this.state.isImporting} />
+              </Stack>
+              <input ref={this.importInput} type="file" accept=".json,application/json" hidden onChange={this.handleImport} />
+              {this.state.isImporting && <Spinner size={SpinnerSize.small} label={strings.AdminConfigurationImportingLabel} />}
+              {this.state.transferError && <MessageBar messageBarType={MessageBarType.error}>{this.state.transferError}</MessageBar>}
+              {this.state.importSucceeded && <MessageBar messageBarType={MessageBarType.success}>{strings.AdminConfigurationImportedLabel}</MessageBar>}
+            </Stack>
             {loadNotice && (
               <MessageBar messageBarType={MessageBarType.warning}>
                 {loadNotice}
