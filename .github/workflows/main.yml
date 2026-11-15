@@ -20,10 +20,10 @@ jobs:
       - name: Checkout code (tag)
         uses: actions/checkout@v7
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 26
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           check-latest: true
 
       # Extract version from release tag

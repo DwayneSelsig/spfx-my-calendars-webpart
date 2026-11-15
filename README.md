@@ -167,7 +167,7 @@ The package is written to `sharepoint/solution/`.
 
 `npm run build` runs the focused Jest regression tests, including browser-cache and administrator-settings persistence coverage, before creating the production package.
 
-The solution uses SPFx 1.24.1 with React 18.3.1 and TypeScript 5.8. Dependency updates follow the SPFx compatibility limits for Node.js, React, and TypeScript. See [Dependency compatibility](docs/dependency-compatibility.md) for the selected package versions, upstream constraints, and release workflow references. The release workflow follows the current Ubuntu runner and action major tags while using the latest supported Node.js 22 patch.
+The solution uses SPFx 1.24.1 with React 18.3.1 and TypeScript 5.8. Dependency updates follow the SPFx compatibility limits for Node.js, React, and TypeScript. See [Dependency compatibility](docs/dependency-compatibility.md) for the selected package versions, upstream constraints, and release workflow references. The release workflow follows the current Ubuntu runner and action major tags while using the latest Node.js 26 patch.
 
 ## Installation and upgrade
 

@@ -4,7 +4,7 @@ This is an operational dependency review, not a product behavior contract.
 
 ## SPFx constraints
 
-The solution targets **SPFx 1.24.1**, with **React and React DOM exactly 18.3.1** and **TypeScript 5.8.3**. Supported development runtimes are Node.js 22 (22.14.0 or later within 22.x), 24, and 26. Node.js 26 LTS is recommended for new environments. CI continues to use the supported Node 22 line.
+The solution targets **SPFx 1.24.1**, with **React and React DOM exactly 18.3.1** and **TypeScript 5.8.3**. Supported development runtimes are Node.js 22 (22.14.0 or later within 22.x), 24, and 26. Node.js 26 LTS is recommended for new environments. The release workflow uses Node 26.
 
 See Microsoft's [1.24.1 release notes](https://learn.microsoft.com/sharepoint/dev/spfx/release-1.24.1), [compatibility reference](https://learn.microsoft.com/sharepoint/dev/spfx/compatibility), and [React 18 migration guide](https://learn.microsoft.com/sharepoint/dev/spfx/react-18-upgrade).
 
@@ -32,7 +32,7 @@ DOM regression tests use React 18 roots and `act` from React, with the test-only
 
 ## Release workflow
 
-The existing `.github/workflows/main.yml` continues to use `ubuntu-latest`, `actions/checkout@v7`, `actions/setup-node@v7`, and `softprops/action-gh-release@v3`. Node setup selects the latest available Node 22 patch with `check-latest: true`. Those references are unchanged by this framework upgrade. The actions' internal runtime is independent of the Node runtime selected for the SPFx build.
+The release workflow `.github/workflows/main.yml` uses `ubuntu-latest`, `actions/checkout@v7`, `actions/setup-node@v7`, and `softprops/action-gh-release@v3`. Node setup selects the latest available Node 26 patch with `check-latest: true`. The actions' internal runtime is independent of the Node runtime selected for the SPFx build.
 
 ## Validation and remaining checks
 
