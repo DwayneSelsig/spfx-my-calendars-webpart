@@ -2,5 +2,8 @@
   "extends": "@microsoft/spfx-web-build-rig/profiles/default/config/jest.config.json",
   "moduleNameMapper": {
     "^MyCalendarsWebPartStrings$": "<rootDir>/lib-commonjs/webparts/myCalendars/utils/testStrings.js"
+  },
+  "globals": {
+    "IS_REACT_ACT_ENVIRONMENT": true
   }
 }

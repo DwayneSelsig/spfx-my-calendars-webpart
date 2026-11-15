@@ -123,7 +123,7 @@ Use [Calendar](docs/calendar.md) for loading and rendering behavior, [Sources an
 - A SharePoint or Microsoft 365 tenant that supports the configured host.
 - The required Microsoft Graph permissions.
 - Access to each configured calendar source.
-- Node.js `>=22.14.0 <23.0.0` for local development.
+- Node.js 22 (22.14.0 or later), 24, or 26 for local development. Node.js 26 LTS is recommended for a new environment.
 
 The supported host contract covers SharePoint web-part pages, SharePoint full-page apps, Microsoft Teams personal apps and tabs, Microsoft 365, and Outlook. Some host identities are recognized through the Teams SDK rather than listed as distinct manifest values. Host-sensitive behavior still requires validation in each host.
 
@@ -166,7 +166,7 @@ The package is written to `sharepoint/solution/`.
 
 `npm run build` runs the focused Jest regression tests, including browser-cache and administrator-settings persistence coverage, before creating the production package.
 
-Dependency updates follow the SPFx compatibility limits for Node.js, React, and TypeScript. See [Dependency compatibility](docs/dependency-compatibility.md) for the selected package versions, upstream constraints, and release workflow references. The release workflow follows the current Ubuntu runner and action major tags while using the latest supported Node.js 22 patch.
+The solution uses SPFx 1.24.1 with React 18.3.1 and TypeScript 5.8. Dependency updates follow the SPFx compatibility limits for Node.js, React, and TypeScript. See [Dependency compatibility](docs/dependency-compatibility.md) for the selected package versions, upstream constraints, and release workflow references. The release workflow follows the current Ubuntu runner and action major tags while using the latest supported Node.js 22 patch.
 
 ## Installation and upgrade
 

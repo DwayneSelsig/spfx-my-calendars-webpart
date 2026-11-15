@@ -1,5 +1,5 @@
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
 import {
   type IPropertyPaneCustomFieldProps,
   type IPropertyPaneField,
@@ -117,6 +117,9 @@ class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerC
   }
 }
 
+// SPFx can recreate the field descriptor while retaining the same container.
+const adminDefaultsRoots = new WeakMap<HTMLElement, Root>();
+
 export function PropertyPaneAdminDefaultsManager(
   targetProperty: string,
   properties: IPropertyPaneAdminDefaultsManagerProps
@@ -127,17 +130,22 @@ export function PropertyPaneAdminDefaultsManager(
     properties: {
       key: targetProperty,
       onRender: (elem, _context, changeCallback): void => {
-        ReactDOM.render(
+        let root = adminDefaultsRoots.get(elem);
+        if (!root) {
+          root = createRoot(elem);
+          adminDefaultsRoots.set(elem, root);
+        }
+        root.render(
           <AdminDefaultsManagerControl
             {...properties}
             targetProperty={targetProperty}
             changeCallback={changeCallback}
-          />,
-          elem
+          />
         );
       },
       onDispose: (elem: HTMLElement): void => {
-        ReactDOM.unmountComponentAtNode(elem);
+        adminDefaultsRoots.get(elem)?.unmount();
+        adminDefaultsRoots.delete(elem);
       }
     }
   };

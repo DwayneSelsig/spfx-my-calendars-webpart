@@ -1,4 +1,3 @@
-/* eslint-disable @rushstack/pair-react-dom-render-unmount -- afterEach disposes the custom field. */
 jest.mock('@microsoft/sp-core-library', () => ({ Version: { parse: jest.fn() } }));
 jest.mock('@microsoft/sp-webpart-base', () => ({ BaseClientSideWebPart: class { public properties = {}; } }));
 jest.mock('@microsoft/sp-property-pane', () => ({ PropertyPaneFieldType: { Custom: 1 } }));
@@ -13,7 +12,8 @@ jest.mock('../services/AudienceService', () => ({}));
 jest.mock('../services/SettingsStorageService', () => ({}));
 jest.mock('MyCalendarsWebPartStrings', () => new Proxy({ __esModule: true }, { get: (_target, key) => key === '__esModule' ? true : String(key) }));
 
-import { act, Simulate } from 'react-dom/test-utils';
+import { act } from 'react';
+import { Simulate } from 'react-dom/test-utils';
 import { setIconOptions } from '@fluentui/react/lib/Styling';
 import type { IPropertyPaneCustomFieldProps, IPropertyPaneField } from '@microsoft/sp-property-pane';
 import MyCalendarsWebPart from '../MyCalendarsWebPart';

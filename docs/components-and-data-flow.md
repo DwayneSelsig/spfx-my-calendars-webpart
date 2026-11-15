@@ -42,7 +42,8 @@ This document describes verified current responsibilities. Normative cross-cutti
 
 - `onThemeChanged` can update CSS variables and effective theme-derived settings without mounting React.
 - `onInit` initializes storage and Graph access before the framework `render` mounts React.
-- `onDispose` unmounts the React subtree.
+- The web part creates one React 18 root on its first render and reuses it for subsequent renders. `onDispose` unmounts and clears that root.
+- The administrator property-pane adapter owns one React 18 root per control container, reuses it across renders and SPFx field-descriptor replacements, and unmounts and removes it on disposal (DEC-031).
 - The webpart owns accepted settings callbacks. Administrator saves use one SPFx callback writer and one property; personal writes use OneDrive. Panels await completion before closing; the adapter does not refresh itself during a save.
 - The web part discovers applicable automatic Exchange mailbox rules using the Exchange service before pure settings resolution, on initialization, administrator changes and manual refresh. Generation checks discard obsolete results.
 - AssignmentControls supplies reusable policy, capability and grouping presentation; CalendarSettingsService retains all policy decisions.

@@ -274,6 +274,8 @@ Confirmed administrator settings missing from the UI are organization color, fiv
 
 `PropertyPaneAdminDefaultsManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and provides the sole SPFx property writer to the webpart and reads current values through getters.
 
+SharePoint site selection in both panels applies discovered lists through a functional state update guarded by the current edit session and selected site. This preserves fast responses under React 18 automatic batching while ignoring results for a superseded selection.
+
 ### Personal interface
 
 The current personal panel exposes:

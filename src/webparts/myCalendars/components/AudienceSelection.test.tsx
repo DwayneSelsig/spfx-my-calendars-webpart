@@ -1,20 +1,21 @@
-/* eslint-disable @rushstack/pair-react-dom-render-unmount -- Shared host is unmounted after each test. */
 jest.mock('MyCalendarsWebPartStrings', () => new Proxy({ __esModule: true }, {
   get: (_target, key) => key === '__esModule' ? true : String(key)
 }));
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
-import { act, Simulate } from 'react-dom/test-utils';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react';
+import { Simulate } from 'react-dom/test-utils';
 import { AudienceSelection, type IAudienceSelectionProps } from './AudienceSelection';
 import type { AudienceService } from '../services/AudienceService';
 
 describe('audience selection', () => {
   let host: HTMLDivElement;
+  let root: Root;
   let props: IAudienceSelectionProps;
   let count: jest.Mock;
   function render(update: Partial<IAudienceSelectionProps> = {}): void {
     props = { ...props, ...update };
-    act(() => { ReactDOM.render(<AudienceSelection {...props} />, host); });
+    act(() => { root.render(<AudienceSelection {...props} />); });
   }
   function button(label: string): HTMLButtonElement {
     const found = Array.from(host.querySelectorAll('button')).find(item => item.textContent === label);
@@ -27,7 +28,7 @@ describe('audience selection', () => {
     act(() => { Simulate.click(row); });
   }
   beforeEach(() => {
-    host = document.createElement('div'); document.body.appendChild(host);
+    host = document.createElement('div'); root = createRoot(host); document.body.appendChild(host);
     count = jest.fn(async (ids: string[]) => {
       const result: Record<string, number> = {};
       ids.forEach(id => { result[id] = id === 'g0' ? 0 : 7; });
@@ -42,7 +43,7 @@ describe('audience selection', () => {
       onSelectionChange: jest.fn(selected => render({ selected })), onApply: jest.fn()
     };
   });
-  afterEach(() => { act(() => { ReactDOM.unmountComponentAtNode(host); }); host.remove(); jest.restoreAllMocks(); });
+  afterEach(() => { act(() => { root.unmount(); }); host.remove(); jest.restoreAllMocks(); });
 
   it('counts only the current page, reuses successful counts, and preserves a single selection across pages', async () => {
     await act(async () => { render(); });

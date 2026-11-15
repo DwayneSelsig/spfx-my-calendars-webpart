@@ -473,8 +473,10 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     this.setSessionState(session, { spSelectedSite: site, spListsLoading: true, spLists: [] });
     const lists = await this.sharePointService?.getCalendarLists(site.id) || [];
     if (!this.isCurrentSession(session)) return;
-    if (this.state.spSelectedSite?.id !== site.id) return;
-    this.setSessionState(session, { spLists: lists, spListsLoading: false, addingCalendarStep: 'sharepoint-list' });
+    // React 18 may batch the selection with this response; check queued state.
+    this.setSessionState(session, previous => previous.spSelectedSite?.id === site.id
+      ? { spLists: lists, spListsLoading: false, addingCalendarStep: 'sharepoint-list' }
+      : null);
   };
 
   private handleSelectSharePointList = (list: ISharePointList): void => {

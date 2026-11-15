@@ -462,3 +462,12 @@ When a decision is confirmed:
 3. update specialized documentation and matrices;
 4. update README only when user-visible or operational behavior changes; and
 5. keep a deviation until implementation actually meets the decision.
+
+### DEC-031 — SPFx 1.24.1 and React 18 lifecycle
+
+- **Status:** Decision
+- The solution targets SPFx 1.24.1 and its supported React 18.3.1 runtime, with TypeScript 5.8 and Node.js 22 (22.14.0+), 24, or 26.
+- The web part and administrator property-pane control own and reuse a React root per DOM container. Field-descriptor replacement for the same property-pane container reuses the root. Disposal unmounts and clears it; rendering a disposed container creates a new root.
+- SharePoint site-selection response guards evaluate queued state in a functional updater so fast discovery responses remain valid under automatic batching and superseded selections remain ignored.
+- The upgrade preserves settings persistence ownership and awaited-save behavior under DEC-025 and DEC-026. DOM regression tests use React 18 roots and React `act`.
+- Production packaging and local regression checks do not establish host integration success. SharePoint, Teams, Microsoft 365 and Outlook require tenant validation.

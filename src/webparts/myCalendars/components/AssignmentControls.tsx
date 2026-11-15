@@ -29,6 +29,6 @@ export const AllowedOverrideControls: React.FC<{ value?: IAdminAllowedOverrides;
   return <Stack tokens={{ childrenGap: 8 }}>{fields.map(field => <Checkbox key={field.key} label={field.label} checked={allowed[field.key]} onChange={(_, checked) => onChange({ ...allowed, [field.key]: !!checked })} />)}</Stack>;
 };
 
-export const AssignmentGroup: React.FC<{ title: string; description?: string }> = ({ title, description, children }) => (
+export const AssignmentGroup: React.FC<{ title: string; description?: string; children?: React.ReactNode }> = ({ title, description, children }) => (
   <details open style={{ marginBottom: 12 }}><summary style={{ cursor: 'pointer', padding: '8px 0' }}><strong>{title}</strong>{description && <span style={{ marginLeft: 8 }}>{description}</span>}</summary><div style={{ paddingLeft: 16 }}>{children}</div></details>
 );

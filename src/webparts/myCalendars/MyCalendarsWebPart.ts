@@ -1,6 +1,6 @@
 import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage } from './services/ExchangeCalendarService';
 import * as React from 'react';
-import * as ReactDom from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
 import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration
@@ -60,6 +60,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   private _userSavePending = false;
   private _userPreview: IUserCalendarSettings | undefined;
   private _disposed = false;
+  private _root: Root | undefined;
 
   public render(): void {
     if (this._disposed) return;
@@ -87,7 +88,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
       }
     );
 
-    ReactDom.render(element, this.domElement);
+    if (!this._root) this._root = createRoot(this.domElement);
+    this._root.render(element);
   }
 
   protected async onInit(): Promise<void> {
@@ -160,7 +162,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   protected onDispose(): void {
     this._disposed = true;
     this._settingsGeneration++;
-    ReactDom.unmountComponentAtNode(this.domElement);
+    this._root?.unmount();
+    this._root = undefined;
   }
 
   protected get dataVersion(): Version {

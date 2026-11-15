@@ -1,4 +1,3 @@
-/* eslint-disable @rushstack/pair-react-dom-render-unmount -- Every test unmounts its shared host in afterEach. */
 jest.mock('@microsoft/sp-http', () => ({}));
 jest.mock('../services/ExchangeCalendarService', () => ({ ExchangeCalendarService: jest.fn(() => ({ setGraphClient: jest.fn(), getCalendars: async () => [] })) }));
 jest.mock('../services/SharePointCalendarService', () => ({ SharePointCalendarService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
@@ -10,8 +9,9 @@ jest.mock('MyCalendarsWebPartStrings', () => new Proxy({ __esModule: true }, {
 }));
 
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
-import { act, Simulate } from 'react-dom/test-utils';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react';
+import { Simulate } from 'react-dom/test-utils';
 import { setIconOptions } from '@fluentui/react/lib/Styling';
 import { AdminDefaultsPanel, type IAdminDefaultsPanelProps } from './AdminDefaultsPanel';
 import { UserSettingsPanel, type IUserSettingsPanelProps } from './UserSettingsPanel';
@@ -37,19 +37,20 @@ function deferred(): { promise: Promise<void>; resolve: () => void; reject: (err
 
 describe('settings panels awaited lifecycle', () => {
   let host: HTMLDivElement;
+  let root: Root;
   let errorLog: jest.SpyInstance;
   beforeAll(() => {
     setIconOptions({ disableWarnings: true });
     if (!globalThis.structuredClone) Object.defineProperty(globalThis, 'structuredClone', { value: <T,>(value: T): T => (jest.requireActual('v8').deserialize(jest.requireActual('v8').serialize(value)) as T), configurable: true });
   });
   beforeEach(() => {
-    host = document.createElement('div');
+    host = document.createElement('div'); root = createRoot(host);
     document.body.appendChild(host);
     errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     jest.spyOn(window, 'confirm').mockReturnValue(true);
   });
   afterEach(() => {
-    act(() => { ReactDOM.unmountComponentAtNode(host); });
+    act(() => { root.unmount(); });
     host.remove();
     jest.restoreAllMocks();
   });
@@ -66,13 +67,13 @@ describe('settings panels awaited lifecycle', () => {
   function admin(overrides: Partial<IAdminDefaultsPanelProps> = {}): { panel: AdminDefaultsPanel; props: IAdminDefaultsPanelProps } {
     const props = { isOpen: true, settings: structuredClone(defaultAdminWebPartSettings), onDismiss: jest.fn(), onSave: jest.fn(async () => undefined), ...overrides };
     let panel!: AdminDefaultsPanel;
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} ref={instance => { if (instance) panel = instance; }} />, host); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} ref={instance => { if (instance) panel = instance; }} />); });
     return { panel, props };
   }
   function user(overrides: Partial<IUserSettingsPanelProps> = {}): { panel: UserSettingsPanel; props: IUserSettingsPanelProps } {
     const props = { isOpen: true, settings: structuredClone(defaultCalendarSettings), onDismiss: jest.fn(), onPreview: jest.fn(), onSave: jest.fn(async () => undefined), onReset: jest.fn(async () => undefined), ...overrides };
     let panel!: UserSettingsPanel;
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} ref={instance => { if (instance) panel = instance; }} />, host); });
+    act(() => { root.render(<UserSettingsPanel {...props} ref={instance => { if (instance) panel = instance; }} />); });
     return { panel, props };
   }
 
@@ -152,15 +153,15 @@ describe('settings panels awaited lifecycle', () => {
     selectTimeline(2, 2);
     click('CancelLabel');
     expect(props.onSave).not.toHaveBeenCalled();
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen />, host); });
+    act(() => { root.render(<UserSettingsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<UserSettingsPanel {...props} isOpen />); });
     expect(panel.state.settings.userShowWeekends).toBeUndefined();
     selectTimeline(2, 2);
     await act(async () => { click('SaveLabel'); });
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ userShowWeekends: false, showWeekends: false }));
     const saved = (props.onSave as jest.Mock).mock.calls[0][0];
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} settings={saved} isOpen />, host); });
+    act(() => { root.render(<UserSettingsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<UserSettingsPanel {...props} settings={saved} isOpen />); });
     expect(panel.state.settings.userShowWeekends).toBe(false);
     expect(timelineDropdown(2).textContent).toContain('HideOptionLabel');
   });
@@ -250,8 +251,8 @@ describe('settings panels awaited lifecycle', () => {
     expect(content.hidden).toBe(true);
     setGrouping('exchange', 'container');
     expect(content.hidden).toBe(true);
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={false} />, host); });
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={true} />, host); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} isOpen={true} />); });
     expect(panel.state.groupingModes).toEqual({});
     expect(panel.state.expandedSections).toEqual({});
     expect(document.querySelector('[data-admin-section="exchange"] button[aria-expanded]')?.getAttribute('aria-expanded')).toBe('true');
@@ -440,9 +441,9 @@ describe('settings panels awaited lifecycle', () => {
     expect(props.onSave).not.toHaveBeenCalled();
     click('CancelLabel');
     expect(props.onSave).not.toHaveBeenCalled();
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={false} />, host); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} isOpen={false} />); });
     const latest = { ...props.settings, defaultView: 'day' as const };
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} settings={latest} isOpen />, host); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} settings={latest} isOpen />); });
     expect(panel.state.settings.defaultView).toBe('day');
     expect(panel.state.settings).not.toBe(latest);
   });
@@ -450,7 +451,7 @@ describe('settings panels awaited lifecycle', () => {
   it('keeps administrator edits when incoming props change while open', () => {
     const { panel, props } = admin();
     act(() => { panel.setState(previous => ({ settings: { ...previous.settings, showWeekends: false } })); });
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} settings={{ ...props.settings, defaultView: 'day' }} />, host); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} settings={{ ...props.settings, defaultView: 'day' }} />); });
     expect(panel.state.settings.showWeekends).toBe(false);
     expect(panel.state.settings.defaultView).toBe('month');
   });
@@ -491,7 +492,7 @@ describe('settings panels awaited lifecycle', () => {
     const restored = resolveCalendarSettings({ adminSettings: mandatory, userSettings: {
       ...defaultUserCalendarSettings, adminSourceOverridesById: { 'source-id': { removed: true, isEnabled: false, name: 'Stored name', color: '#ffffff' } }
     }, matchedGroupIds });
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} settings={restored} />, host); });
+    act(() => { root.render(<UserSettingsPanel {...props} settings={restored} />); });
     expect(panel.state.settings.sources).toHaveLength(1);
     expect(panel.state.settings.sources[0]).toMatchObject({ id: 'source-id', isMandatory: true, isEnabled: true,
       name: choice === 'removed' ? 'Stored name' : 'Draft name', color: '#0078d4'
@@ -536,15 +537,15 @@ describe('settings panels awaited lifecycle', () => {
     if (kind === 'admin') {
       const { props } = admin({ onSave: () => pending.promise });
       click('SaveLabel');
-      act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={false} />, host); });
-      act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen />, host); });
+      act(() => { root.render(<AdminDefaultsPanel {...props} isOpen={false} />); });
+      act(() => { root.render(<AdminDefaultsPanel {...props} isOpen />); });
       await act(async () => { pending.resolve(); await pending.promise; });
       expect(props.onDismiss).not.toHaveBeenCalled();
     } else {
       const { props } = user({ onSave: () => pending.promise });
       click('SaveLabel');
-      act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
-      act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen />, host); });
+      act(() => { root.render(<UserSettingsPanel {...props} isOpen={false} />); });
+      act(() => { root.render(<UserSettingsPanel {...props} isOpen />); });
       await act(async () => { pending.resolve(); await pending.promise; });
       expect(props.onDismiss).not.toHaveBeenCalled();
     }
@@ -651,8 +652,8 @@ describe('settings panels awaited lifecycle', () => {
     };
     loader.unifiedGroupService = { getUnifiedGroups: () => groups, getJoinedTeamIds: async () => new Set() };
     const loading = loader.loadUnifiedGroups();
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen={false} />, host); });
-    act(() => { ReactDOM.render(<AdminDefaultsPanel {...props} isOpen />, host); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} isOpen />); });
     await act(async () => { complete([{ id: 'old', displayName: 'Stale group' }]); await loading; });
     expect(panel.state.unifiedGroups).toEqual([]);
   });
@@ -662,8 +663,8 @@ describe('settings panels awaited lifecycle', () => {
     const { panel, props } = user({ onSave: jest.fn(() => pending.promise) });
     click('CancelLabel');
     expect(props.onSave).not.toHaveBeenCalled();
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} settings={{ ...props.settings, showWeekends: false }} isOpen />, host); });
+    act(() => { root.render(<UserSettingsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<UserSettingsPanel {...props} settings={{ ...props.settings, showWeekends: false }} isOpen />); });
     expect(panel.state.settings.showWeekends).toBe(false);
     click('SaveLabel');
     expect(props.onDismiss).toHaveBeenCalledTimes(1);
@@ -675,7 +676,7 @@ describe('settings panels awaited lifecycle', () => {
     const pending = deferred();
     const { panel, props } = kind === 'admin' ? admin({ onSave: () => pending.promise }) : user({ onSave: () => pending.promise });
     click('SaveLabel');
-    act(() => { ReactDOM.unmountComponentAtNode(host); });
+    act(() => { root.unmount(); });
     const stateUpdate = jest.spyOn(panel, 'setState');
     await act(async () => { pending.resolve(); await pending.promise; });
     expect(stateUpdate).not.toHaveBeenCalled();
@@ -731,8 +732,8 @@ describe('settings panels awaited lifecycle', () => {
     const { panel, props } = user();
     act(() => { panel.setState({ spSelectedSite: { id: 'old', name: 'Old site', url: '' }, spSelectedList: { id: 'old-list', name: 'Old list', webUrl: '' }, spFieldMapping: { titleField: 'OldTitle' }, spListsLoading: true, plannerSelectedPlanId: 'old-plan' }); });
     click('CancelLabel');
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen={false} />, host); });
-    act(() => { ReactDOM.render(<UserSettingsPanel {...props} isOpen />, host); });
+    act(() => { root.render(<UserSettingsPanel {...props} isOpen={false} />); });
+    act(() => { root.render(<UserSettingsPanel {...props} isOpen />); });
     expect(panel.state.spSelectedSite).toBeUndefined();
     expect(panel.state.spSelectedList).toBeUndefined();
     expect(panel.state.spFieldMapping).toEqual({});
