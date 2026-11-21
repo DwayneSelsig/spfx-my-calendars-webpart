@@ -32,7 +32,7 @@ DOM regression tests use React 18 roots and `act` from React, with the test-only
 
 ## Release workflow
 
-The release workflow `.github/workflows/main.yml` uses `ubuntu-latest`, `actions/checkout@v7`, `actions/setup-node@v7`, and `softprops/action-gh-release@v3`. Node setup selects the latest available Node 26 patch with `check-latest: true`. The actions' internal runtime is independent of the Node runtime selected for the SPFx build.
+The release workflow `.github/workflows/main.yml` uses `ubuntu-latest`, `actions/checkout@v7`, `actions/setup-node@v7`, and `softprops/action-gh-release@v3`. Node setup selects the latest available Node 26 patch with `check-latest: true`. After uploading the `.sppkg` release asset, `crazy-max/ghaction-virustotal@v5` scans it using the `VT_API_KEY` repository secret and adds an analysis link to the release notes. The actions' internal runtime is independent of the Node runtime selected for the SPFx build.
 
 ## Validation and remaining checks
 
