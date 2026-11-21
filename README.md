@@ -1,201 +1,64 @@
 # <picture><img src="docs/images/icon.svg" alt="My Calendars icon" width="32" height="32" /></picture> My Calendars
 
-My Calendars is a read-only SharePoint Framework web part. It combines calendar data from multiple Microsoft 365 and SharePoint sources. It presents the data in one calendar interface.
+**Your calendars, meetings, tasks, and deadlines. One place.**
 
-The web part does not create, change, or delete events or tasks in a source system. When a source provides a suitable URL, the web part can link the user to the source calendar or event.
+Your work doesn't live in just one calendar. Meetings are scheduled in Outlook, tasks and deadlines are tracked in Planner, and project schedules live in SharePoint. Colleagues share calendars through Exchange, while groups have their own calendars and teams use Shifts.
 
-![My Calendars web part in SharePoint](docs/images/my-calendars-screenshot.png "My Calendars web part in SharePoint")
+My Calendars brings them together in one read-only calendar on your SharePoint page. See what's coming up and spend less time switching between applications.
 
-## Capability status
+![My Calendars web part](docs/images/my-calendars-screenshot.png)
 
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Exchange calendars | Available | Includes the current user's calendars and configured shared mailboxes. |
-| SharePoint list calendars | Available | Supports explicit field mapping for compatible lists. |
-| Planner tasks | Available | Supports assignment and completion filters. |
-| Microsoft 365 Group and Teams calendars | Available | Uses one calendar source per selected group or Team. |
-| Teams Shifts | Available | Includes shared and draft shifts. |
-| ICS subscription | Available | Opens the Exchange Online subscription wizard with a generated deep link. The web part does not parse ICS data. |
-| Day, Week, and Month views | Available | Uses the local read-only calendar renderer. |
-| Search view | Available | Uses a custom search result view. The active calendar stays mounted while search is active. |
-| Schedule view | Not supported | Day, Week, and Month are the supported calendar views. |
-| Partial source results | Available | A source failure does not remove events that other sources loaded successfully. |
+[Documentation](https://www.m365wizard.com/docs/tools/apps/my-calendars) · [Latest release](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/releases/latest) · [Report an issue](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/issues)
 
-## Main features
+## Features
 
-- Assign Exchange and SharePoint calendars to Microsoft 365, security or mail-enabled security groups, or Everyone, through group-first administrator settings. Choose Mandatory, Default or Available per calendar and independently control personal name, color, logo and supported option changes. Group assignment does not grant source permissions.
-- A previously removed or hidden assigned calendar reappears enabled when its applicable policy becomes Mandatory, including in an already open personal settings panel. Other personal draft edits and permitted presentation choices remain. The old removal/visibility override is discarded on observing that policy and cleaned from storage on the next successful personal save.
-- Select multiple Exchange calendars, or opt into all current and future mailbox calendars with individual policy exceptions. SharePoint calendars remain explicitly selected with their own field mapping. Matching assignments produce one effective calendar using the strongest policy.
+- View Outlook and shared Exchange calendars, Microsoft 365 Group calendars, Planner tasks, SharePoint list events, and Teams Shifts together.
+- Switch between Day, Week, and Month views, search events, and open supported items in their original applications.
+- Choose calendars, colors, visibility, and display preferences. Personal settings follow you across SharePoint sites.
+- Administrators can assign Exchange or SharePoint calendars to Microsoft Entra security groups (or Everyone), and offer ICS subscriptions to those audiences through Outlook.
 
-- Configure shared Exchange calendars with a local people picker that suggests directory users by display name, UPN or primary SMTP address. Manual UPN, object ID and primary SMTP input remains available, with clear discovery errors and empty-result feedback. Secondary aliases are not supported.
-- Combine Exchange, SharePoint list, Planner, Microsoft 365 Group and Teams, and Teams Shifts data through a common event contract in one view.
-- Use the responsive local calendar renderer in Day, Week, and Month views, with calendar navigation and styling designed for the web part rather than an external calendar component.
-- Use optimized search and settings flows. Search covers event titles and locations while the active calendar remains mounted.
-- Keep search visible in narrow web parts: Settings and Refresh use icons without text when space is limited, and search moves below the actions at very narrow widths.
-- Navigate beyond the initial seven-month window with source- and month-aware loading, and optionally cache the initial range in the browser for an administrator-defined lifetime. An unreadable or incompatible appointment-cache entry is discarded as a whole and rebuilt from source data.
-- Handle source-specific date and time behavior defensively, including mailbox time zones, Graph all-day values, and SharePoint's inclusive all-day end dates.
-- Show sanitized HTML descriptions and meeting organizer information without presenting an attendee-less appointment as a meeting.
-- Enable or disable individual sources. Outlook and SharePoint sections also provide an eye icon at the far right of each header for tri-state bulk visibility, changing optional individual visibility settings while mandatory calendars remain enabled.
-- Find mailboxes in personal and administrator settings with the same people-picker suggestions by name, UPN or primary email address, or enter a UPN, object ID or primary SMTP address manually. Load calendars after choosing or entering the mailbox.
-- Personal Exchange addition first recommends adding the calendar in Outlook. Choose **Load another mailbox** to add a calendar only to this web part; the next screen shows mailbox entry, **Load calendars**, and the discovered calendars in that order.
-- Keep automatic Planner, Group and Teams, and Teams Shifts discovery separate from visibility controls. Automatically discovered sources are enabled by default; Planner includes all accessible plans, not only tasks assigned to the current user.
-- Show the SharePoint site name separately from the editable calendar name in personal settings, administrator settings, and event details. Older saved sources are enriched when their site can be resolved.
-- Display Graph calendar availability in Day, Week, Month, Search, and Event Details while preserving the calendar color as source identity. Availability uses icons, outlines, and theme-aware patterns; the signed-in user's response is shown only for events loaded from their own mailbox.
-- Keep declined personal events visible with a response icon, muted presentation, and struck-through title.
-- Set a color for each configured source and optionally show source logos by service type. Logo toggles sit directly below each expanded source header in personal settings. Outlook's **Manage all calendars** button sits below all calendars within its section.
-- Choose personal timeline start time, visible hours and weekends through three compact dropdowns, each with an option to follow the administrator default. Administrators set a 15, 30, or 60 minute grid.
-- Follow the SharePoint page culture for locale-aware date and time formatting, including regional 12- or 24-hour clocks.
-- Use organization theme colors and support light and dark themes.
-- Search all returned pages of audience groups with local alphabetical ordering, visible API errors, and selections preserved across searches.
-- Choose Everyone or specific groups in the administrator Fluent UI audience picker for calendars and ICS subscriptions. Filter a paged grid immediately by typing any part of a group name, with group types and user counts including nested members. Counts load independently and do not imply permission to read the source calendar.
-- Target administrator sources and ICS subscriptions to supported Entra groups or Everyone, with paged group discovery and fail-closed membership evaluation. Create an admin ICS entry by selecting its audience first, then entering its title and URL; eligible users open its Outlook subscription flow with one click, while manual ICS entry remains available.
-- Preview personal settings live in the calendar before saving. Cancel restores saved settings; failed Save retains your draft and restores the calendar with an error message.
-- Store personal settings and per-source visibility choices in the OneDrive App Folder. Save and Reset wait for storage; toolbar view preferences update optimistically and roll back on failure.
-- Export the complete administrator draft to a JSON file and import it into another web part within the same tenant. Import replaces the draft and takes effect only after Save; calendar, list and audience references remain unchanged and require existing permissions. Personal settings already follow the same user across sites through OneDrive.
-- Preserve partial results when one source fails and use defensive Graph mapping for incomplete or future values.
-- Open exact Outlook and Microsoft 365 Group calendar events, SharePoint list events, and Planner tasks from Event Details. Sources without a reliable exact item link, including Teams Shifts, do not receive a general application fallback.
+### Calendar assignments
 
-## Scope and non-goals
+For Exchange and SharePoint calendars, administrators can decide how assignments appear:
 
-My Calendars aggregates read data. Event and task management stays in the source system.
+| Policy | Behavior |
+| --- | --- |
+| **Mandatory** | Always enabled; users cannot hide or remove it. |
+| **Default** | Enabled initially; users can hide it. |
+| **Available** | Offered to users, who can enable it themselves. |
 
-The web part does not:
+Administrators can also control which presentation settings users may change. Group assignments do not grant access to Exchange mailboxes or SharePoint lists; existing Microsoft 365 permissions still apply. ICS links open the Outlook subscription flow; My Calendars does not read ICS feeds directly.
 
-- create, update, or delete source events;
-- create, update, or delete Planner tasks;
-- parse or display ICS feeds directly;
-- provide a Schedule view.
+[Read the administration guide](https://www.m365wizard.com/docs/tools/apps/my-calendars/administration/entra-group-assignments)
 
-## Installation
-Go to the [SharePoint admin center → **More features**](https://go.microsoft.com/fwlink/?linkid=2185077) → **Apps** → **Open** → **Upload** the `.sppkg` file. Approve Microsoft Graph permissions when prompted.
+## Getting started
 
-Configured Exchange mailbox resolution additionally requires approved delegated `User.ReadBasic.All` in SharePoint API access. It reads basic user identity fields to resolve primary SMTP addresses; it does not grant access to calendars. Existing calendar permissions remain required. Full Access, Reviewer and LimitedDetails are separate Exchange rights: LimitedDetails does not promise full event details, and some discovery/event requests may fail. See the [manual validation matrix](docs/shared-mailbox-audience-validation.md).
+1. [Download the latest `.sppkg` package](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/releases/latest).
+2. [In the SharePoint admin center](https://go.microsoft.com/fwlink/?linkid=2185077), open **More features &rarr; Apps &rarr; Open** and upload the package.
+3. Enable the app and have an authorized administrator approve the requested Microsoft Graph permissions under **API access**.
+4. Add **My Calendars** to a modern SharePoint page.
+5. Configure the web part and publish the page.
 
-### Upgrades
-Upload the new `.sppkg` file and overwrite the existing one when prompted.
+To upgrade, upload the new package and replace the existing version.
 
-> **Note:** SharePoint add-ins are being retired, but SharePoint Framework (SPFx) solutions like this one are not affected and remain fully supported.
-
-For more information, see the SharePoint App Catalog documentation:
-https://learn.microsoft.com/sharepoint/use-app-catalog
-
-## Configuration
-
-Web part editors can set administrator defaults in the property pane. Users can set personal preferences in the settings panel.
-
-The administrator panel groups its calendar assignments, **Add calendar** button, and ICS catalog in one bordered area under **Admin default calendars**. Each calendar section, including ICS, has a colored icon, gray collapsible header and its own dropdown visibly labeled **Group by**, offering **Audience** or the source-specific **Mailbox**, **SharePoint site**, **Plan**, **Group / team**, **Team** or **Subscription URL**. Every opening starts expanded and grouped by audience. Account grouping uses mailboxes, sites, plans or groups/teams; ICS uses URL groups without separate borders. Grouping only changes the display. Exchange and SharePoint calendars are added through the central **Add calendar** button. The ICS section is hidden until its catalog contains an entry. Edit an entry and choose **Groups** to change its audiences.
-
-The administrator settings model includes:
-
-- default calendar view and display values;
-- browser-cache enablement and a cache duration from 1 to 60 minutes;
-- organization color and source-logo defaults;
-- audience-assigned calendar sources;
-- Exchange mailbox headings showing the mailbox name and primary email address;
-- audience-assigned ICS catalog entries with audience-first or URL-first display grouping and audience editing through **Groups** on each entry;
-- automatic loading defaults for Planner, Groups and Teams, and Teams Shifts;
-
-The current administrator panel does not expose every modeled field. Organization color, service-level source-logo defaults, automatic source-loading defaults, and the Planner assigned-to-me default are registered implementation gaps.
-
-Personal settings include:
-
-- personal calendar sources;
-- source names, colors, and enabled states;
-- personal weekend, start-time, and visible-hour overrides and a default view;
-- Exchange calendar visibility;
-- automatic loading and source-logo overrides.
-
-Date and time labels follow the current SharePoint page culture. This includes the regional 12- or 24-hour time format.
-
-Administrator assignments use Mandatory (always enabled), Default (initially enabled) or Available (initially disabled). Complete administrator drafts are handed to SPFx through one callback writing one property. Save verifies the property transfer and retains the draft with an error if it fails; save and republish the SharePoint page to persist settings for readers. Mandatory sources cannot be disabled or removed. Personal name, color, logo and supported source-option permissions are configured separately. Explicit optional-calendar visibility choices persist until reset or an observed policy disallows them. See [Settings and policy](docs/settings-and-policy.md#administrator-source-policy) and [DEC-005](docs/decisions-deviations-and-open-questions.md#dec-005--administrator-source-policy-dimensions).
+For screenshots, requirements, and configuration steps, see the [installation guide](https://www.m365wizard.com/docs/tools/apps/my-calendars/getting-started/installation).
 
 ## Documentation
 
-The repository uses progressive reading so a change only loads relevant instructions:
+The [M365Wizard guide](https://www.m365wizard.com/docs/tools/apps/my-calendars) covers setup, personal calendars, Entra group assignments, permissions, and troubleshooting.
 
-1. [Architecture and behavior](docs/architecture-and-behavior.md) is the small cross-cutting contract.
-2. [AGENTS.md](AGENTS.md) routes a task directly to the relevant section in the calendar, source, or settings document.
-3. [Decisions, deviations, and open questions](docs/decisions-deviations-and-open-questions.md) is searched by the related record IDs; it is not mandatory cover-to-cover reading.
+Developer references remain in this repository: [architecture](docs/architecture-and-behavior.md), [calendar behavior](docs/calendar.md), [sources and permissions](docs/sources-and-permissions.md), and [settings and policies](docs/settings-and-policy.md).
 
-Use [Calendar](docs/calendar.md) for loading and rendering behavior, [Sources and permissions](docs/sources-and-permissions.md) for adapters, APIs, mappings, pagination, and permissions, and [Settings and policy](docs/settings-and-policy.md) for precedence, policy, audiences, storage, migration, and settings interfaces.
+## Development
 
-## Requirements
-
-- A SharePoint or Microsoft 365 tenant that supports the configured host.
-- The required Microsoft Graph permissions.
-- Access to each configured calendar source.
-- Node.js 22 (22.14.0 or later), 24, or 26 for local development. Node.js 26 LTS is recommended for a new environment.
-
-The supported host contract covers SharePoint web-part pages, SharePoint full-page apps, Microsoft Teams personal apps and tabs, Microsoft 365, and Outlook. Some host identities are recognized through the Teams SDK rather than listed as distinct manifest values. Host-sensitive behavior still requires validation in each host.
-
-## Microsoft Graph permissions
-
-The solution requests these delegated Microsoft Graph permissions:
-
-| Permission | Purpose |
-| --- | --- |
-| `Calendars.Read` | Read the current user's calendars and events. |
-| `Calendars.Read.Shared` | Read calendars that other users shared with the current user. |
-| `MailboxSettings.Read` | Requested in both manifests, but no current runtime path reads mailbox settings; this scope is registered as redundant pending removal or a confirmed consumer. |
-| `Files.ReadWrite.AppFolder` | Store and load personal settings in the OneDrive App Folder. |
-| `Sites.Read.All` | Discover SharePoint sites and read compatible lists. |
-| `Tasks.Read` | Read Planner plans and tasks. |
-| `Group.Read.All` | Discover groups and read Group or Team calendar events. |
-| `Team.ReadBasic.All` | Discover joined Teams and select the correct source icon. |
-| `Schedule.Read.All` | Read Teams Shifts data. |
-
-A tenant administrator must approve permissions that require administrator consent in the SharePoint API access page.
-
-See [Sources and permissions](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) for endpoint use, least-privilege notes, pagination limits, and authoritative Microsoft documentation links.
-
-## Build and local development
-
-Install dependencies and start the local workbench:
-
-```text
+```bash
 npm install
-npm start
+npm run start    # local development
+npm run build    # production package in sharepoint/solution/
 ```
 
-Create a production package:
+See [dependency compatibility](docs/dependency-compatibility.md) before changing the build environment. Bugs and contributions are welcome through [GitHub Issues](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/issues) and pull requests.
 
-```text
-npm run build
-```
+## License
 
-The package is written to `sharepoint/solution/`.
-
-`npm run build` runs the focused Jest regression tests, including browser-cache and administrator-settings persistence coverage, before creating the production package.
-
-The solution uses SPFx 1.24.1 with React 18.3.1 and TypeScript 5.8. Dependency updates follow the SPFx compatibility limits for Node.js, React, and TypeScript. See [Dependency compatibility](docs/dependency-compatibility.md) for the selected package versions, upstream constraints, and release workflow references. The release workflow follows the current Ubuntu runner and action major tags while using the latest Node.js 26 patch.
-
-## Installation and upgrade
-
-1. Download a release package or create one with `npm run build`.
-2. Open the SharePoint App Catalog.
-3. Upload the `.sppkg` file.
-4. Approve the requested Microsoft Graph permissions.
-5. Add the web part to a supported page or host.
-
-For an upgrade, upload the new package and replace the existing package.
-
-## Contributing
-
-- Report a defect with reproduction steps and environment details.
-- Propose a feature with its user goal and source-system constraints.
-- Keep user-visible text and documentation in English unless a localization file supplies the translation.
-- Do not treat inactive code as a confirmed product requirement.
-
-## References
-
-- [SharePoint Framework setup](https://learn.microsoft.com/sharepoint/dev/spfx/set-up-your-development-environment)
-- [SharePoint App Catalog](https://learn.microsoft.com/sharepoint/use-app-catalog)
-- [Microsoft Graph Calendar API](https://learn.microsoft.com/graph/api/resources/calendar)
-- [Microsoft Graph Planner API](https://learn.microsoft.com/graph/api/resources/planner-overview)
-- [Heft documentation](https://heft.rushstack.io/)
-
-The icon is from Microsoft Fluent UI System Icons and uses the MIT License.
-
-## Disclaimer
-
-THIS CODE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+Licensed under [AGPL-3.0](LICENSE). The icon is from Microsoft Fluent UI System Icons (MIT). Provided as is, without warranty.
