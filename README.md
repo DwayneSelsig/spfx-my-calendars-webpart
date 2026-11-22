@@ -1,10 +1,15 @@
 # <picture><img src="docs/images/icon.svg" alt="My Calendars icon" width="32" height="32" /></picture> My Calendars
 
-**Your calendars, meetings, tasks, and deadlines. One place.**
+📧 Outlook for meetings  
+✅ Planner for tasks and deadlines  
+💬 Teams for group calendars  
+📋 SharePoint for calendars, task lists, project tracking, and more  
 
-Your work doesn't live in just one calendar. Meetings are scheduled in Outlook, tasks and deadlines are tracked in Planner, and project schedules live in SharePoint. Colleagues share calendars through Exchange, while groups have their own calendars and teams use Shifts.
+Great, until you want to see it all in one place.
 
-My Calendars brings them together in one read-only calendar on your SharePoint page. See what's coming up and spend less time switching between applications.
+**My Calendars** is a free, open-source SharePoint web part that brings your Microsoft 365 schedules together in a single calendar.
+
+Administrators can assign Exchange and SharePoint calendars to Microsoft Entra groups, choosing whether they're mandatory, enabled by default, or optional. They can also offer ICS subscriptions through Outlook.
 
 ![My Calendars web part](docs/images/my-calendars-screenshot.png)
 
