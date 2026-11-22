@@ -31,7 +31,7 @@ Read the smallest sufficient document set:
 | Component ownership, SPFx lifecycle, or composition hand-offs | [Components and data flow](docs/components-and-data-flow.md) |
 | Source coordination, loading, visible range, refresh, deduplication, status, partial failure, or runtime cache | [Calendar: loading, range, and cache](docs/calendar.md#loading-range-and-cache) |
 | Day, Week, Month, Search, toolbar, layout, event details, or locale formatting | [Calendar: rendering and interaction](docs/calendar.md#rendering-and-interaction) |
-| Shared event normalization, permission manifests, pagination, retry, throttling, or cross-source contract | [Sources: common contract, permissions, and resilience](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) |
+| Shared event normalization, Graph requests and scheduling, permission manifests, pagination, retry, throttling, or cross-source contract | [Sources: common contract, permissions, and resilience](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) |
 | Exchange calendars or mailboxes | [Sources: common contract](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) and [Exchange](docs/sources-and-permissions.md#exchange-calendars) |
 | SharePoint list calendars | [Sources: common contract](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) and [SharePoint](docs/sources-and-permissions.md#sharepoint-list-calendars) |
 | Planner plans or tasks | [Sources: common contract](docs/sources-and-permissions.md#common-contract-permissions-and-resilience) and [Planner](docs/sources-and-permissions.md#planner) |
@@ -56,6 +56,7 @@ Documentation-only changes still require a targeted check of relevant source. Co
 - Preserve the read-only product boundary. Source adapters and renderers do not create, update, or delete source data.
 - Do not implement an unresolved policy schema, retry policy, error-record schema, retention rule, persistence-failure UX, backup strategy, or test architecture without a confirmed decision.
 - Keep source-specific API access and normalization in source services.
+- Every feature that calls Microsoft Graph **MUST** receive a scheduled `GraphClient` backed by the web part's shared `GraphRequestExecutor` and `GraphRequestScheduler`. This includes discovery, settings I/O, continuation pages, and batch requests. `MyCalendarsWebPart` obtains the delegated SPFx `MSGraphClientV3` and supplies it to the executor. See [Graph scheduling and pagination](docs/sources-and-permissions.md#pagination-retry-and-throttling).
 - Keep settings policy and precedence in the settings service/web-part composition boundary.
 - Treat `ScheduleView` and `AddCalendarDialog` as inactive.
 - Treat ICS as a subscription deep-link feature, not an event adapter.

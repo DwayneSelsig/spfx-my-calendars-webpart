@@ -2,7 +2,7 @@ import * as React from 'react';
 import type { ICalendarEvent } from '../../models/ICalendarEvent';
 import { EventDetailsDialog } from './EventDetailsDialog';
 import { ALL_DAY_SECTION_HEIGHT, TimelineDay } from './TimelineDay';
-import { addLocalDays, isToday, minutesToTimelinePixels } from './calendarUtils';
+import { getWeekVisibleDays, isToday, minutesToTimelinePixels } from './calendarUtils';
 import { formatCalendarDate } from './calendarFormatting';
 
 export interface IWeekViewProps {
@@ -15,19 +15,8 @@ export interface IWeekViewProps {
   locale?: string;
 }
 
-function getVisibleDays(start: Date, showWeekends: boolean): Date[] {
-  if (showWeekends) return Array.from({ length: 7 }, (_, index) => addLocalDays(start, index));
-  const result: Date[] = [];
-  let offset = 0;
-  while (result.length < 5) {
-    const day = addLocalDays(start, offset++);
-    if (day.getDay() !== 0 && day.getDay() !== 6) result.push(day);
-  }
-  return result;
-}
-
 export const WeekView: React.FC<IWeekViewProps> = ({ appointments, currentDate, preferredStartMinutes, visibleHourCount, slotDurationMinutes, showWeekends, locale }) => {
-  const days = React.useMemo(() => getVisibleDays(currentDate, showWeekends), [currentDate, showWeekends]);
+  const days = React.useMemo(() => getWeekVisibleDays(currentDate, showWeekends), [currentDate, showWeekends]);
   const scrollRefs = React.useRef<Array<HTMLDivElement | null>>([]);
   const syncingRef = React.useRef(false);
   const restoreFocusRef = React.useRef<HTMLElement>();

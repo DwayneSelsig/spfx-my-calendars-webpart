@@ -2,7 +2,9 @@ jest.mock('@microsoft/sp-core-library', () => ({ Version: { parse: jest.fn() } }
 jest.mock('@microsoft/sp-webpart-base', () => ({ BaseClientSideWebPart: class { public properties = {}; public context = { pageContext: { aadInfo: {} } }; } }));
 jest.mock('./components/MyCalendars', () => ({ __esModule: true, default: jest.fn() }));
 jest.mock('./propertyPane/PropertyPaneAdminDefaultsManager', () => ({}));
-jest.mock('./services/ExchangeCalendarService', () => ({}));
+jest.mock('./services/ExchangeCalendarService', () => ({
+  ExchangeCalendarService: jest.fn(() => ({ resolveMailbox: async () => { throw new Error('Graph unavailable in this fixture'); } }))
+}));
 jest.mock('./services/AudienceService', () => ({}));
 jest.mock('./services/SettingsStorageService', () => ({}));
 

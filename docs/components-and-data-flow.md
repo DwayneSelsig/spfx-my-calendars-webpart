@@ -8,15 +8,17 @@ This document describes verified current responsibilities. Normative cross-cutti
 
 | Component | Responsibility | State or side effect |
 | --- | --- | --- |
-| `MyCalendarsWebPart` | SPFx composition root; settings/audience/theme composition and React lifecycle | Web-part properties, OneDrive callbacks, effective settings |
+| `MyCalendarsWebPart` | SPFx composition root; Graph scheduling, settings, audiences, theme and React lifecycle | Web-part properties, shared Graph executor, persistence callbacks and effective settings |
 | `ICalendarSettings.ts` | Persisted, effective, source, and default data definitions | Static types/defaults; no precedence logic |
 | `CalendarSettingsService` | Validation, schema 7 migration/reference hydration, policy resolution, explicit visibility and permitted personal overrides | Pure except identifier generation |
 | `SettingsStorageService` | Current/legacy personal JSON in OneDrive App Folder | Graph I/O; no policy resolution |
 | `AudienceService` | Typed group discovery and current-user membership | Five-minute session cache; no policy effects |
-| `MyCalendars` | Source coordination, visible range, event merge, status, search, renderer selection | Runtime state plus optional administrator-controlled browser cache |
+| `GraphRequestScheduler` and Graph executor | Order Graph HTTP operations by priority and capacity. Execute continuation pages through the same scheduler | One instance per web part |
+| `CalendarRangeCoordinator` | Discovery, source/month work, priority, freshness and deduplication | Runtime state and optional IndexedDB appointment cache |
+| `MyCalendars` | Feed the visible range to the coordinator, present source status, and render search and calendar views | React state and renderer selection |
 | `UserSettingsPanel` | Personal draft, live preview and source discovery | Awaited `onSave`/`onReset`, preview/cancel, deep links; no persistence writes |
 | `AdminDefaultsPanel` | Administrator draft, group-first calendar discovery, mailbox rules, policy and shared presentation, ICS catalog | `onSave`; no property writes |
-| `PropertyPaneAdminDefaultsManager` | Property-pane adapter for administrator panel | Required SPFx change bridge, current-value getters, Graph client and React mount lifecycle |
+| `PropertyPaneAdminDefaultsManager` | Property-pane adapter for administrator panel | Required SPFx change bridge, current-value getters, shared Graph executor and React mount lifecycle |
 | Source services | External access and `ICalendarEvent` mapping | Graph/HTTP requests; no policy or rendering |
 | `CalendarSourceRegistry` | Source-type display metadata | Static definitions |
 | `sourceIconHelper` | Explicit/registry icon and name fallbacks | Pure derived metadata |
@@ -41,7 +43,7 @@ This document describes verified current responsibilities. Normative cross-cutti
 ## Lifecycle facts
 
 - `onThemeChanged` can update CSS variables and effective theme-derived settings without mounting React.
-- `onInit` initializes storage and Graph access before the framework `render` mounts React.
+- `onInit` applies the persisted Graph concurrency limit before Graph settings I/O. React mounts after settings resolution and starts calendar jobs without awaiting them.
 - The web part creates one React 18 root on its first render and reuses it for subsequent renders. `onDispose` unmounts and clears that root.
 - The administrator property-pane adapter owns one React 18 root per control container, reuses it across renders and SPFx field-descriptor replacements, and unmounts and removes it on disposal (DEC-031).
 - The webpart owns accepted settings callbacks. Administrator saves use one SPFx callback writer and one property; personal writes use OneDrive. Panels await completion before closing; the adapter does not refresh itself during a save.

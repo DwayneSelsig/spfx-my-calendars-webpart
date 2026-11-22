@@ -3,9 +3,7 @@ import { UserHelper } from '../utils/userHelper';
 import { normalizeAvailabilityStatus, normalizeResponseStatus } from './GraphEventStatus';
 import * as strings from 'MyCalendarsWebPartStrings';
 
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
+import { collectGraphPages, forEachGraphPage, type GraphClient } from './GraphRequestExecutor';
 
 export interface IResolvedMailbox {
   id: string;
@@ -101,7 +99,7 @@ interface IGraphEventAttendee {
  * Requires Calendars.Read, Calendars.Read.Shared and User.ReadBasic.All for configured mailboxes
  */
 export class ExchangeCalendarService {
-  private graphClient: MSGraphClientV3 | null = null;
+  private graphClient: GraphClient | null = null;
 
   // Color mapping based on Outlook calendar colors
   private readonly COLOR_MAP: Record<string, string> = {
@@ -118,14 +116,14 @@ export class ExchangeCalendarService {
     'auto': '#0078D4' // Outlook blue for default calendar
   };
 
-  constructor(graphClient?: MSGraphClientV3) {
+  constructor(graphClient?: GraphClient) {
     this.graphClient = graphClient || null;
   }
 
   /**
    * Set the GraphClient (for authentication)
    */
-  public setGraphClient(client: MSGraphClientV3): void {
+  public setGraphClient(client: GraphClient): void {
     this.graphClient = client;
   }
 
@@ -171,19 +169,8 @@ export class ExchangeCalendarService {
         ? `/users/${encodeURIComponent(identity.id)}/calendars`
         : '/me/calendars';
 
-      let data = await this.graphClient
-        .api(endpoint)
-        .query({
-          $select: 'id,name,hexColor,isDefaultCalendar,color,canViewPrivateItems'
-        })
-        .get();
-
-      const calendars: IGraphCalendar[] = [];
-      for (;;) {
-        calendars.push(...(data.value || []));
-        if (!data['@odata.nextLink']) break;
-        data = await this.graphClient.api(data['@odata.nextLink']).get();
-      }
+      const calendars = await collectGraphPages<IGraphCalendar>(this.graphClient, endpoint,
+        request => request.query({ $select: 'id,name,hexColor,isDefaultCalendar,color,canViewPrivateItems' }));
       return calendars.map((calendar: IGraphCalendar) => ({
         id: calendar.id,
         name: calendar.name,
@@ -244,14 +231,17 @@ export class ExchangeCalendarService {
     calendarId: string,
     startDate: Date,
     endDate: Date,
-    mailbox?: string
+    mailbox?: string,
+    onPage?: (events: IEvent[]) => void,
+    resolve: (mailbox: string) => Promise<IResolvedMailbox> = value => this.resolveMailbox(value),
+    getEmail: () => Promise<string> = () => UserHelper.getCurrentUserEmail(this.graphClient!)
   ): Promise<IEvent[]> {
     try {
       if (!this.graphClient) {
         throw new Error('GraphClient not initialized');
       }
 
-      const identity = mailbox === undefined ? undefined : await this.resolveMailbox(mailbox);
+      const identity = mailbox === undefined ? undefined : await resolve(mailbox);
       const encodedCalendarId = encodeURIComponent(calendarId);
       const endpoint = identity
         ? `/users/${encodeURIComponent(identity.id)}/calendars/${encodedCalendarId}/calendarView`
@@ -261,21 +251,22 @@ export class ExchangeCalendarService {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
 
-      const data = await this.graphClient
-        .api(endpoint)
-        .header('Prefer', 'outlook.timezone="UTC"')
-        .query({
-          startDateTime: startISO,
-          endDateTime: endISO,
-          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees,showAs,responseStatus',
-          $top: 500
-        })
-        .get();
-
-      // Get current user email for isOrganizer determination
-      const currentUserEmail = await UserHelper.getCurrentUserEmail(this.graphClient);
-
-      return (data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail, !mailbox));
+      const events = new Map<string, IEvent>();
+      let email: Promise<string> | undefined;
+      await forEachGraphPage<IGraphEvent>(this.graphClient, endpoint, async page => {
+        if (!page.length) return;
+        email = email || getEmail();
+        const currentUserEmail = await email;
+        const appointments = page.map(event => this.mapGraphEventToAppointment(event, currentUserEmail, !mailbox));
+        appointments.forEach(event => events.set(event.id, event));
+        onPage?.(appointments);
+      }, request => request.query({
+        startDateTime: startISO,
+        endDateTime: endISO,
+        $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees,showAs,responseStatus',
+        $top: 500
+      }), { Prefer: 'outlook.timezone="UTC"' });
+      return Array.from(events.values());
     } catch (error) {
       console.error('Error fetching Exchange calendar events:', error);
       throw asExchangeError('events', error);
@@ -343,18 +334,15 @@ export class ExchangeCalendarService {
         if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '', displayName: user.displayName, mail: user.mail });
       } else {
         const escaped = normalized.replace(/'/g, "''");
-        let data = await this.graphClient.api('/users').query({
-          $select: 'id,userPrincipalName,displayName,mail',
-          $filter: `userPrincipalName eq '${escaped}' or mail eq '${escaped}'`
-        }).get();
-        for (;;) {
-          (data.value || []).forEach((user: IResolvedMailbox) => {
+        await forEachGraphPage<IResolvedMailbox>(this.graphClient, '/users', page => {
+          page.forEach(user => {
             if (user.id) identities.set(user.id, { id: user.id, userPrincipalName: user.userPrincipalName || '', displayName: user.displayName, mail: user.mail });
           });
           if (identities.size > 1) throw new ExchangeRequestError('identity', 'ambiguous');
-          if (!data['@odata.nextLink']) break;
-          data = await this.graphClient.api(data['@odata.nextLink']).get();
-        }
+        }, request => request.query({
+          $select: 'id,userPrincipalName,displayName,mail',
+          $filter: `userPrincipalName eq '${escaped}' or mail eq '${escaped}'`
+        }));
       }
       if (identities.size === 0) throw new ExchangeRequestError('identity', 'notFound');
       return Array.from(identities.values())[0];

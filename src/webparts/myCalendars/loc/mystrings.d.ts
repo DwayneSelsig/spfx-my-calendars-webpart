@@ -117,6 +117,7 @@ declare interface IMyCalendarsWebPartStrings {
   CacheDefaultsLabel: string;
   EnableCacheLabel: string;
   CacheDurationMinutesLabel: string;
+  MaxConcurrentGraphRequestsLabel: string;
   HomeLabel: string;
   EditLabel: string;
   FieldMappingLabel: string;

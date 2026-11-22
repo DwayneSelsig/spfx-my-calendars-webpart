@@ -8,7 +8,7 @@ jest.mock('../services/ExchangeCalendarService', () => ({ ExchangeCalendarServic
 jest.mock('../services/SharePointCalendarService', () => ({ SharePointCalendarService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
 jest.mock('../services/PlannerTaskService', () => ({ PlannerTaskService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
 jest.mock('../services/UnifiedGroupCalendarService', () => ({ UnifiedGroupCalendarService: jest.fn(() => ({ setGraphClient: jest.fn() })) }));
-jest.mock('../services/AudienceService', () => ({}));
+jest.mock('../services/AudienceService', () => ({ AudienceService: jest.fn(() => ({ getAudienceGroups: async () => [], getAudienceMemberCounts: async () => ({}) })) }));
 jest.mock('../services/SettingsStorageService', () => ({}));
 jest.mock('MyCalendarsWebPartStrings', () => new Proxy({ __esModule: true }, { get: (_target, key) => key === '__esModule' ? true : String(key) }));
 
@@ -19,11 +19,13 @@ import type { IPropertyPaneCustomFieldProps, IPropertyPaneField } from '@microso
 import MyCalendarsWebPart from '../MyCalendarsWebPart';
 import { defaultAdminWebPartSettings, type IAdminWebPartSettings } from '../models/ICalendarSettings';
 import { loadAdminWebPartSettings, serializeAdminWebPartSettings } from '../services/CalendarSettingsService';
+import type { GraphRequestScheduler } from '../services/GraphRequestScheduler';
 
 interface Harness {
   properties: { adminSettings?: string };
   context: unknown;
   _adminSettings: IAdminWebPartSettings;
+  _scheduler: GraphRequestScheduler;
   render: jest.Mock;
   rebuildResolvedSettings: jest.Mock;
   getPropertyPaneConfiguration: () => { pages: Array<{ groups: Array<{ groupFields: Array<IPropertyPaneField<IPropertyPaneCustomFieldProps>> }> }> };
@@ -58,6 +60,23 @@ describe('administrator editor to SPFx property hand-off', () => {
     return result;
   }
   function click(label: string): void { act(() => { Simulate.click(button(label)); }); }
+
+  it('updates the live scheduler only after the slider draft is accepted by SPFx', async () => {
+    const commit = jest.fn();
+    await act(async () => { field.properties.onRender(host, undefined, commit); });
+    click('ManageAdminDefaultsLabel');
+    const slider = document.querySelector<HTMLElement>('[role="slider"][aria-label="MaxConcurrentGraphRequestsLabel"]')!;
+    expect(slider.getAttribute('aria-valuemin')).toBe('2');
+    expect(slider.getAttribute('aria-valuemax')).toBe('20');
+    act(() => { Simulate.keyDown(slider, { key: 'End', which: 35, keyCode: 35 }); });
+    expect(webpart._scheduler.counts.limit).toBe(10);
+    await act(async () => { Simulate.click(button('SaveLabel')); });
+    expect(webpart._scheduler.counts.limit).toBe(10);
+    commit.mockImplementation((_property, value: string | undefined) => { webpart.properties.adminSettings = value; });
+    await act(async () => { Simulate.click(button('SaveLabel')); });
+    expect(webpart._scheduler.counts.limit).toBe(20);
+    expect(loadAdminWebPartSettings({ current: webpart.properties.adminSettings }).settings.maxConcurrentGraphRequests).toBe(20);
+  });
   function expectClosed(): void {
     const panel = document.querySelector('.ms-Panel');
     // Fluent UI keeps a dismissed panel mounted during its exit animation.

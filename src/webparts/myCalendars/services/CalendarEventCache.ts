@@ -57,6 +57,10 @@ export function getCalendarEventCacheKey(configuration: ICalendarEventCacheConfi
 }
 
 export class CalendarEventCache {
+  public readLegacySegments(configuration: ICalendarEventCacheConfiguration): ICalendarEventCacheSegment[] {
+    return this.readEntry(configuration)?.segments || [];
+  }
+
   public read(
     configuration: ICalendarEventCacheConfiguration,
     cacheDurationMinutes: unknown,

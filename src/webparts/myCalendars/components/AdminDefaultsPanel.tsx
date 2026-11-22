@@ -1,3 +1,4 @@
+import { MAX_GRAPH_CONCURRENCY, MIN_GRAPH_CONCURRENCY } from '../services/GraphRequestScheduler';
 import * as React from 'react';
 import { AssignmentPolicyControl, AllowedOverrideControls, AssignmentGroup, audienceTypeLabel, assignmentPolicyLabel } from './AssignmentControls';
 import { LatestDiscovery } from './latestDiscovery';
@@ -15,7 +16,8 @@ import { Icon } from '@fluentui/react/lib/Icon';
 import { Checkbox } from '@fluentui/react/lib/Checkbox';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { Slider } from '@fluentui/react/lib/Slider';
-import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import { HttpClient } from '@microsoft/sp-http';
+import { collectGraphPages, type GraphClient } from '../services/GraphRequestExecutor';
 import {
   type IAdminAssignedSource,
   type IAssignmentPolicy,
@@ -72,7 +74,7 @@ export interface IAdminDefaultsPanelProps {
   onSave: (settings: IAdminWebPartSettings) => Promise<void>;
   loadNotice?: string;
   httpClient?: HttpClient;
-  graphClient?: MSGraphClientV3;
+  graphClient?: GraphClient;
   locale?: string;
   webAbsoluteUrl?: string;
 }
@@ -310,7 +312,7 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     this.invalidateDialogDiscovery();
   }
 
-  private initializeGraphClient(client: MSGraphClientV3): void {
+  private initializeGraphClient(client: GraphClient): void {
     this.exchangeService = this.exchangeService || new ExchangeCalendarService(client);
     this.exchangeService.setGraphClient(client);
     if (this.sharePointService) this.sharePointService.setGraphClient(client);
@@ -692,13 +694,12 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
     }
 
     try {
-      const columnsData = await this.props.graphClient
-        .api(`/sites/${spSelectedSite.id}/lists/${list.id}/columns`)
-        .query({ $select: 'name,displayName,columnGroup' })
-        .get();
+      const columnsData = await collectGraphPages<IGraphColumn>(this.props.graphClient,
+        `/sites/${spSelectedSite.id}/lists/${list.id}/columns`,
+        request => request.query({ $select: 'name,displayName,columnGroup' }));
 
       if (!this.isCurrentSession(session) || generation !== this.sharePointFieldsGeneration || this.state.spSelectedList?.id !== list.id) return;
-      const rawOptions: IDropdownOption[] = (columnsData.value || [])
+      const rawOptions: IDropdownOption[] = columnsData
         .filter((column: IGraphColumn) => column.name && !column.name.startsWith('_') && column.columnGroup !== '_Hidden')
         .map((column: IGraphColumn) => ({
           key: column.name as string,
@@ -1907,6 +1908,18 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
               disabled={!settings.enableCache}
               showValue={true}
               onChange={value => this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, cacheDurationMinutes: value } }))}
+            />
+
+            <Slider
+              label={strings.MaxConcurrentGraphRequestsLabel}
+              min={MIN_GRAPH_CONCURRENCY}
+              max={MAX_GRAPH_CONCURRENCY}
+              step={1}
+              value={settings.maxConcurrentGraphRequests}
+              showValue={true}
+              onChange={value => this.setSessionState(this.editSession, prev => ({
+                settings: { ...prev.settings, maxConcurrentGraphRequests: value }
+              }))}
             />
 
             <Label>{strings.TimelineDefaultsLabel}</Label>

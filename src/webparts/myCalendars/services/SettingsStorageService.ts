@@ -1,4 +1,4 @@
-import { MSGraphClientFactory, MSGraphClientV3 } from '@microsoft/sp-http';
+import type { GraphClient } from './GraphRequestExecutor';
 import type { ILegacyCalendarSettings, IUserCalendarSettings } from '../models/ICalendarSettings';
 import { normalizeUserCalendarSettings } from './CalendarSettingsService';
 
@@ -10,15 +10,7 @@ export class SettingsStorageService {
   private readonly APP_FOLDER_NAME = 'SPFx-My-Calendar-Webpart';
   private readonly USER_SETTINGS_FILE = 'user-calendar-settings.json';
   private readonly LEGACY_SETTINGS_FILE = 'calendar-settings.json';
-  private graphClientFactory: MSGraphClientFactory;
-
-  constructor(graphClientFactory: MSGraphClientFactory) {
-    this.graphClientFactory = graphClientFactory;
-  }
-
-  private async getGraphClient(): Promise<MSGraphClientV3> {
-    return this.graphClientFactory.getClient('3');
-  }
+  public constructor(private readonly client: GraphClient) {}
 
   private isNotFoundError(error: unknown): boolean {
     const err = error as { statusCode?: number; code?: string } | undefined;
@@ -31,9 +23,8 @@ export class SettingsStorageService {
   }
 
   private async ensureAppFolderExists(): Promise<void> {
-    const client = await this.getGraphClient();
     try {
-      await client.api('/me/drive/special/approot/children').post({
+      await this.client.api('/me/drive/special/approot/children').post({
         name: this.APP_FOLDER_NAME,
         folder: {},
         '@microsoft.graph.conflictBehavior': 'fail'
@@ -49,8 +40,7 @@ export class SettingsStorageService {
   private async readJsonFile<T>(fileName: string): Promise<T | undefined> {
     try {
       const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${fileName}:/content`;
-      const client = await this.getGraphClient();
-      const data = await client.api(appFolderPath).get();
+      const data = await this.client.api(appFolderPath).get();
       return data as T;
     } catch (error) {
       if (this.isNotFoundError(error)) {
@@ -65,9 +55,8 @@ export class SettingsStorageService {
     try {
       await this.ensureAppFolderExists();
       const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${fileName}:/content`;
-      const client = await this.getGraphClient();
 
-      await client
+      await this.client
         .api(appFolderPath)
         .header('Content-Type', 'application/json')
         .put(data);
@@ -82,8 +71,7 @@ export class SettingsStorageService {
   private async deleteJsonFile(fileName: string): Promise<boolean> {
     try {
       const appFolderPath = `/me/drive/special/approot:/${this.APP_FOLDER_NAME}/${fileName}:`;
-      const client = await this.getGraphClient();
-      await client.api(appFolderPath).delete();
+      await this.client.api(appFolderPath).delete();
       return true;
     } catch (error) {
       if (this.isNotFoundError(error)) {

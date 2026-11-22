@@ -3,9 +3,7 @@ import { UserHelper } from '../utils/userHelper';
 import { normalizeAvailabilityStatus } from './GraphEventStatus';
 import * as strings from 'MyCalendarsWebPartStrings';
 
-// MSGraphClientV3 type - using any since @microsoft/sp-client-preview is not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MSGraphClientV3 = any;
+import { collectGraphPages, forEachGraphPage, type GraphClient } from './GraphRequestExecutor';
 
 export interface IUnifiedGroupItem {
   id: string;
@@ -46,16 +44,16 @@ interface IGraphEventAttendee {
  * Requires Group.Read.All and Calendars.Read permissions
  */
 export class UnifiedGroupCalendarService {
-  private graphClient: MSGraphClientV3 | null = null;
+  private graphClient: GraphClient | null = null;
 
-  constructor(graphClient?: MSGraphClientV3) {
+  constructor(graphClient?: GraphClient) {
     this.graphClient = graphClient || null;
   }
 
   /**
    * Set the GraphClient (for authentication)
    */
-  public setGraphClient(client: MSGraphClientV3): void {
+  public setGraphClient(client: GraphClient): void {
     this.graphClient = client;
   }
 
@@ -68,19 +66,8 @@ export class UnifiedGroupCalendarService {
     }
 
     try {
-      const groups: IGraphGroup[] = [];
-      let nextLink: string | undefined = '/me/memberOf/microsoft.graph.group';
-
-      while (nextLink) {
-        const request = nextLink.startsWith('http')
-          ? this.graphClient.api(nextLink)
-          : this.graphClient.api(nextLink).select('id,displayName,groupTypes');
-
-        const response = await request.get();
-        groups.push(...((response.value || []) as IGraphGroup[]));
-        nextLink = response['@odata.nextLink'] as string | undefined;
-      }
-
+      const groups = await collectGraphPages<IGraphGroup>(this.graphClient, '/me/memberOf/microsoft.graph.group',
+        request => request.select('id,displayName,groupTypes'));
       return groups
         .filter(group => (group.groupTypes || []).indexOf('Unified') >= 0)
         .map(group => ({
@@ -103,21 +90,8 @@ export class UnifiedGroupCalendarService {
     }
 
     try {
-      const teamIds: string[] = [];
-      let nextLink: string | undefined = '/me/joinedTeams?$select=id';
-
-      while (nextLink) {
-        const request = nextLink.startsWith('http')
-          ? this.graphClient.api(nextLink)
-          : this.graphClient.api(nextLink);
-
-        const response = await request.get();
-        const ids = (response.value || []).map((team: { id?: string }) => team.id).filter(Boolean) as string[];
-        teamIds.push(...ids);
-        nextLink = response['@odata.nextLink'] as string | undefined;
-      }
-
-      return new Set(teamIds);
+      const teams = await collectGraphPages<{ id?: string }>(this.graphClient, '/me/joinedTeams?$select=id');
+      return new Set(teams.map(team => team.id).filter((id): id is string => !!id));
     } catch (error) {
       console.error('Error fetching joined Teams:', error);
       throw error;
@@ -127,7 +101,10 @@ export class UnifiedGroupCalendarService {
   /**
    * Get calendar events for a specific group
    */
-  public async getGroupEvents(groupId: string, startDate: Date, endDate: Date): Promise<IEvent[]> {
+  public async getGroupEvents(
+    groupId: string, startDate: Date, endDate: Date, onPage?: (events: IEvent[]) => void,
+    getEmail: () => Promise<string> = () => UserHelper.getCurrentUserEmail(this.graphClient!)
+  ): Promise<IEvent[]> {
     if (!this.graphClient) {
       console.error('GraphClient not initialized');
       return [];
@@ -137,21 +114,22 @@ export class UnifiedGroupCalendarService {
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
 
-      const data = await this.graphClient
-        .api(`/groups/${groupId}/calendarView`)
-        .header('Prefer', 'outlook.timezone="UTC"')
-        .query({
-          startDateTime: startISO,
-          endDateTime: endISO,
-          $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees,showAs',
-          $top: 500
-        })
-        .get();
-
-      // Get current user email for isOrganizer determination
-      const currentUserEmail = await UserHelper.getCurrentUserEmail(this.graphClient);
-
-      return Promise.all((data.value || []).map((event: IGraphEvent) => this.mapGraphEventToAppointment(event, currentUserEmail)));
+      const events = new Map<string, IEvent>();
+      let email: Promise<string> | undefined;
+      await forEachGraphPage<IGraphEvent>(this.graphClient, `/groups/${groupId}/calendarView`, async page => {
+        if (!page.length) return;
+        email = email || getEmail();
+        const currentUserEmail = await email;
+        const appointments = await Promise.all(page.map(event => this.mapGraphEventToAppointment(event, currentUserEmail)));
+        appointments.forEach(event => events.set(event.id, event));
+        onPage?.(appointments);
+      }, request => request.query({
+        startDateTime: startISO,
+        endDateTime: endISO,
+        $select: 'id,subject,bodyPreview,start,end,isReminderOn,isAllDay,isOnlineMeeting,onlineMeeting,webLink,location,organizer,attendees,showAs',
+        $top: 500
+      }), { Prefer: 'outlook.timezone="UTC"' });
+      return Array.from(events.values());
     } catch (error) {
       console.error('Error fetching group calendar events:', error);
       throw error;

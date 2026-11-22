@@ -30,6 +30,7 @@ export const ResetDraftToDefaultsLabel = 'Reset draft';
 export const ResetToDefaultsLabel = 'Reset';
 export const CalendarSettingsTitle = 'Personal settings';
 export const AdminCalendarDefaultsTitle = 'Administrator defaults';
+export const MaxConcurrentGraphRequestsLabel = 'Maximum concurrent Graph requests';
 export const UserSettingsSaveErrorLabel = 'Save failed; saved settings restored.';
 export const UserSettingsResetErrorLabel = 'Reset failed; saved settings restored.';
 export const AdminSettingsSaveErrorLabel = 'Administrator save failed.';

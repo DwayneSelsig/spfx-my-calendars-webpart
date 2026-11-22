@@ -1,4 +1,4 @@
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { forEachGraphPage, type GraphClient } from './GraphRequestExecutor';
 import * as strings from 'MyCalendarsWebPartStrings';
 
 export interface IEntraAudienceGroup {
@@ -19,9 +19,9 @@ export class AudienceService {
   private readonly MEMBERSHIP_CACHE_KEY = 'myCalendarsAudienceMembershipCache';
   private readonly MEMBERSHIP_CACHE_DURATION_MS = 5 * 60 * 1000;
   private readonly CHECK_MEMBER_GROUPS_BATCH_SIZE = 20;
-  private graphClient: MSGraphClientV3;
+  private graphClient: GraphClient;
 
-  constructor(graphClient: MSGraphClientV3) {
+  constructor(graphClient: GraphClient) {
     this.graphClient = graphClient;
   }
 
@@ -60,21 +60,16 @@ export class AudienceService {
     }
 
     try {
-      let data = await this.graphClient
-        .api('/groups')
-        .header('ConsistencyLevel', 'eventual')
-        .query({ $select: 'id,displayName,groupTypes,mailEnabled,securityEnabled', $filter: filterSegments.join(' and '), $top: 50, $count: 'true' })
-        .get();
       const groups = new Map<string, IEntraSecurityGroup>();
-      for (;;) {
-        (data.value || []).forEach((item: { id?: string; displayName?: string; groupTypes?: string[]; securityEnabled?: boolean; mailEnabled?: boolean }) => {
-          const groupType = (item.groupTypes || []).indexOf('Unified') >= 0 ? 'microsoft365'
-            : item.securityEnabled === true ? item.mailEnabled === true ? 'mailEnabledSecurity' : 'security' : undefined;
-          if (item.id && groupType) groups.set(item.id, { id: item.id, displayName: item.displayName || strings.UnnamedSecurityGroupLabel, groupType });
-        });
-        if (!data['@odata.nextLink']) break;
-        data = await this.graphClient.api(data['@odata.nextLink']).header('ConsistencyLevel', 'eventual').get();
-      }
+      await forEachGraphPage<{ id?: string; displayName?: string; groupTypes?: string[]; securityEnabled?: boolean; mailEnabled?: boolean }>(
+        this.graphClient, '/groups', page => {
+          page.forEach(item => {
+            const groupType = (item.groupTypes || []).indexOf('Unified') >= 0 ? 'microsoft365'
+              : item.securityEnabled === true ? item.mailEnabled === true ? 'mailEnabledSecurity' : 'security' : undefined;
+            if (item.id && groupType) groups.set(item.id, { id: item.id, displayName: item.displayName || strings.UnnamedSecurityGroupLabel, groupType });
+          });
+        }, request => request.query({ $select: 'id,displayName,groupTypes,mailEnabled,securityEnabled',
+          $filter: filterSegments.join(' and '), $top: 50, $count: 'true' }), { ConsistencyLevel: 'eventual' });
       return Array.from(groups.values()).sort((a, b) => a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id));
     } catch (error) {
       console.error('Failed to load Entra security groups:', error);

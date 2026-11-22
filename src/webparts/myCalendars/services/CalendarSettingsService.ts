@@ -22,6 +22,7 @@ import {
   defaultUserCalendarSettings
 } from '../models/ICalendarSettings';
 import { normalizeCacheDuration } from './CalendarEventCache';
+import { normalizeGraphConcurrency } from './GraphRequestScheduler';
 
 export type AdminSettingsLoadSource = 'current' | 'defaults' | 'legacy';
 
@@ -557,6 +558,7 @@ export function normalizeAdminWebPartSettings(value: unknown): IAdminWebPartSett
     slotDurationMinutes,
     enableCache: typeof value.enableCache === 'boolean' ? value.enableCache : defaultAdminWebPartSettings.enableCache,
     cacheDurationMinutes: normalizeCacheDuration(value.cacheDurationMinutes),
+    maxConcurrentGraphRequests: normalizeGraphConcurrency(value.maxConcurrentGraphRequests),
     organizationPrimaryColor: typeof value.organizationPrimaryColor === 'string' && value.organizationPrimaryColor.trim()
       ? value.organizationPrimaryColor.trim()
       : defaultAdminWebPartSettings.organizationPrimaryColor,
@@ -881,6 +883,7 @@ export function resolveCalendarSettings(params: {
     slotDurationMinutes: adminSettings.slotDurationMinutes,
     enableCache: adminSettings.enableCache,
     cacheDurationMinutes: adminSettings.cacheDurationMinutes,
+    maxConcurrentGraphRequests: adminSettings.maxConcurrentGraphRequests,
     userPreferredStartMinutes,
     userVisibleHourCount,
     organizationPrimaryColor: organizationPrimaryColor || adminSettings.organizationPrimaryColor || defaultCalendarSettings.organizationPrimaryColor,

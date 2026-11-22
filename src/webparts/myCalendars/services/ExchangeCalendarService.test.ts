@@ -1,8 +1,29 @@
 import { UserHelper } from '../utils/userHelper';
 import { ExchangeCalendarService } from './ExchangeCalendarService';
+import type { GraphClient } from './GraphRequestExecutor';
 
 describe('ExchangeCalendarService event mapping', () => {
   afterEach(() => jest.restoreAllMocks());
+
+  it('publishes Exchange pages incrementally and returns each appointment once', async () => {
+    jest.spyOn(UserHelper, 'getCurrentUserEmail').mockResolvedValue('viewer@example.com');
+    const event = (id: string): object => ({ id, subject: id, start: { dateTime: '2026-09-10T08:00:00Z' },
+      end: { dateTime: '2026-09-10T09:00:00Z' } });
+    const continuation = 'https://graph.microsoft.com/v1.0/me/calendars/calendar/calendarView?$skiptoken=OPAQUE';
+    const get = jest.fn().mockResolvedValueOnce({ value: [event('one')], '@odata.nextLink': continuation });
+    const onPage = jest.fn();
+    get.mockImplementationOnce(async () => {
+      expect(onPage).toHaveBeenCalledWith([expect.objectContaining({ id: 'one' })]);
+      return { value: [event('one'), event('two')] };
+    });
+    const request = { header: jest.fn().mockReturnThis(), query: jest.fn().mockReturnThis(), get };
+    const api = jest.fn().mockReturnValue(request);
+    const service = new ExchangeCalendarService({ api });
+    const events = await service.getCalendarEvents('calendar', new Date('2026-09-01'), new Date('2026-10-01'), undefined, onPage);
+    expect(events.map(item => item.id)).toEqual(['one', 'two']);
+    expect(api.mock.calls.map(call => call[0])).toEqual(['/me/calendars/calendar/calendarView', continuation]);
+    expect(request.header.mock.calls).toEqual(Array(2).fill(['Prefer', 'outlook.timezone="UTC"']));
+  });
 
   it('uses the configured mailbox and only exposes organizer metadata for meetings', async () => {
     jest.spyOn(UserHelper, 'getCurrentUserEmail').mockResolvedValue('viewer@example.com');
@@ -39,7 +60,7 @@ describe('ExchangeCalendarService event mapping', () => {
       get
     };
     const graphClient = { api: jest.fn((endpoint: string) => endpoint === '/users' ? { query: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue({ value: [{ id: 'owner-id', userPrincipalName: 'owner@example.com' }] }) } : request) };
-    const service = new ExchangeCalendarService(graphClient);
+    const service = new ExchangeCalendarService(graphClient as unknown as GraphClient);
 
     const events = await service.getCalendarEvents(
       'calendar-id',

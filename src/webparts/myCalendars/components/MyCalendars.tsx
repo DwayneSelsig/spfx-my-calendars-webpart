@@ -1,20 +1,12 @@
-import { isAutomaticExchangeCalendarAssigned } from '../services/CalendarSettingsService';
 import * as React from 'react';
-import { loadExchangeSources } from './exchangeLoading';
 import type { IMyCalendarsProps } from './IMyCalendarsProps';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
-import { CalendarViewType } from '../models/ICalendarSettings';
-import { ExchangeCalendarService, type IExchangeCalendar } from '../services/ExchangeCalendarService';
-import { SharePointCalendarService } from '../services/SharePointCalendarService';
-import { PlannerTaskService, type IPlannerPlan } from '../services/PlannerTaskService';
-import { TeamsShiftsService } from '../services/TeamsShiftsService';
-import { UnifiedGroupCalendarService, type IUnifiedGroupItem } from '../services/UnifiedGroupCalendarService';
-import {
-  CalendarEventCache,
-  type CalendarCacheServiceKey,
-  type ICalendarEventCacheConfiguration,
-  type ICalendarEventCacheSegment
-} from '../services/CalendarEventCache';
+import type { CalendarViewType, ICalendarSettings } from '../models/ICalendarSettings';
+import { CalendarRangeCoordinator, calendarMonth, eventIntersectsRange } from '../services/CalendarRangeCoordinator';
+import { type CalendarCacheServiceKey, type ICalendarEventCacheConfiguration, normalizeCacheDuration } from '../services/CalendarEventCache';
+import { startCalendarSources } from '../services/CalendarSources';
+import { IndexedCalendarEventCache } from '../services/IndexedCalendarEventCache';
+import { addLocalDays, getMonthVisibleDays, getWeekVisibleDays, startOfLocalDay } from './views/calendarUtils';
 import { DayView } from './views/DayView';
 import { WeekView } from './views/WeekView';
 import { MonthView } from './views/MonthView';
@@ -30,7 +22,6 @@ import { CommandBarButton } from '@fluentui/react/lib/Button';
 import { SearchBox } from '@fluentui/react/lib/SearchBox';
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { UserSettingsPanel } from './UserSettingsPanel';
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { getSourceIconName, getSourceTypeDisplayName } from '../utils/sourceIconHelper';
 import { formatCalendarDate } from './views/calendarFormatting';
 import * as strings from 'MyCalendarsWebPartStrings';
@@ -58,6 +49,19 @@ const defaultLoadErrors: Record<ServiceKey, string | undefined> = {
   teamsShifts: undefined,
   unifiedGroup: undefined
 };
+
+const serviceErrorLabels: Record<ServiceKey, string | undefined> = {
+  exchange: strings.ExchangeLoadErrorLabel,
+  ics: undefined,
+  sharepoint: strings.SharePointLoadErrorLabel,
+  planner: strings.PlannerLoadErrorLabel,
+  teamsShifts: strings.TeamsShiftsLoadErrorLabel,
+  unifiedGroup: strings.GroupsTeamsLoadErrorLabel
+};
+
+const CalendarDay = React.memo(DayView);
+const CalendarWeek = React.memo(WeekView);
+const CalendarMonth = React.memo(MonthView);
 
 const styles = mergeStyleSets({
   myCalendars: {
@@ -145,7 +149,7 @@ interface IMyCalendarsState {
   searchQuery: string;
   appliedSearchQuery: string;
   toolbarLayout: ToolbarLayout;
-  graphClient: MSGraphClientV3 | undefined;
+  visibleLoadErrors: string[];
   loadingSources: Record<ServiceKey, ServiceStatus>;
   loadErrors: Record<ServiceKey, string | undefined>;
   isLoadingStatusOpen: boolean;
@@ -156,23 +160,15 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   private searchDebounceTimer: number | null = null;
   private topToolbarRef = React.createRef<HTMLDivElement>();
   private toolbarResizeObserver: ResizeObserver | undefined;
-  private activeLoadId = 0;
   private loadingStatusWrapperRef = React.createRef<HTMLDivElement>();
   private refreshingAdminSources = false;
   private refreshTimer: number | null = null;
-  private loadedMonthsBySource = new Map<string, Set<string>>();
-  private knownSourceIdsByService: Record<ServiceKey, Set<string>> = {
-    exchange: new Set(), ics: new Set(), sharepoint: new Set(), planner: new Set(), teamsShifts: new Set(), unifiedGroup: new Set()
-  };
-  private rangeLoadPromise: Promise<void> = Promise.resolve();
-  private loadGeneration = 0;
-  private exchangeCalendarsPromise?: Promise<IExchangeCalendar[]>;
-  private plannerPlansPromise?: Promise<IPlannerPlan[]>;
-  private unifiedGroupsPromise?: Promise<IUnifiedGroupItem[]>;
-  private joinedTeamIdsPromise?: Promise<Set<string>>;
-  private teamsShiftsService?: TeamsShiftsService;
-  private readonly eventCache = new CalendarEventCache();
-  private initialCacheMonthKeys = new Set<string>();
+  private coordinator?: CalendarRangeCoordinator;
+  private loadingFingerprint?: string;
+  private appointmentCache?: IndexedCalendarEventCache;
+  private updateFrame?: number;
+  private readonly prepared = new WeakMap<IEvent, IndexedEvent>();
+  private visibleAppointments: IEvent[] = [];
 
   constructor(props: IMyCalendarsProps) {
     super(props);
@@ -187,7 +183,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       searchQuery: '',
       appliedSearchQuery: '',
       toolbarLayout: 'compact',
-      graphClient: undefined,
+      visibleLoadErrors: [],
       loadingSources: { ...defaultLoadingSources },
       loadErrors: { ...defaultLoadErrors },
       isLoadingStatusOpen: false,
@@ -206,35 +202,31 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       });
       this.toolbarResizeObserver.observe(this.topToolbarRef.current);
     }
-    this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
-    // Resolve and store graphClient for use in UserSettingsPanel
-    this.props.context.msGraphClientFactory.getClient('3')
-      .then(client => { if (this.settingsUiMounted) this.setState({ graphClient: client }); })
-      .catch(err => console.error('Failed to initialize graph client:', err));
+    this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
   }
 
-  private getLoadingSettingsFingerprint(settings: import('../models/ICalendarSettings').ICalendarSettings): string {
+  private getLoadingSettingsFingerprint(settings: ICalendarSettings): string {
     const loadingSettings = { ...settings } as unknown as Record<string, unknown>;
-    ['defaultView', 'preferredStartMinutes', 'visibleHourCount', 'slotDurationMinutes', 'showWeekends', 'userPreferredStartMinutes', 'userVisibleHourCount']
+    ['defaultView', 'preferredStartMinutes', 'visibleHourCount', 'slotDurationMinutes', 'showWeekends', 'adminShowWeekends', 'userShowWeekends', 'userPreferredStartMinutes', 'userVisibleHourCount', 'maxConcurrentGraphRequests']
       .forEach(key => delete loadingSettings[key]);
     return JSON.stringify(loadingSettings);
   }
 
-  private getCacheConfiguration(): ICalendarEventCacheConfiguration {
+  private getCacheConfiguration(settings: ICalendarSettings): ICalendarEventCacheConfiguration {
     return {
       tenantId: this.props.tenantId,
       userId: this.props.userId,
       webPartInstanceId: this.props.webPartInstanceId,
-      configSignature: this.getCacheSignature()
+      configSignature: this.getCacheSignature(settings)
     };
   }
 
-  private getCacheSignature(): string {
-    const loadingSettings = { ...this.props.settings } as unknown as Record<string, unknown>;
+  private getCacheSignature(settings: ICalendarSettings): string {
+    const loadingSettings = { ...settings } as unknown as Record<string, unknown>;
     [
       'defaultView', 'preferredStartMinutes', 'visibleHourCount', 'slotDurationMinutes', 'showWeekends',
       'adminShowWeekends', 'userShowWeekends', 'userPreferredStartMinutes', 'userVisibleHourCount',
-      'enableCache', 'cacheDurationMinutes', 'availableAdminIcsCatalogItems'
+      'enableCache', 'cacheDurationMinutes', 'availableAdminIcsCatalogItems', 'maxConcurrentGraphRequests'
     ].forEach(key => delete loadingSettings[key]);
     return JSON.stringify(loadingSettings);
   }
@@ -256,16 +248,16 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
       const prevJson = JSON.stringify(prevProps.settings);
       const currJson = JSON.stringify(this.props.settings);
       if (prevJson !== currJson) {
-        if (this.getLoadingSettingsFingerprint(prevProps.settings) !== this.getLoadingSettingsFingerprint(this.props.settings)) {
-          this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
-        } else if (!defaultViewChanged) {
+        if ((this.loadingFingerprint || this.getLoadingSettingsFingerprint(prevProps.settings)) !== this.getLoadingSettingsFingerprint(this.props.settings)) {
+          this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
+        } else if (!defaultViewChanged && prevProps.settings.showWeekends !== this.props.settings.showWeekends) {
           this.ensureVisibleRange().catch(err => console.error('Failed to load visible range:', err));
         }
       }
     } catch {
       // Fallback to sources change detection
       if (prevProps.settings.sources !== this.props.settings.sources) {
-        this.loadAppointments().then(() => this.ensureVisibleRange()).catch(err => console.error('Failed to load appointments:', err));
+        this.loadAppointments().catch(err => console.error('Failed to load appointments:', err));
       }
     }
   }
@@ -273,6 +265,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   public componentWillUnmount(): void {
     this.settingsUiMounted = false;
     this.toolbarResizeObserver?.disconnect();
+    this.coordinator?.dispose();
+    this.appointmentCache?.close();
+    if (this.updateFrame !== undefined) window.cancelAnimationFrame(this.updateFrame);
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = null;
@@ -284,663 +279,124 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     }
   }
 
-  private getMonthKeys(startDate: Date, endDate: Date): string[] {
-    const keys: string[] = [];
-    const firstMonth = startDate.getFullYear() * 12 + startDate.getMonth();
-    const lastInstant = new Date(Math.max(startDate.getTime(), endDate.getTime() - 1));
-    const lastMonth = lastInstant.getFullYear() * 12 + lastInstant.getMonth();
-    for (let monthIndex = firstMonth; monthIndex <= lastMonth; monthIndex++) {
-      const year = Math.floor(monthIndex / 12);
-      keys.push(`${year}-${monthIndex - year * 12 + 1}`);
-    }
-    return keys;
+  private getVisibleDays(date: Date, view: CalendarViewType, showWeekends = this.props.settings.showWeekends): Date[] {
+    if (view === 'month') return getMonthVisibleDays(date);
+    if (view === 'week') return getWeekVisibleDays(date, showWeekends);
+    return [startOfLocalDay(date)];
   }
 
-  private clearRangeCache(): void {
-    this.loadedMonthsBySource.clear();
-    (Object.keys(this.knownSourceIdsByService) as ServiceKey[]).forEach(key => this.knownSourceIdsByService[key].clear());
-    this.exchangeCalendarsPromise = undefined;
-    this.plannerPlansPromise = undefined;
-    this.unifiedGroupsPromise = undefined;
-    this.joinedTeamIdsPromise = undefined;
-    this.teamsShiftsService = undefined;
+  private getVisibleMonths(date: Date, view: CalendarViewType, showWeekends?: boolean): number[] {
+    return Array.from(new Set([calendarMonth(date), ...this.getVisibleDays(date, view, showWeekends).map(calendarMonth)]));
   }
 
-  private registerSource(service: ServiceKey, sourceId: string): void {
-    this.knownSourceIdsByService[service].add(sourceId);
+  private async ensureVisibleRange(date = this.state.currentDate, view = this.state.previousView): Promise<void> {
+    this.coordinator?.setVisible(this.getVisibleMonths(date, view), true);
   }
 
-  private areMonthsLoaded(sourceId: string, monthKeys: string[]): boolean {
-    const loaded = this.loadedMonthsBySource.get(sourceId);
-    return !!loaded && monthKeys.every(key => loaded.has(key));
-  }
-
-  private markMonthsLoaded(sourceId: string, monthKeys: string[]): void {
-    const loaded = this.loadedMonthsBySource.get(sourceId) || new Set<string>();
-    monthKeys.forEach(key => loaded.add(key));
-    this.loadedMonthsBySource.set(sourceId, loaded);
-  }
-
-  private getMonthRange(monthKey: string): { start: Date; end: Date } | undefined {
-    const match = /^(\d{4})-(\d{1,2})$/.exec(monthKey);
-    if (!match) return undefined;
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    if (month < 0 || month > 11) return undefined;
-    return { start: new Date(year, month, 1), end: new Date(year, month + 1, 1) };
-  }
-
-  private eventIntersectsMonth(event: IEvent, monthKey: string): boolean {
-    const range = this.getMonthRange(monthKey);
-    if (!range) return false;
-    const start = Date.parse(event.start);
-    const end = Date.parse(event.end);
-    const effectiveEnd = end > start ? end : start + 1;
-    return Number.isFinite(start) && Number.isFinite(end) && start < range.end.getTime() && effectiveEnd > range.start.getTime();
-  }
-
-  private prepareAppointments(appointments: IEvent[]): IndexedEvent[] {
-    return appointments.map(apt => ({
-      ...apt,
-      colorHex: apt.colorHex || '#0078d4',
-      sourceIconName: getSourceIconName(apt.sourceType, apt.sourceIconName),
-      sourceDisplayName: apt.sourceDisplayName || getSourceTypeDisplayName(apt.sourceType, apt.sourceIconName),
-      searchIndexText: this.buildSearchIndexText(apt)
-    }));
-  }
-
-  private hydratePersistentCache(requestedMonthKeys: string[], now: number = Date.now()): IEvent[] {
-    const allowedMonthKeys = new Set(requestedMonthKeys);
-    if (!this.props.settings.enableCache) {
-      this.eventCache.remove(this.getCacheConfiguration());
-      return [];
-    }
-    const cached = this.eventCache.read(
-      this.getCacheConfiguration(),
-      this.props.settings.cacheDurationMinutes,
-      allowedMonthKeys,
-      now
-    );
-    if (!cached) return [];
-
-    const appointments = new Map<string, IEvent>();
-    cached.segments.forEach(segment => {
-      this.registerSource(segment.service, segment.sourceId);
-      if (!segment.isStale) this.markMonthsLoaded(segment.sourceId, [segment.monthKey]);
-      segment.events.forEach(event => appointments.set(`${event.sourceId}:${event.id}`, event));
+  private async loadAppointments(force = false, settings = this.props.settings): Promise<void> {
+    const graph = this.props.graph;
+    if (!graph || !this.settingsUiMounted) return;
+    const previous = this.coordinator;
+    previous?.dispose();
+    this.appointmentCache?.close();
+    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+    const enableCache = settings.enableCache;
+    const cache = new IndexedCalendarEventCache(this.getCacheConfiguration(settings), enableCache);
+    this.appointmentCache = cache;
+    const coordinator = new CalendarRangeCoordinator({
+      today: new Date(),
+      cacheDurationMs: normalizeCacheDuration(settings.cacheDurationMinutes) * 60000,
+      cache: enableCache ? cache : undefined,
+      force,
+      previous: force && enableCache ? previous : undefined,
+      onChange: () => this.queueCalendarUpdate()
     });
-    return Array.from(appointments.values());
-  }
-
-  private replaceAppointmentsForSourceMonths(sourceId: string, monthKeys: string[], appointments: IEvent[]): void {
-    const prepared = this.prepareAppointments(appointments);
-    this.setState(prev => {
-      const retained = prev.appointments.filter(event => event.sourceId !== sourceId ||
-        !monthKeys.some(monthKey => this.eventIntersectsMonth(event, monthKey)));
-      const byIdentity = new Map<string, IndexedEvent>();
-      retained.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event as IndexedEvent));
-      prepared.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event));
-      return { appointments: Array.from(byIdentity.values()) };
-    });
-  }
-
-  private cacheSuccessfulResult(service: ServiceKey, sourceId: string, monthKeys: string[], appointments: IEvent[], cachedAt: number = Date.now()): void {
-    if (!this.props.settings.enableCache) return;
-    const cacheableMonthKeys = monthKeys.filter(monthKey => this.initialCacheMonthKeys.has(monthKey));
-    if (cacheableMonthKeys.length === 0) return;
-    const segments: ICalendarEventCacheSegment[] = cacheableMonthKeys.map(monthKey => ({
-      service,
-      sourceId,
-      monthKey,
-      cachedAt,
-      events: appointments.filter(event => this.eventIntersectsMonth(event, monthKey))
-    }));
-    this.eventCache.replaceSegments(this.getCacheConfiguration(), segments, this.initialCacheMonthKeys);
-  }
-
-  private getVisibleRange(date: Date = this.state.currentDate, view: CalendarViewType = this.state.previousView): { start: Date; end: Date } {
-    if (view === 'month') {
-      const first = new Date(date.getFullYear(), date.getMonth(), 1);
-      const start = new Date(first);
-      start.setDate(first.getDate() - first.getDay());
-      const end = new Date(start);
-      end.setDate(start.getDate() + 42);
-      return { start, end };
-    }
-    if (view === 'week') {
-      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      if (!this.props.settings.showWeekends) {
-        while (start.getDay() === 0 || start.getDay() === 6) start.setDate(start.getDate() + 1);
-      }
-      const end = new Date(start);
-      if (this.props.settings.showWeekends) {
-        end.setDate(end.getDate() + 7);
-      } else {
-        let weekdays = 0;
-        while (weekdays < 5) {
-          if (end.getDay() !== 0 && end.getDay() !== 6) weekdays++;
-          end.setDate(end.getDate() + 1);
-        }
-      }
-      return { start, end };
-    }
-    const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return { start, end };
-  }
-
-  private ensureVisibleRange(date: Date = this.state.currentDate, view: CalendarViewType = this.state.previousView): Promise<void> {
-    const range = this.getVisibleRange(date, view);
-    const monthKeys = this.getMonthKeys(range.start, range.end);
-    const missingServices = new Set(this.getEnabledServiceKeys().filter(service => {
-      const knownSources = Array.from(this.knownSourceIdsByService[service]);
-      return knownSources.length === 0 || knownSources.some(sourceId => !this.areMonthsLoaded(sourceId, monthKeys));
-    }));
-    if (missingServices.size === 0) return Promise.resolve();
-    const generation = this.loadGeneration;
-    this.rangeLoadPromise = this.rangeLoadPromise
-      .catch(() => undefined)
-      .then(() => generation === this.loadGeneration
-        ? this.loadAppointments(range.start, range.end, false, missingServices)
-        : Promise.resolve());
-    return this.rangeLoadPromise;
-  }
-
-  private async loadAppointments(
-    requestStart?: Date,
-    requestEnd?: Date,
-    reset: boolean = true,
-    requestedServices?: Set<ServiceKey>,
-    preserveAppointments: boolean = false,
-    forceRefresh: boolean = false
-  ): Promise<void> {
-    if (reset) this.loadGeneration++;
-    const currentGeneration = this.loadGeneration;
-    const loadId = ++this.activeLoadId;
-    if (reset) this.clearRangeCache();
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = null;
-    }
-    const today = new Date();
-    const startDate = requestStart || new Date(today.getFullYear(), today.getMonth() - 3, 1);
-    const endDate = requestEnd || new Date(today.getFullYear(), today.getMonth() + 4, 1);
-    const requestedMonthKeys = this.getMonthKeys(startDate, endDate);
-    if (reset) this.initialCacheMonthKeys = new Set(requestedMonthKeys);
-    const cachedAppointments = reset && !forceRefresh ? this.hydratePersistentCache(requestedMonthKeys) : [];
-    const enabledServices = this.getEnabledServiceKeys();
-    const servicesToLoad = requestedServices || new Set(enabledServices.filter(service => {
-      const knownSources = Array.from(this.knownSourceIdsByService[service]);
-      return forceRefresh || knownSources.length === 0 ||
-        knownSources.some(sourceId => !this.areMonthsLoaded(sourceId, requestedMonthKeys));
-    }));
-    const initialLoadingSources = Array.from(servicesToLoad).reduce((acc, key) => {
-      acc[key] = 'loading';
-      return acc;
-    }, reset ? { ...defaultLoadingSources } : { ...this.state.loadingSources });
-
+    this.coordinator = coordinator;
+    this.loadingFingerprint = this.getLoadingSettingsFingerprint(settings);
     this.setState({
+      appointments: force && enableCache ? this.state.appointments : [],
       isLoading: true,
-      appointments: reset && !preserveAppointments ? this.prepareAppointments(cachedAppointments) : this.state.appointments,
-      loadingSources: initialLoadingSources,
-      loadErrors: reset ? { ...defaultLoadErrors } : this.state.loadErrors,
-      isLoadingStatusOpen: false,
-      showRefreshButton: false
+      loadingSources: { ...defaultLoadingSources },
+      loadErrors: { ...defaultLoadErrors },
+      visibleLoadErrors: [],
+      showRefreshButton: false,
+      isLoadingStatusOpen: false
     });
-    if (servicesToLoad.size === 0) {
-      this.setState({ isLoading: false, showRefreshButton: true });
-      return;
-    }
-    const graphClientPromise = this.props.context.msGraphClientFactory.getClient('3');
-    const graphClient = await graphClientPromise;
-    const exchangeService = new ExchangeCalendarService(graphClient);
-    const sharePointService = new SharePointCalendarService(graphClient);
-    const plannerService = new PlannerTaskService(graphClient, this.props.tenantId);
-    const teamsShiftsService = this.teamsShiftsService || new TeamsShiftsService(graphClient);
-    teamsShiftsService.setGraphClient(graphClient);
-    this.teamsShiftsService = teamsShiftsService;
-    const unifiedGroupService = new UnifiedGroupCalendarService(graphClient);
-    
-    const markLoaded = (service: ServiceKey, sourceId: string, events: IEvent[] = []): void => {
-      if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) {
-        this.markMonthsLoaded(sourceId, requestedMonthKeys);
-        this.replaceAppointmentsForSourceMonths(sourceId, requestedMonthKeys, events);
-        this.cacheSuccessfulResult(service, sourceId, requestedMonthKeys, events);
-      }
+    coordinator.setVisible(this.getVisibleMonths(this.state.currentDate, this.state.previousView, settings.showWeekends), force);
+    startCalendarSources(coordinator, graph, settings, this.props.tenantId);
+    coordinator.warmVisibleCache().catch(err => console.error('Failed to read visible appointments from the cache:', err));
+  }
+
+  private prepare(event: IEvent): IndexedEvent {
+    const cached = this.prepared.get(event);
+    if (cached) return cached;
+    const prepared = {
+      ...event,
+      colorHex: event.colorHex || '#0078d4',
+      sourceIconName: getSourceIconName(event.sourceType, event.sourceIconName),
+      sourceDisplayName: event.sourceDisplayName || getSourceTypeDisplayName(event.sourceType, event.sourceIconName),
+      searchIndexText: this.buildSearchIndexText(event)
     };
-    const registerLoadedSource = (service: ServiceKey, sourceId: string): void => {
-      if (loadId === this.activeLoadId && currentGeneration === this.loadGeneration) this.registerSource(service, sourceId);
-    };
-    Array.from(servicesToLoad).forEach(service => {
-      this.registerSource(service, `$service:${service}`);
-      if (this.props.settings.enableCache) {
-        this.eventCache.removeSegments(
-          this.getCacheConfiguration(),
-          service,
-          `$service:${service}`,
-          new Set(requestedMonthKeys),
-          this.initialCacheMonthKeys
-        );
-      }
-    });
-    
-    const updateStatus = (service: ServiceKey, status: ServiceStatus, errorMessage?: string): void => {
-      if (loadId !== this.activeLoadId) {
-        return;
-      }
+    this.prepared.set(event, prepared);
+    return prepared;
+  }
 
-      if (status === 'ready') markLoaded(service, `$service:${service}`);
-
-      this.setState(prev => ({
-        loadingSources: {
-          ...prev.loadingSources,
-          [service]: status
-        },
-        loadErrors: {
-          ...prev.loadErrors,
-          [service]: errorMessage
-        }
-      }));
-    };
-
-    const appendAppointments = (appointments: IEvent[]): void => {
-      if (loadId !== this.activeLoadId || appointments.length === 0) {
-        return;
-      }
-
-      const normalizedAppointments = this.prepareAppointments(appointments);
-
-      this.setState(prev => {
-        const byIdentity = new Map<string, IndexedEvent>();
-        prev.appointments.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event as IndexedEvent));
-        normalizedAppointments.forEach(event => byIdentity.set(`${event.sourceId}:${event.id}`, event));
-        return { appointments: Array.from(byIdentity.values()) };
+  private queueCalendarUpdate(): void {
+    if (!this.settingsUiMounted || this.updateFrame !== undefined) return;
+    this.updateFrame = window.requestAnimationFrame(() => {
+      this.updateFrame = undefined;
+      const coordinator = this.coordinator;
+      if (!coordinator) return;
+      const status = coordinator.status();
+      const loadingSources = { ...defaultLoadingSources };
+      const loadErrors = { ...defaultLoadErrors };
+      const visibleLoadErrors: string[] = [];
+      status.pending.forEach(service => { loadingSources[service] = 'loading'; });
+      status.failures.forEach(service => {
+        loadingSources[service] = 'error';
+        loadErrors[service] = serviceErrorLabels[service];
       });
-    };
-
-    const enabledSources = this.props.settings.sources.filter(source => source.isEnabled);
-
-    const sourceGroups: Record<ServiceKey, typeof enabledSources> = {
-      exchange: enabledSources.filter(source => source.sourceType === 'exchange'),
-      ics: enabledSources.filter(source => source.sourceType === 'ics'),
-      sharepoint: enabledSources.filter(source => source.sourceType === 'sharepoint'),
-      planner: enabledSources.filter(source => source.sourceType === 'planner'),
-      teamsShifts: enabledSources.filter(source => source.sourceType === 'teamsShifts'),
-      unifiedGroup: enabledSources.filter(source => source.sourceType === 'unifiedGroup')
-    };
-    (Object.keys(sourceGroups) as ServiceKey[]).forEach(service => {
-      sourceGroups[service].forEach(source => this.registerSource(service, source.id));
+      status.visibleFailures.forEach(service => {
+        const message = serviceErrorLabels[service];
+        if (message) visibleLoadErrors.push(message);
+      });
+      const exchangeErrors = this.props.settings.adminExchangeDiscoveryErrors || [];
+      if (exchangeErrors.length) {
+        loadingSources.exchange = 'error';
+        loadErrors.exchange = [strings.ExchangeLoadErrorLabel, ...exchangeErrors].join(' — ');
+        const index = visibleLoadErrors.indexOf(strings.ExchangeLoadErrorLabel);
+        if (index >= 0) visibleLoadErrors[index] = loadErrors.exchange;
+        else visibleLoadErrors.push(loadErrors.exchange);
+      }
+      const appointments = coordinator.appointments().map(event => this.prepare(event));
+      if (status.pending.size > 0 || this.refreshingAdminSources) {
+        if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+        this.refreshTimer = null;
+      } else if (!this.state.showRefreshButton && this.refreshTimer === null) {
+        this.refreshTimer = window.setTimeout(() => {
+          this.refreshTimer = null;
+          if (this.coordinator === coordinator) this.setState({ showRefreshButton: true });
+        }, 2000);
+      }
+      this.setState(prev => this.coordinator === coordinator ? {
+        appointments: this.sameItems(prev.appointments, appointments) ? prev.appointments : appointments,
+        isLoading: status.background,
+        loadingSources,
+        loadErrors,
+        visibleLoadErrors,
+        showRefreshButton: status.pending.size === 0 && !this.refreshingAdminSources && prev.showRefreshButton
+      } : null);
     });
+  }
 
-    const tasks: Array<Promise<void>> = [];
-
-    // Automatic discovery and configured mailboxes are independent load lanes.
-    if (servicesToLoad.has('exchange')) {
-      tasks.push((async () => {
-        const configured = sourceGroups.exchange
-          .filter(source => source.exchangeCalendarId && !this.areMonthsLoaded(source.id, requestedMonthKeys))
-          .map(source => ({
-            sourceId: source.id,
-            load: async (): Promise<IEvent[]> => {
-              const events = await exchangeService.getCalendarEvents(source.exchangeCalendarId as string, startDate, endDate, source.exchangeMailbox);
-              return events.map(event => ({
-                ...event, sourceId: source.id, sourceDisplayName: source.name, colorHex: source.color,
-                sourceType: 'exchange' as const,
-                showSourceLogo: source.showSourceLogo ?? this.props.settings.exchangeShowSourceLogo ?? true
-              } as IEvent));
-            }
-          }));
-        const result = await loadExchangeSources(async () => {
-          let userCalendars: IExchangeCalendar[];
-          try {
-            this.exchangeCalendarsPromise = this.exchangeCalendarsPromise || exchangeService.getCalendars();
-            userCalendars = await this.exchangeCalendarsPromise;
-          } catch (error) {
-            if (currentGeneration === this.loadGeneration) this.exchangeCalendarsPromise = undefined;
-            throw error;
-          }
-          const exchangeCalendarStates = this.props.settings.exchangeCalendarStates || {};
-          const discoveredSourceIds = new Set(userCalendars
-            .filter(calendar => !isAutomaticExchangeCalendarAssigned(this.props.settings, calendar.id))
-            .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
-            .map(calendar => `exchange_${calendar.id}`));
-          Array.from(this.knownSourceIdsByService.exchange)
-            .filter(sourceId => sourceId.indexOf('exchange_') === 0 && !discoveredSourceIds.has(sourceId))
-            .forEach(sourceId => markLoaded('exchange', sourceId));
-          userCalendars.filter(calendar => !isAutomaticExchangeCalendarAssigned(this.props.settings, calendar.id))
-            .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
-            .forEach(calendar => registerLoadedSource('exchange', `exchange_${calendar.id}`));
-          return userCalendars
-            .filter(calendar => !isAutomaticExchangeCalendarAssigned(this.props.settings, calendar.id))
-            .filter(calendar => exchangeCalendarStates[calendar.id] !== false)
-            .filter(calendar => !this.areMonthsLoaded(`exchange_${calendar.id}`, requestedMonthKeys))
-            .map(calendar => ({
-              sourceId: `exchange_${calendar.id}`,
-              load: async (): Promise<IEvent[]> => {
-                const events = await exchangeService.getCalendarEvents(calendar.id, startDate, endDate);
-                return events.map(event => ({
-                  ...event, sourceId: `exchange_${calendar.id}`, sourceDisplayName: calendar.name,
-                  colorHex: calendar.hexColor, sourceType: 'exchange' as const,
-                  showSourceLogo: this.props.settings.exchangeShowSourceLogo ?? true
-                } as IEvent));
-              }
-            }));
-        }, configured, (sourceId, events) => markLoaded('exchange', sourceId, events),
-        (error, sourceId) => console.error('Failed to load Exchange source:', sourceId, error));
-        appendAppointments(result.events);
-        const discoveryErrors = this.props.settings.adminExchangeDiscoveryErrors || [];
-        const hadError = result.hadError || discoveryErrors.length > 0;
-        updateStatus('exchange', hadError ? 'error' : 'ready', hadError ? [strings.ExchangeLoadErrorLabel, ...discoveryErrors].join(' — ') : undefined);
-      })());
-    }
-
-    if (servicesToLoad.has('sharepoint') && sourceGroups.sharepoint.length > 0) {
-      tasks.push((async () => {
-        let hadError = false;
-        const appointmentsBySource = await Promise.all(sourceGroups.sharepoint.map(async source => {
-          try {
-            if (source.sharePointSiteId && source.sharePointListId && !this.areMonthsLoaded(source.id, requestedMonthKeys)) {
-              const items = await sharePointService.getListEvents(
-                source.sharePointSiteId,
-                source.sharePointListId,
-                startDate,
-                endDate,
-                source.sharePointFieldMapping,
-                source.sharePointSiteName
-              );
-              const normalizedEvents = items.map(item => ({
-                ...item,
-                sourceId: source.id,
-                sourceDisplayName: source.name,
-                colorHex: source.color,
-                sourceType: 'sharepoint' as const,
-                showSourceLogo: source.showSourceLogo ?? this.props.settings.sharePointShowSourceLogo ?? true
-              } as IEvent));
-              markLoaded('sharepoint', source.id, normalizedEvents);
-              return normalizedEvents;
-            }
-          } catch (error) {
-            hadError = true;
-            console.error(`Failed to load SharePoint calendar ${source.name}:`, error);
-          }
-
-          return [] as IEvent[];
-        }));
-
-        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-        appendAppointments(flattenedAppointments);
-        updateStatus('sharepoint', hadError ? 'error' : 'ready', hadError ? strings.SharePointLoadErrorLabel : undefined);
-      })());
-    }
-
-    if (servicesToLoad.has('planner') && this.props.settings.plannerShowAllCalendars) {
-      tasks.push((async () => {
-        let hadError = false;
-
-        try {
-          this.plannerPlansPromise = this.plannerPlansPromise || plannerService.getUserPlans();
-          const plans = await this.plannerPlansPromise;
-          const autoPlannerSources = plans.map(plan => ({
-            id: `auto_planner_${plan.id}`,
-            origin: 'user' as const,
-            sourceType: 'planner' as const,
-            name: plan.title,
-            color: this.props.settings.organizationPrimaryColor || '#0078d4',
-            isEnabled: true,
-            plannerPlanId: plan.id,
-            plannerPlanTitle: plan.title,
-            plannerAssignedToMeOnly: this.props.settings.plannerShowAllAssignedToMeOnly ?? false,
-            showCompletedTasks: true,
-            showSourceLogo: this.props.settings.plannerShowSourceLogo ?? true
-          }));
-          const discoveredPlannerSourceIds = new Set(autoPlannerSources.map(source => source.id));
-          Array.from(this.knownSourceIdsByService.planner)
-            .filter(sourceId => sourceId.indexOf('auto_planner_') === 0 && !discoveredPlannerSourceIds.has(sourceId))
-            .forEach(sourceId => markLoaded('planner', sourceId));
-          autoPlannerSources.forEach(source => registerLoadedSource('planner', source.id));
-
-          const appointmentsBySource = await Promise.all(autoPlannerSources.map(async source => {
-            try {
-              if (!source.plannerPlanId || this.areMonthsLoaded(source.id, requestedMonthKeys)) {
-                return [] as IEvent[];
-              }
-
-              const events = await plannerService.getTasks(
-                source.plannerPlanId,
-                startDate,
-                endDate,
-                source.plannerAssignedToMeOnly ?? false,
-                source.showCompletedTasks ?? true,
-                source,
-                source.showSourceLogo ?? this.props.settings.plannerShowSourceLogo ?? true
-              );
-              markLoaded('planner', source.id, events);
-              return events;
-            } catch (error) {
-              hadError = true;
-              console.error(`Failed to load Planner tasks ${source.name}:`, error);
-              return [] as IEvent[];
-            }
-          }));
-
-          const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-          appendAppointments(flattenedAppointments);
-        } catch (error) {
-          hadError = true;
-          if (currentGeneration === this.loadGeneration) this.plannerPlansPromise = undefined;
-          console.error('Failed to load Planner plans for auto mode:', error);
-        }
-
-        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? strings.PlannerLoadErrorLabel : undefined);
-      })());
-    } else if (servicesToLoad.has('planner') && sourceGroups.planner.length > 0) {
-      tasks.push((async () => {
-        let hadError = false;
-        const appointmentsBySource = await Promise.all(sourceGroups.planner.map(async source => {
-          try {
-            if (source.plannerPlanId && !this.areMonthsLoaded(source.id, requestedMonthKeys)) {
-              const events = await plannerService.getTasks(
-                source.plannerPlanId,
-                startDate,
-                endDate,
-                source.plannerAssignedToMeOnly ?? false,
-                source.showCompletedTasks ?? true,
-                source,
-                source.showSourceLogo ?? this.props.settings.plannerShowSourceLogo ?? true
-              );
-              markLoaded('planner', source.id, events);
-              return events;
-            }
-          } catch (error) {
-            hadError = true;
-            console.error(`Failed to load Planner tasks ${source.name}:`, error);
-          }
-
-          return [] as IEvent[];
-        }));
-
-        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-        appendAppointments(flattenedAppointments);
-        updateStatus('planner', hadError ? 'error' : 'ready', hadError ? strings.PlannerLoadErrorLabel : undefined);
-      })());
-    }
-
-    if (servicesToLoad.has('teamsShifts') && this.props.settings.teamsShiftsShowAllCalendars) {
-      tasks.push((async () => {
-        let hadError = false;
-        const autoSource = {
-          id: 'auto_teamsShifts',
-          origin: 'user' as const,
-          sourceType: 'teamsShifts' as const,
-          name: strings.TeamsShiftsLabel,
-          color: this.props.settings.organizationPrimaryColor || '#4a4fbe',
-          isEnabled: true,
-          showSourceLogo: this.props.settings.teamsShiftsShowSourceLogo ?? true
-        };
-
-        try {
-          registerLoadedSource('teamsShifts', autoSource.id);
-          if (!this.areMonthsLoaded(autoSource.id, requestedMonthKeys)) {
-            const events = await teamsShiftsService.getShiftsForJoinedTeams(
-              startDate,
-              endDate,
-              autoSource,
-              this.props.settings.teamsShiftsShowSourceLogo ?? true
-            );
-            markLoaded('teamsShifts', autoSource.id, events);
-            appendAppointments(events);
-          }
-        } catch (error) {
-          hadError = true;
-          console.error('Failed to load Teams shifts for auto mode:', error);
-        }
-
-        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? strings.TeamsShiftsLoadErrorLabel : undefined);
-      })());
-    } else if (servicesToLoad.has('teamsShifts') && sourceGroups.teamsShifts.length > 0) {
-      tasks.push((async () => {
-        let hadError = false;
-        const appointmentsBySource = await Promise.all(sourceGroups.teamsShifts.map(async source => {
-          try {
-            if (this.areMonthsLoaded(source.id, requestedMonthKeys)) return [] as IEvent[];
-            const events = await teamsShiftsService.getShiftsForJoinedTeams(
-              startDate,
-              endDate,
-              source,
-              source.showSourceLogo ?? this.props.settings.teamsShiftsShowSourceLogo ?? true
-            );
-            markLoaded('teamsShifts', source.id, events);
-            return events;
-          } catch (error) {
-            hadError = true;
-            console.error(`Failed to load Teams shifts ${source.name}:`, error);
-            return [] as IEvent[];
-          }
-        }));
-
-        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-        appendAppointments(flattenedAppointments);
-        updateStatus('teamsShifts', hadError ? 'error' : 'ready', hadError ? strings.TeamsShiftsLoadErrorLabel : undefined);
-      })());
-    }
-
-    if (servicesToLoad.has('unifiedGroup') && this.props.settings.unifiedGroupShowAllCalendars) {
-      tasks.push((async () => {
-        let hadError = false;
-
-        try {
-          this.unifiedGroupsPromise = this.unifiedGroupsPromise || unifiedGroupService.getUnifiedGroups();
-          this.joinedTeamIdsPromise = this.joinedTeamIdsPromise || unifiedGroupService.getJoinedTeamIds();
-          const [groups, joinedTeamIds] = await Promise.all([this.unifiedGroupsPromise, this.joinedTeamIdsPromise]);
-          const discoveredGroupSourceIds = new Set(groups.map(group => `auto_unifiedGroup_${group.id}`));
-          Array.from(this.knownSourceIdsByService.unifiedGroup)
-            .filter(sourceId => sourceId.indexOf('auto_unifiedGroup_') === 0 && !discoveredGroupSourceIds.has(sourceId))
-            .forEach(sourceId => markLoaded('unifiedGroup', sourceId));
-          groups.forEach(group => registerLoadedSource('unifiedGroup', `auto_unifiedGroup_${group.id}`));
-
-          const appointmentsByGroup = await Promise.all(groups.map(async group => {
-            try {
-              const sourceId = `auto_unifiedGroup_${group.id}`;
-              if (this.areMonthsLoaded(sourceId, requestedMonthKeys)) return [] as IEvent[];
-              const iconName = joinedTeamIds.has(group.id) ? 'TeamsLogo' : 'Group';
-              const events = await unifiedGroupService.getGroupEvents(group.id, startDate, endDate);
-              const normalizedEvents = events.map(event => ({
-                ...event,
-                sourceId: `auto_unifiedGroup_${group.id}`,
-                sourceDisplayName: group.displayName,
-                colorHex: this.props.settings.organizationPrimaryColor || '#5b5fc7',
-                sourceType: 'unifiedGroup' as const,
-                showSourceLogo: this.props.settings.unifiedGroupShowSourceLogo ?? true,
-                sourceIconName: iconName
-              } as IEvent));
-              markLoaded('unifiedGroup', sourceId, normalizedEvents);
-              return normalizedEvents;
-            } catch (error) {
-              hadError = true;
-              console.error(`Failed to load group calendar ${group.displayName}:`, error);
-              return [] as IEvent[];
-            }
-          }));
-
-          const flattenedAppointments = appointmentsByGroup.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-          appendAppointments(flattenedAppointments);
-        } catch (error) {
-          hadError = true;
-          if (currentGeneration === this.loadGeneration) {
-            this.unifiedGroupsPromise = undefined;
-            this.joinedTeamIdsPromise = undefined;
-          }
-          console.error('Failed to load group calendars for auto mode:', error);
-        }
-
-        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? strings.GroupsTeamsLoadErrorLabel : undefined);
-      })());
-    } else if (servicesToLoad.has('unifiedGroup') && sourceGroups.unifiedGroup.length > 0) {
-      tasks.push((async () => {
-        let hadError = false;
-        let joinedTeamIds: Set<string> = new Set();
-
-        try {
-          this.joinedTeamIdsPromise = this.joinedTeamIdsPromise || unifiedGroupService.getJoinedTeamIds();
-          joinedTeamIds = await this.joinedTeamIdsPromise;
-        } catch (error) {
-          hadError = true;
-          if (currentGeneration === this.loadGeneration) this.joinedTeamIdsPromise = undefined;
-          console.error('Failed to load joined Teams for group calendars:', error);
-        }
-
-        const appointmentsBySource = await Promise.all(sourceGroups.unifiedGroup.map(async source => {
-          try {
-            if (!source.groupId || this.areMonthsLoaded(source.id, requestedMonthKeys)) {
-              return [] as IEvent[];
-            }
-
-            const iconName = joinedTeamIds.has(source.groupId) ? 'TeamsLogo' : 'Group';
-            const events = await unifiedGroupService.getGroupEvents(source.groupId, startDate, endDate);
-            const normalizedEvents = events.map(event => ({
-              ...event,
-              sourceId: source.id,
-              sourceDisplayName: source.name,
-              colorHex: source.color,
-              sourceType: 'unifiedGroup' as const,
-              showSourceLogo: source.showSourceLogo ?? this.props.settings.unifiedGroupShowSourceLogo ?? true,
-              sourceIconName: iconName
-            } as IEvent));
-            markLoaded('unifiedGroup', source.id, normalizedEvents);
-            return normalizedEvents;
-          } catch (error) {
-            hadError = true;
-            console.error(`Failed to load group calendar ${source.name}:`, error);
-            return [] as IEvent[];
-          }
-        }));
-
-        const flattenedAppointments = appointmentsBySource.reduce<IEvent[]>((acc, group) => acc.concat(group), []);
-        appendAppointments(flattenedAppointments);
-        updateStatus('unifiedGroup', hadError ? 'error' : 'ready', hadError ? strings.GroupsTeamsLoadErrorLabel : undefined);
-      })());
-    }
-
-    if (servicesToLoad.has('ics')) {
-      sourceGroups.ics.forEach(source => markLoaded('ics', source.id));
-      updateStatus('ics', 'ready');
-    }
-    await Promise.all(tasks.map(task => task.catch(() => undefined)));
-
-    if (loadId === this.activeLoadId) {
-      this.setState({ isLoading: false });
-      this.refreshTimer = window.setTimeout(() => {
-        if (loadId === this.activeLoadId) {
-          this.setState({ showRefreshButton: true });
-        }
-      }, 2000);
-    }
+  private sameItems<T>(a: T[], b: T[]): boolean {
+    return a.length === b.length && a.every((item, index) => item === b[index]);
   }
 
   private handleDateChange = (date: Date): void => {
     this.setState({ currentDate: date }, () => {
-      this.ensureVisibleRange(date).catch(err => console.error('Failed to load visible range:', err));
+      if (this.state.currentDate === date) this.ensureVisibleRange(date).catch(err => console.error('Failed to load visible range:', err));
     });
   };
 
@@ -975,14 +431,15 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
   };
 
   private handleManualRefresh = async (): Promise<void> => {
+    if (this.refreshingAdminSources) return;
     this.refreshingAdminSources = true;
-    try { await this.props.onRefreshAdminSources?.(); } finally { this.refreshingAdminSources = false; }
-    const visibleRange = this.getVisibleRange();
-    const preserveAppointments = this.props.settings.enableCache;
-    await this.loadAppointments(undefined, undefined, true, undefined, preserveAppointments, true);
-    const visibleMonthKeys = this.getMonthKeys(visibleRange.start, visibleRange.end);
-    if (visibleMonthKeys.some(monthKey => !this.initialCacheMonthKeys.has(monthKey))) {
-      await this.loadAppointments(visibleRange.start, visibleRange.end, false, undefined, preserveAppointments, true);
+    this.setState({ showRefreshButton: false });
+    try {
+      const settings = await this.props.onRefreshAdminSources?.();
+      await this.loadAppointments(true, settings || this.props.settings);
+    } finally {
+      this.refreshingAdminSources = false;
+      this.queueCalendarUpdate();
     }
   };
 
@@ -1184,8 +641,13 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
     // stays mounted and appears instantly when the user clears the query.
     const displayView = currentView === 'search' ? previousView : currentView;
 
+    const days = this.getVisibleDays(currentDate, displayView);
+    const visible = appointments.filter(event => eventIntersectsRange(event, {
+      start: days[0], end: addLocalDays(days[days.length - 1], 1)
+    }));
+    if (!this.sameItems(this.visibleAppointments, visible)) this.visibleAppointments = visible;
     const calendarViewProps = {
-      appointments,
+      appointments: this.visibleAppointments,
       currentDate,
       preferredStartMinutes,
       visibleHourCount,
@@ -1196,12 +658,12 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
 
     switch (displayView) {
       case 'day':
-        return <DayView {...calendarViewProps} />;
+        return <CalendarDay {...calendarViewProps} />;
       case 'week':
-        return <WeekView {...calendarViewProps} />;
+        return <CalendarWeek {...calendarViewProps} />;
       case 'month':
       default:
-        return <MonthView appointments={appointments} currentDate={currentDate} locale={this.props.locale} />;
+        return <CalendarMonth appointments={this.visibleAppointments} currentDate={currentDate} locale={this.props.locale} />;
     }
   }
 
@@ -1314,6 +776,9 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           />
         )}
         {this.state.settingsWriteError && <MessageBar messageBarType={MessageBarType.error}>{this.state.settingsWriteError}</MessageBar>}
+        {this.state.visibleLoadErrors.length > 0 && (
+          <MessageBar messageBarType={MessageBarType.warning}>{this.state.visibleLoadErrors.join(' — ')}</MessageBar>
+        )}
         <div className={styles.calendarContainer}>
           {/*
             Keep the calendar mounted at all times (hidden via CSS when searching).
@@ -1340,7 +805,7 @@ export default class MyCalendars extends React.Component<IMyCalendarsProps, IMyC
           onSave={this.props.onSettingsChange}
           onReset={this.props.onResetSettings}
           httpClient={this.props.context.httpClient}
-          graphClient={this.state.graphClient}
+          graphClient={this.props.settingsGraph}
           webAbsoluteUrl={this.props.context.pageContext.web.absoluteUrl}
           locale={this.props.locale}
         />

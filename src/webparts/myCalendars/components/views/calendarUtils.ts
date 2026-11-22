@@ -25,6 +25,24 @@ export function addLocalDays(value: Date, days: number): Date {
   return result;
 }
 
+export function getWeekVisibleDays(start: Date, showWeekends: boolean): Date[] {
+  if (showWeekends) return Array.from({ length: 7 }, (_, index) => addLocalDays(start, index));
+  const result: Date[] = [];
+  let offset = 0;
+  while (result.length < 5) {
+    const day = addLocalDays(start, offset++);
+    if (day.getDay() !== 0 && day.getDay() !== 6) result.push(day);
+  }
+  return result;
+}
+
+export function getMonthVisibleDays(date: Date): Date[] {
+  const first = startOfLocalDay(date);
+  first.setDate(1);
+  const gridStart = addLocalDays(first, -first.getDay());
+  return Array.from({ length: 42 }, (_, index) => addLocalDays(gridStart, index));
+}
+
 export function localDateKey(value: Date): string {
   const year = value.getFullYear();
   const month = (`0${value.getMonth() + 1}`).slice(-2);

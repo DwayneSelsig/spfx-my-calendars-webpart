@@ -14,7 +14,7 @@ Read only the section selected by [AGENTS.md](../AGENTS.md). Requirements are no
 | Audience result | `Set<string>` of matched group IDs | Runtime plus five-minute session cache | Select applicable administrator entries |
 | Effective runtime settings | `ICalendarSettings` | Not persisted as one object | Input to `MyCalendars` and personal draft editing |
 | Theme-derived value | Current `palette.themePrimary` | Runtime only | Highest-precedence organization/source fallback color |
-| Event/source caches | Coordinator maps, promises, event state, optional browser entry | Runtime plus optional initial-range `localStorage` cache | Avoid duplicate discovery and month loads |
+| Event/source caches | Coordinator maps, promises, event state, optional browser entry | Runtime plus optional IndexedDB appointment cache | Avoid duplicate discovery and month loads |
 
 `CalendarSettingsService` owns validation, normalization, migration, precedence, and persisted/effective conversion. `SettingsStorageService` owns OneDrive access only. `AudienceService` owns group discovery and membership evaluation only.
 
@@ -58,6 +58,7 @@ Precedence is not uniform for every field:
 | `slotDurationMinutes` | Admin `30`; 15/30/60 | Yes | No | Admin → default | Day/Week | Administrator-only |
 | `enableCache` | Admin `true` | Yes | No | Admin → default | Coordinator | Administrator-only browser appointment cache |
 | `cacheDurationMinutes` | Admin `10`; 1–60 | Yes | No | Admin → default | Coordinator | Whole-minute stale threshold |
+| `maxConcurrentGraphRequests` | Admin `10`; 2–20 | Yes | No | Admin → default | Graph scheduler | Whole-number setting applied after successful SPFx property transfer |
 | `organizationPrimaryColor` | `#0078d4` | **No, deviation** | No | Theme → admin → default | Automatic colors | Confirmed administrator setting |
 | `exchangeCalendarStates` | Absent IDs enabled | No | Per discovered calendar | Personal map only | Exchange | User-owned |
 | Source-type `showSourceLogo` fields | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Event decoration | Five source types |
@@ -191,7 +192,7 @@ Current administrator and personal locations accept only integer schema versions
 1. `AdminDefaultsPanel` opens an isolated complete draft from the latest accepted administrator settings. Incoming props never replace an open draft. Reset replaces only the draft with the complete defaults; Cancel persists nothing.
 2. The panel snapshots the draft and awaits its `Promise<void>` callback through `PropertyPaneAdminDefaultsManager` to `MyCalendarsWebPart`.
 3. The web part validates and serializes once. Its required SPFx commit callback hands the JSON to `adminSettings`. The web part verifies that the property contains that JSON before accepting the configuration; a callback that silently ignores the transfer rejects Save. SPFx is the sole property writer; there is no additional local assignment or notification path.
-4. The web part accepts the configuration, then attempts audience/mailbox resolution and runtime rebuilding. Post-transfer failures are logged and exposed separately; they do not reject successful property transfer.
+4. The web part accepts the configuration, applies the saved concurrency limit, then attempts audience/mailbox resolution and runtime rebuilding. Post-transfer failures are logged and exposed separately; they do not reject successful property transfer.
 5. Save closes the panel only after completion. The adapter reads current settings/notices through getters and updates its summary without `propertyPane.refresh()`.
 
 **Requirements:** administrator settings **MUST** remain a complete `IAdminWebPartSettings`. Non-exposed fields, stable identities and policy **MUST** survive edits. UI-only wizard state **MUST NOT** be persisted. The panel and composition owner **MUST** prevent concurrent Save operations. A rejected transfer **MUST** retain the draft and restore controls; a partially changed property is restored and checked through the same callback, with any restoration failure logged separately.
@@ -213,6 +214,8 @@ Toolbar Day/Week/Month choices also update optimistically and await storage. Fai
 Panels **MUST** await lifecycle-dependent writes, freeze draft editing and dismissal while saving, and close only after success. Edit-session and mount checks **MUST** reject obsolete discovery results, enrichment and save completions. Background draft changes **MUST NOT** alter a running save snapshot.
 
 Personal read failures continue to use the existing legacy/default fallback. Distinguishing absent files from unavailable storage remains open under OQ-004. Deleting two OneDrive files is not a server transaction; no retry/transaction framework is introduced.
+
+OneDrive reads, writes and deletes use the scheduler’s high-priority queue, including the legacy fallback, migration and all save or reset steps. The same priority applies to Entra membership checks and Exchange identity and calendar lookups that resolve administrator assignments at startup, after administrator Save or on manual refresh. Settings-panel discovery and informational member counts use normal priority. See DEC-033.
 
 ### Administrator assignment migration
 
@@ -241,10 +244,10 @@ When the current file is absent, unreadable, or rejected for an unsupported sche
 | `sessionStorage.myCalendarsAudienceMembershipCache` | Group membership/expiry | Five minutes per entry | Errors logged; evaluation continues |
 | `localStorage.currentUserEmailCache` | Email/timestamp | Twelve hours | Errors logged; Graph retried |
 | `localStorage.currentUserMailboxSettingsCache` | Working hours/time zone | Twelve hours | Errors logged; Graph retried |
-| `localStorage.myCalendars:<tenant>:<user>:<instance>` | Structurally validated canonical event segments for the initial seven-month range; new writes are versionless | Until disabled, invalid, replaced, or browser-evicted | Any read or validation failure rejects the whole entry; best-effort removal and source retrieval rebuild it |
+| IndexedDB appointment cache | Normalized appointment data and query completion scoped by tenant, user, web-part instance and result settings | Until disabled, replaced, or browser-evicted | Failed storage operations leave runtime results usable. Compatible legacy `localStorage` data migrates on successful commit |
 | React/coordinator fields | Events, ranges, discovery promises | Component lifetime/reset | Not persisted |
 
-Personal settings are the only current product data written to OneDrive. When enabled by an administrator, initial-range event segments are additionally persisted in browser `localStorage`; no event data is written to OneDrive. Mandatory-source error records are an intention with no confirmed schema, retention, or implementation.
+Personal settings are the only current product data written to OneDrive. When enabled by an administrator, successfully downloaded appointments are additionally persisted in IndexedDB; no event data is written to OneDrive. Mandatory-source error records are an intention with no confirmed schema, retention, or implementation.
 
 ## Settings interfaces
 
@@ -271,6 +274,7 @@ The current administrator panel exposes:
 - preferred start time;
 - visible-hour count;
 - appointment-cache enablement and duration from 1–60 minutes;
+- maximum concurrent Graph requests from 2–20, defaulting to 10;
 - assigned Exchange, SharePoint, Planner, Unified Group/Team, and Teams Shifts sources;
 - group-first Exchange/SharePoint configuration, per-calendar Mandatory/Default/Available policy, shared source presentation and individual override permissions;
 - Exchange all-calendar rules including future calendars and calendar-specific exceptions; and
@@ -282,7 +286,7 @@ Exchange mailbox group headings **MUST** show the resolved mailbox display name 
 
 Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
 
-`PropertyPaneAdminDefaultsManager` adapts the panel to the SPFx custom property-field lifecycle. The property field obtains its own Graph client for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and provides the sole SPFx property writer to the webpart and reads current values through getters.
+`PropertyPaneAdminDefaultsManager` adapts the panel to the SPFx custom property-field lifecycle. The property field receives the web part’s shared Graph executor for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and provides the sole SPFx property writer to the webpart and reads current values through getters.
 
 SharePoint site selection in both panels applies discovered lists through a functional state update guarded by the current edit session and selected site. This preserves fast responses under React 18 automatic batching while ignoring results for a superseded selection.
 

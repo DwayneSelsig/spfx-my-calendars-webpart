@@ -1,4 +1,4 @@
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { collectGraphPages, forEachGraphPage, type GraphClient } from './GraphRequestExecutor';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ISharePointFieldMapping } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
@@ -106,17 +106,17 @@ export function normalizeSharePointEventDates(
  */
 export class SharePointCalendarService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
-  private graphClient: MSGraphClientV3 | null = null;
+  private graphClient: GraphClient | null = null;
   private readonly sitePromises = new Map<string, Promise<ISharePointSite | undefined>>();
 
-  constructor(graphClient?: MSGraphClientV3) {
+  constructor(graphClient?: GraphClient) {
     this.graphClient = graphClient || null;
   }
 
   /**
    * Set the GraphClient (for authentication)
    */
-  public setGraphClient(client: MSGraphClientV3): void {
+  public setGraphClient(client: GraphClient): void {
     this.graphClient = client;
     this.sitePromises.clear();
   }
@@ -165,27 +165,19 @@ export class SharePointCalendarService {
         return [];
       }
 
-      console.log('Fetching accessible SharePoint sites...');
       
       // Use wildcard search to get all accessible sites
-      const data = await this.graphClient
-        .api('/sites')
-        .query({
-          search: '*',
-          $select: 'id,displayName,webUrl',
-          $top: 999
-        })
-        .get();
+      const data = await collectGraphPages<IGraphSite>(this.graphClient, '/sites',
+        request => request.query({ search: '*', $select: 'id,displayName,webUrl', $top: 999 }));
 
-      console.log('Response data:', data);
+
       
-      const sites = (data.value || []).map((site: IGraphSite) => ({
+      const sites = data.map((site: IGraphSite) => ({
         id: site.id,
         name: site.displayName || site.name || strings.UnnamedSiteLabel,
         url: site.webUrl
       }));
 
-      console.log('Found accessible sites:', sites);
       return sites;
     } catch (error) {
       console.error('Error fetching accessible sites:', error);
@@ -206,24 +198,17 @@ export class SharePointCalendarService {
     }
 
     try {
-      console.log('Searching sites for:', filter);
       
-      const data = await this.graphClient
-        .api('/sites')
-        .query({
-          search: filter,
-          $select: 'id,displayName,webUrl',
-          $top: 999
-        })
-        .get();
+      const data = await collectGraphPages<IGraphSite>(this.graphClient, '/sites',
+        request => request.query({ search: filter, $select: 'id,displayName,webUrl', $top: 999 }));
 
-      const searchResults = (data.value || []).map((site: IGraphSite) => ({
+
+      const searchResults = data.map((site: IGraphSite) => ({
         id: site.id,
         name: site.displayName || site.name || strings.UnnamedSiteLabel,
         url: site.webUrl
       }));
 
-      console.log('Search results for "' + filter + '":', searchResults);
       return searchResults;
     } catch (error) {
       console.error('Error searching sites:', error);
@@ -244,15 +229,9 @@ export class SharePointCalendarService {
 
     try {
       // Query lists and filter client-side for calendar-capable templates
-      const data = await this.graphClient
-        .api(`/sites/${siteId}/lists`)
-        .query({
-          $select: 'id,displayName,name,webUrl,list',
-          $top: 200
-        })
-        .get();
-
-      return (data.value || [])
+      const data = await collectGraphPages<IGraphList>(this.graphClient, `/sites/${siteId}/lists`,
+        request => request.query({ $select: 'id,displayName,name,webUrl,list', $top: 200 }));
+      return data
         .filter((list: IGraphList) => {
           const template = list.list?.template;
           const isHidden = list.list?.hidden === true;
@@ -282,10 +261,12 @@ export class SharePointCalendarService {
   public async getListEvents(
     siteId: string,
     listId: string,
-    startDate: Date,
-    endDate: Date,
+    startDate: Date | undefined,
+    endDate: Date | undefined,
     fieldMapping?: ISharePointFieldMapping,
-    siteName?: string
+    siteName?: string,
+    onPage?: (events: IEvent[]) => void,
+    fetchSiteName: () => Promise<string | undefined> = async () => (await this.getSite(siteId))?.name
   ): Promise<IEvent[]> {
     if (!this.graphClient) {
       throw new Error('GraphClient not initialized');
@@ -294,22 +275,21 @@ export class SharePointCalendarService {
     try {
       const resolvedSiteNamePromise = siteName?.trim()
         ? Promise.resolve(siteName.trim())
-        : this.getSite(siteId).then(site => site?.name || undefined);
-      // Fetch all items - need to expand fields to get the actual field values
-      const data = await this.graphClient
-        .api(`/sites/${siteId}/lists/${listId}/items`)
-        .select('id,webUrl')
-        .expand('fields')
-        .get();
-
-      // Auto-detect field mapping from first item if not provided
-      const effectiveMapping = fieldMapping || (data.value?.[0] ? this.detectFieldMapping(data.value[0]) : {});
-
-      const resolvedSiteName = await resolvedSiteNamePromise;
-      return (data.value || [])
-        .map((item: IGraphListItem) => this.mapListItemToAppointment(item, startDate, endDate, effectiveMapping))
-        .filter((apt: IEvent | null): apt is IEvent => apt !== null)
-        .map((event: IEvent) => ({ ...event, sharePointSiteName: resolvedSiteName }));
+        : fetchSiteName();
+      let mapping = fieldMapping;
+      const events: IEvent[] = [];
+      await forEachGraphPage<IGraphListItem>(this.graphClient, `/sites/${siteId}/lists/${listId}/items`, async page => {
+        if (!page.length) return;
+        mapping = mapping || this.detectFieldMapping(page[0]);
+        const resolvedSiteName = await resolvedSiteNamePromise;
+        const appointments = page
+          .map(item => this.mapListItemToAppointment(item, startDate, endDate, mapping))
+          .filter((event): event is IEvent => event !== null)
+          .map(event => ({ ...event, sharePointSiteName: resolvedSiteName }));
+        events.push(...appointments);
+        onPage?.(appointments);
+      }, request => request.select('id,webUrl').expand('fields'));
+      return events;
     } catch (error) {
       console.error('Error fetching list events:', error);
       throw error;

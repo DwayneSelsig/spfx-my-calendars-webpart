@@ -117,6 +117,7 @@ define([], function() {
     ,"SlotDurationLabel": "Rasterduur"
     ,"CacheDefaultsLabel": "Browsercache"
     ,"EnableCacheLabel": "Afsprakencache inschakelen"
+    ,"MaxConcurrentGraphRequestsLabel": "Maximaal gelijktijdige Graph-verzoeken"
     ,"CacheDurationMinutesLabel": "Cacheduur (minuten)"
     ,"HomeLabel": "Start"
     ,"EditLabel": "Bewerken"

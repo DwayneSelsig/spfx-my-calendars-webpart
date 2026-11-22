@@ -16,7 +16,8 @@ import { Dropdown, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 import { Icon } from '@fluentui/react/lib/Icon';
 import { Checkbox } from '@fluentui/react/lib/Checkbox';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
-import { HttpClient, type MSGraphClientV3 } from '@microsoft/sp-http';
+import { HttpClient } from '@microsoft/sp-http';
+import { collectGraphPages, type GraphClient } from '../services/GraphRequestExecutor';
 import { ICalendarSource, ICalendarSettings, CalendarSourceType } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
 import { ExchangeCalendarService, getExchangeDiscoveryErrorMessage, IExchangeCalendar, IMailboxSearchResult } from '../services/ExchangeCalendarService';
@@ -35,7 +36,7 @@ export interface IUserSettingsPanelProps {
   onPreview: (settings: ICalendarSettings) => void;
   onReset: () => Promise<void>;
   httpClient?: HttpClient;
-  graphClient?: MSGraphClientV3;
+  graphClient?: GraphClient;
   webAbsoluteUrl?: string;
   locale?: string;
 }
@@ -250,7 +251,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
     this.userCalendarSession++;
   }
 
-  private initializeGraphClient(client: MSGraphClientV3): void {
+  private initializeGraphClient(client: GraphClient): void {
     if (this.sharePointService) this.sharePointService.setGraphClient(client);
     this.exchangeService = this.exchangeService || new ExchangeCalendarService(client);
     this.exchangeService.setGraphClient(client);
@@ -511,13 +512,12 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
       if (!isCurrentSelection()) return;
       if (!client) return;
 
-      const columnsData = await client
-        .api(`/sites/${spSelectedSite.id}/lists/${list.id}/columns`)
-        .query({ $select: 'name,displayName,columnGroup' })
-        .get();
+      const columnsData = await collectGraphPages<IGraphColumn>(client,
+        `/sites/${spSelectedSite.id}/lists/${list.id}/columns`,
+        request => request.query({ $select: 'name,displayName,columnGroup' }));
       if (!isCurrentSelection()) return;
 
-      const rawOptions: IDropdownOption[] = (columnsData.value || [])
+      const rawOptions: IDropdownOption[] = columnsData
         .filter((column: IGraphColumn) => column.name && !column.name.startsWith('_') && column.columnGroup !== '_Hidden')
         .map((column: IGraphColumn) => ({
           key: column.name as string,
@@ -540,6 +540,7 @@ export class UserSettingsPanel extends React.Component<IUserSettingsPanelProps, 
         const itemsData = await client
           .api(`/sites/${spSelectedSite.id}/lists/${list.id}/items`)
           .expand('fields')
+          .top(1)
           .get();
         if (!isCurrentSelection()) return;
 

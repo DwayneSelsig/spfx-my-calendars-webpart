@@ -1,4 +1,4 @@
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { collectGraphPages, forEachGraphPage, type GraphClient } from './GraphRequestExecutor';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
@@ -34,17 +34,17 @@ interface IGraphShift {
  * Requires Team.ReadBasic.All and Schedule.Read.All permissions
  */
 export class TeamsShiftsService {
-  private graphClient: MSGraphClientV3 | undefined;
+  private graphClient: GraphClient | undefined;
   private joinedTeamsPromise?: Promise<IGraphTeam[]>;
 
-  constructor(graphClient?: MSGraphClientV3) {
+  constructor(graphClient?: GraphClient) {
     this.graphClient = graphClient;
   }
 
   /**
    * Set the GraphClient (for authentication)
    */
-  public setGraphClient(client: MSGraphClientV3): void {
+  public setGraphClient(client: GraphClient): void {
     this.graphClient = client;
   }
 
@@ -52,16 +52,18 @@ export class TeamsShiftsService {
    * Get shifts for all joined Teams, filtered to teams that actually have shifts
    */
   public async getShiftsForJoinedTeams(
-    startDate: Date,
-    endDate: Date,
+    startDate: Date | undefined,
+    endDate: Date | undefined,
     source: ICalendarSource,
-    showSourceLogo: boolean = true
+    showSourceLogo: boolean = true,
+    onPage?: (events: IEvent[]) => void,
+    discoverTeams: () => Promise<IGraphTeam[]> = () => this.getJoinedTeams()
   ): Promise<IEvent[]> {
     if (!this.graphClient) {
       throw new Error('GraphClient not initialized');
     }
 
-    this.joinedTeamsPromise = this.joinedTeamsPromise || this.getJoinedTeams().catch(error => {
+    this.joinedTeamsPromise = this.joinedTeamsPromise || discoverTeams().catch(error => {
       this.joinedTeamsPromise = undefined;
       throw error;
     });
@@ -73,72 +75,51 @@ export class TeamsShiftsService {
     const allAppointments: IEvent[] = [];
 
     for (const team of teams) {
-      const teamShifts = await this.getTeamShifts(team.id, startDate, endDate);
-      const mappedShifts = teamShifts.reduce((acc: IEvent[], shift: IGraphShift) => {
-        acc.push(...this.mapShiftToAppointments(shift, team, source, showSourceLogo));
-        return acc;
-      }, []);
-
-      if (mappedShifts.length > 0) {
-        allAppointments.push(...mappedShifts);
-      }
+      await this.getTeamShifts(team.id, shifts => {
+        const matching = startDate && endDate ? this.filterShiftsByDate(shifts, startDate, endDate) : shifts;
+        const events = matching.reduce((page, shift) => {
+          page.push(...this.mapShiftToAppointments(shift, team, source, showSourceLogo));
+          return page;
+        }, [] as IEvent[]);
+        allAppointments.push(...events);
+        onPage?.(events);
+      });
     }
 
     return allAppointments;
   }
 
-  private async getJoinedTeams(): Promise<IGraphTeam[]> {
+  public async getJoinedTeams(): Promise<IGraphTeam[]> {
     try {
       if (!this.graphClient) {
         throw new Error('GraphClient not initialized');
       }
 
-      const teams: IGraphTeam[] = [];
-      let nextLink: string | undefined = '/me/joinedTeams';
-
-      while (nextLink) {
-        const request = nextLink.startsWith('http')
-          ? this.graphClient.api(nextLink)
-          : this.graphClient.api(nextLink).select('id,displayName');
-
-        const response = await request.get();
-        teams.push(...((response.value || []) as IGraphTeam[]));
-        nextLink = response['@odata.nextLink'] as string | undefined;
-      }
-
-      return teams;
+      return await collectGraphPages<IGraphTeam>(this.graphClient, '/me/joinedTeams',
+        request => request.select('id,displayName'));
     } catch (error) {
       console.error('Error fetching joined Teams:', error);
       throw error;
     }
   }
 
-  private async getTeamShifts(teamId: string, startDate: Date, endDate: Date): Promise<IGraphShift[]> {
+  private async getTeamShifts(teamId: string, onPage: (shifts: IGraphShift[]) => void): Promise<void> {
+    let receivedPage = false;
     try {
       if (!this.graphClient) {
         throw new Error('GraphClient not initialized');
       }
 
-      const shifts: IGraphShift[] = [];
-      let nextLink: string | undefined = `/teams/${teamId}/schedule/shifts`;
-
-      while (nextLink) {
-        const request = nextLink.startsWith('http')
-          ? this.graphClient.api(nextLink)
-          : this.graphClient.api(nextLink);
-
-        const response = await request.get();
-        shifts.push(...((response.value || []) as IGraphShift[]));
-        nextLink = response['@odata.nextLink'] as string | undefined;
-      }
-
-      return this.filterShiftsByDate(shifts, startDate, endDate);
+      await forEachGraphPage<IGraphShift>(this.graphClient, `/teams/${teamId}/schedule/shifts`, page => {
+        receivedPage = true;
+        onPage(page);
+      });
     } catch (error) {
       const statusCode = (error as { statusCode?: number }).statusCode;
       const message = (error as { message?: string }).message || '';
       const isNotFound = statusCode === 404 || message.includes('TeamNotFound');
 
-      if (isNotFound) return [];
+      if (isNotFound && !receivedPage) return;
       console.error(`Error fetching shifts for team ${teamId}:`, error);
       throw error;
     }

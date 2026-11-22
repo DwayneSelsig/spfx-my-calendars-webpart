@@ -1,3 +1,4 @@
+import { DEFAULT_GRAPH_CONCURRENCY } from '../services/GraphRequestScheduler';
 export type CalendarViewType = 'day' | 'week' | 'month' | 'search';
 export type CalendarSourceType = 'ics' | 'exchange' | 'sharepoint' | 'planner' | 'teamsShifts' | 'unifiedGroup';
 export type CalendarSourceOrigin = 'admin' | 'user';
@@ -125,6 +126,7 @@ export interface IAdminWebPartSettings {
   slotDurationMinutes: CalendarSlotDuration;
   enableCache: boolean;
   cacheDurationMinutes: number;
+  maxConcurrentGraphRequests: number;
   organizationPrimaryColor?: string;
   exchangeShowSourceLogo: boolean;
   sharePointShowSourceLogo: boolean;
@@ -191,6 +193,7 @@ export interface ICalendarSettings {
   slotDurationMinutes: CalendarSlotDuration;
   enableCache: boolean;
   cacheDurationMinutes: number;
+  maxConcurrentGraphRequests: number;
   userPreferredStartMinutes?: number;
   userVisibleHourCount?: number;
   organizationPrimaryColor?: string;
@@ -242,6 +245,7 @@ export const defaultAdminWebPartSettings: IAdminWebPartSettings = {
   slotDurationMinutes: 30,
   enableCache: true,
   cacheDurationMinutes: 10,
+  maxConcurrentGraphRequests: DEFAULT_GRAPH_CONCURRENCY,
   organizationPrimaryColor: '#0078d4',
   exchangeShowSourceLogo: true,
   sharePointShowSourceLogo: true,
@@ -278,6 +282,7 @@ export const defaultCalendarSettings: ICalendarSettings = {
   slotDurationMinutes: 30,
   enableCache: true,
   cacheDurationMinutes: 10,
+  maxConcurrentGraphRequests: DEFAULT_GRAPH_CONCURRENCY,
   organizationPrimaryColor: '#0078d4',
   exchangeCalendarStates: {},
   exchangeShowSourceLogo: true,

@@ -36,10 +36,9 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 ### DEC-007 — Dynamic retrieval range
 
 - **Status:** Decision
-- Initial loading covers the current month plus or minus three months.
-- Navigation loads missing visible months per source.
-- Only successful source/month responses enter the range cache.
-- Manual refresh clears events and range state.
+- Initial loading starts two normal-priority jobs covering the current month plus 13 full months ahead and 13 full months behind.
+- Navigation prioritizes missing visible months and fills skipped months at normal priority. Equivalent work is shared, and complete, empty and failed results remain distinct.
+- Manual refresh rediscovers applicable administrator Exchange rules and forces the initial and visible months. The behavior for existing appointments follows DEC-017.
 
 ### DEC-009 — Display preferences and regional formatting
 
@@ -66,11 +65,11 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - Browser appointment caching is an administrator-only setting, enabled by default with a ten-minute duration normalized to 1–60 whole minutes.
-- New `localStorage` entries are versionless and isolated by tenant, user, web-part instance, and result-affecting configuration signature. A schema-version field in an existing entry is ignored. Entries contain canonical events per source/month for only the initial seven-month range.
+- IndexedDB stores all successfully downloaded normalized appointments and query completion, scoped by tenant, user, web-part instance and result-affecting configuration. Compatible legacy `localStorage` entries migrate on successful commit.
 - Compatible cached events render immediately and are reprocessed locally. Fresh segments suppress retrieval; stale segments remain visible while retrieval runs in the background.
 - Cache expiry by itself does not schedule retrieval while the component remains mounted. A later load that finds stale segments uses the existing loading and toolbar-status workflow.
-- Successful source/month retrieval atomically replaces that segment, including with an empty result. Failure preserves stale data and the source failure remains visible.
-- Manual refresh preserves visible appointments, bypasses freshness, and forces the initial and visible ranges. Any read, parse, structural, identity, or signature failure rejects the entire entry; removal is best-effort, no partial data is hydrated, and normal source retrieval rebuilds the cache. Invalid, disabled, unavailable, read-only, or quota-constrained cache state falls back safely to normal retrieval.
+- Successful pages can be persisted before a query finishes. After the final required page, a successful query atomically replaces the prior result, including with an empty result. An incomplete query stays eligible for retry and retains earlier valid data.
+- Manual refresh preserves visible appointments while browser caching is enabled, bypasses freshness, and forces the initial and visible ranges. Any read, parse, structural, identity, or signature failure rejects the entire entry; removal is best-effort, no partial data is hydrated, and normal source retrieval rebuilds the cache. Invalid, disabled, unavailable, read-only, or quota-constrained cache state falls back safely to normal retrieval.
 
 ### DEC-018 — Event detail semantics
 
@@ -178,6 +177,14 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - Do not store source event content unless a later decision explicitly permits it.
 - Record schema, delay, retry limit, retention, cleanup, and UI behavior remain open.
 
+### DEC-033 — Shared Graph request scheduling
+
+- **Status:** Decision
+- One scheduler per web part controls every Graph HTTP operation. The administrator sets a whole-number limit from 2 to 20, with a default of 10. The setting transfers through the existing SPFx property and applies to the running scheduler.
+- Normal and high priorities share capacity. A waiting high priority receives one minimum slot. Waiting normal work receives at least one slot through limit 10 and two at higher limits. A saturated normal-only workload can yield one temporary extra high-priority operation below the absolute ceiling of 20. At limit 20 a normal-only workload leaves one slot open.
+- OneDrive personal settings I/O, including migration and reset, uses the high-priority FIFO queue alongside visible calendar requests. Audience membership checks and Exchange lookups required to apply administrator assignments also use high priority. Discovery and member counts in settings panels use normal priority.
+- The installed SPFx Graph SDK retains its retry and delay limits. Waiting inside SDK backoff retains the request slot. Calendar pagination and JSON batch subrequests keep independent completion semantics.
+
 ### DEV-004 — Per-source logo precedence is inconsistent
 
 - **Status:** Resolved
@@ -201,16 +208,14 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 - DEC-022 replaces boolean existence validation with identity resolution for UPN, object ID and primary SMTP, followed by authoritative calendar discovery. Identity lookup, discovery and event errors remain distinguishable.
 - There is no generic HTTP fallback.
 
-### DEV-008 — Some “all” source modes do not page all data
+### DEV-008 — Some “all” source modes did not page all data
 
-- **Current state:** Planner group discovery uses `$top=100` without following `@odata.nextLink`.
-- **Current state:** Exchange and Group events use `$top=500` without paging.
-- **Current state:** SharePoint runtime items and several discovery calls do not follow paging.
-- **Consequence:** “all” is limited to the implemented returned pages, not a guaranteed complete tenant data set.
+- **Status:** Resolved for Graph collection continuations. Exchange and Group events, SharePoint items and discovery, and Planner groups, plans and tasks follow returned pages.
+- Mailbox suggestions and one-item mapping previews retain intentional result bounds.
 
 ### DEV-009 — Teams Shifts failure isolation is coarser than Team scope
 
-- **Current state:** joined Teams are queried sequentially; a non-404 error aborts the call and drops earlier collected Team results.
+- **Current state:** joined Teams are queried sequentially. A non-404 failure leaves the aggregate source incomplete. Earlier successful pages remain available.
 - **Required contract:** source-family isolation remains required; Team-level isolation inside Shifts is not confirmed.
 
 ### DEV-012 — Source registry and inactive UI contain obsolete ICS wording

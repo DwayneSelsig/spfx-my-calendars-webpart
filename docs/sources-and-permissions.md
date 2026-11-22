@@ -19,7 +19,7 @@ All active adapters are read-only. They return normalized local events or discov
 
 ## Common contract, permissions, and resilience
 
-**Read when:** changing the shared event model, source coordination boundaries, Graph permission manifests, authentication context, pagination, retry, throttling, or cross-source verification. Related records: DEC-001, DEC-004, DEC-008, DEC-018, DEV-005, DEV-008, and OQ-006.
+**Read when:** changing the shared event model, source coordination boundaries, Graph requests or scheduling, permission manifests, authentication context, pagination, retry, throttling, or cross-source verification. Related records: DEC-001, DEC-004, DEC-008, DEC-018, DEC-033, DEV-005, DEV-008, and OQ-006.
 
 ### Shared adapter contract
 
@@ -33,7 +33,7 @@ The coordinator adds or normalizes source identity, display name, color, type, i
 
 ### Delegated access
 
-All current runtime calls use delegated user context because the web part obtains `MSGraphClientV3` from SPFx and uses `/me` endpoints. No application-only code path exists.
+`MyCalendarsWebPart` obtains `MSGraphClientV3` from SPFx for delegated Graph access and supplies it to the shared `GraphRequestExecutor`. The executor sends each HTTP operation through `GraphRequestScheduler` and executes it using that SDK client. Features receive the scheduled `GraphClient` for their Graph connectivity. See [Pagination, retry, and throttling](#pagination-retry-and-throttling).
 
 ### Microsoft Graph permissions
 
@@ -56,11 +56,11 @@ Administrator audience counts also use the existing `Group.Read.All` permission 
 
 ### Pagination, retry, and throttling
 
-The code follows `@odata.nextLink` for Unified-group discovery, joined-Team discovery, and Shifts retrieval. Exchange calendar discovery follows paging; Exchange events, SharePoint items and Planner group/plan/task discovery retain their existing paging limitations. Audience search and configured Exchange identity resolution follow all returned `@odata.nextLink` pages.
+Production code **MUST** send all Graph HTTP operations through the `GraphClient` supplied by `MyCalendarsWebPart` and backed by its shared `GraphRequestExecutor` and `GraphRequestScheduler`. The composition root obtains the raw `MSGraphClientV3` and supplies scheduled clients to services and panels. A flow that owns request priority uses `GraphRequestExecutor.scoped(scope)` with the same scheduler. Direct Graph HTTP calls and separate schedulers bypass the per-instance concurrency limit.
 
-There is no explicit exponential backoff, `Retry-After` handling, or retry limit in a source service. Retry occurs indirectly when a failed month remains uncached and later navigation or manual refresh starts another load. Selected failed discovery promises are cleared so a later load can rediscover.
+The rule covers discovery, settings reads and writes, batch envelopes, and continuation pages. Use `forEachGraphPage` for progressive results or `collectGraphPages` when the caller needs a complete collection. Each continuation page acquires its own slot. Both helpers follow the full `@odata.nextLink` and apply any required continuation headers supplied by the caller. Mailbox suggestions and SharePoint sample-item lookups retain their intentional result bounds.
 
-A retry policy, mandatory-source retry policy, and error-record schema remain unresolved and **MUST NOT** be invented as part of an unrelated source change.
+The SPFx Graph SDK retains its bounded retry behavior and considers `Retry-After`. The scheduler holds one slot through SDK backoff because retry middleware is owned by the SPFx client. SDK delays remain subject to its cap. Audience batch subrequest failures are handled individually, without a web-part retry policy. A failed appointment range may retry on later navigation or refresh.
 
 ### Verification references
 
@@ -75,7 +75,7 @@ A retry policy, mandatory-source retry policy, and error-record schema remain un
 
 ### Missing automated coverage
 
-Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping. There are no automated tests for pagination, complete endpoint construction, permission alignment, ICS link generation, source identity, deduplication, orchestration, or retry eligibility. `npm run build` remains the production verification command.
+Focused tests cover Exchange, SharePoint, and Microsoft 365 Group event mapping. Focused tests also cover pagination, scheduler capacity, continuation headers, source/month orchestration, deduplication and retry eligibility. Permission alignment and live endpoint behavior remain host verification. `npm run build` remains the production verification command.
 
 ## Exchange calendars
 
@@ -109,7 +109,7 @@ Missing or invalid required timed dates fail that calendar request. Date-only/al
 - Event details can open Graph-provided `joinUrl` and `webLink`.
 - Calendar discovery is cached as a coordinator promise until reset; events use the successful source/month cache.
 - Individual automatic calendars and configured Exchange sources are isolated from each other. Failure of current-user discovery does not prevent configured source loads. Only successful requests mark source/month results as loaded.
-- Calendar discovery follows every `@odata.nextLink`. Event retrieval retains its existing 500-item/page limitation.
+- Calendar discovery and event retrieval follow every `@odata.nextLink`. The event page size remains 500.
 
 **Requirement (DEC-022):** mailbox identity, calendar discovery and event retrieval remain separate access steps. Discovery and event failures **MUST** retain their original diagnostic status/code and stage; an agenda-endpoint 404 **MUST NOT** be interpreted as proof that the mailbox does not exist. Panels show localized errors and successful empty results, finish current-request loading on both success and failure, and discard obsolete discovery responses.
 
@@ -150,7 +150,7 @@ Items without a title or start date, items with invalid dates, and items outside
 - Configured sources load independently and successful months are cached in memory.
 - Site search falls back to wildcard accessible-site discovery after an error; several discovery methods return an empty array on failure.
 - Runtime list-item retrieval propagates errors to the coordinator.
-- Runtime retrieval does not follow paging and does not send a server-side date filter. Large lists can be incomplete or expensive.
+- Runtime retrieval follows all pages and projects the collection into calendar months locally. Lists with many items can require several requests.
 
 ## Planner
 
@@ -162,7 +162,7 @@ Automatic and configured Planner sources expose task dates as all-day calendar e
 
 Plan discovery:
 
-1. reads up to 100 groups from `GET /me/memberOf/microsoft.graph.group`;
+1. reads all pages from `GET /me/memberOf/microsoft.graph.group` with a requested page size of 100;
 2. calls `GET /groups/{groupId}/planner/plans` sequentially for each returned group; and
 3. suppresses errors for an individual group, treating it as having no Planner.
 
@@ -186,7 +186,7 @@ Configured plan access can be checked with `GET /planner/plans/{planId}`. Runtim
 - Automatic mode always includes completed tasks.
 - Configured Planner sources are not loaded while automatic mode is enabled.
 - Plan discovery is cached until reset. Per-plan task loads are parallel and isolated; successful months are cached.
-- Group discovery has `$top=100` without paging. Plan/task calls do not follow paging.
+- Group, plan and task collections follow Graph continuation links.
 - If current-user ID lookup fails while assigned-only mode is requested, filtering is not applied and all returned tasks remain visible.
 
 ## Microsoft 365 Group and Teams calendars
@@ -211,7 +211,7 @@ Mapping matches Exchange for title, plain-text preview, dates, all-day state, lo
 - Explicit group sources are not loaded while automatic mode is enabled.
 - Discovery promises and successful source/month results are cached until reset.
 - Event loads are isolated per group; discovery failure affects the complete service family.
-- Event retrieval does not follow paging beyond `$top=500`.
+- Group calendar event retrieval follows Graph continuation links, with a requested page size of 500.
 - Configured sources use per-source `showSourceLogo` before the source-type default; automatic sources retain the type-wide setting.
 
 ## Teams Shifts
@@ -242,7 +242,7 @@ Teams Shifts **MUST** include all shifts returned for all Teams where the curren
 - A configured Shifts source also covers all joined Teams; it does not identify one Team.
 - Automatic mode suppresses configured Shifts sources.
 - Joined-Team discovery is cached in the retained service instance until reset. Successful months use the coordinator cache.
-- Team-not-found/404 is treated as an empty Team. Another Team failure aborts the full source call, so results collected earlier in that call are lost.
+- Team-not-found/404 is treated as an empty Team. Another Team failure leaves the joined-Teams source incomplete. Successful pages already published remain available.
 - The API supports server-side date filtering, but current code downloads every returned page for each Team before client filtering.
 - Configured sources use per-source `showSourceLogo` before the source-type default; automatic sources retain the type-wide setting.
 

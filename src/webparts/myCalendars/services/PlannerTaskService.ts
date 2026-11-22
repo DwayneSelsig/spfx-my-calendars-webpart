@@ -1,4 +1,5 @@
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { collectGraphPages, forEachGraphPage, type GraphClient } from './GraphRequestExecutor';
+import { GraphRequestCancelled } from './GraphRequestScheduler';
 import type { ICalendarEvent as IEvent } from '../models/ICalendarEvent';
 import { ICalendarSource } from '../models/ICalendarSettings';
 import * as strings from 'MyCalendarsWebPartStrings';
@@ -43,11 +44,11 @@ interface IGraphPlannerTask {
  */
 export class PlannerTaskService {
   private readonly GRAPH_API_URL = 'https://graph.microsoft.com/v1.0';
-  private graphClient: MSGraphClientV3 | null = null;
+  private graphClient: GraphClient | null = null;
   private currentUserId: string | null = null;
   private readonly tenantId?: string;
 
-  constructor(graphClient?: MSGraphClientV3, tenantId?: string) {
+  constructor(graphClient?: GraphClient, tenantId?: string) {
     this.graphClient = graphClient || null;
     this.tenantId = tenantId?.trim() || undefined;
   }
@@ -55,7 +56,7 @@ export class PlannerTaskService {
   /**
    * Set the GraphClient (for authentication)
    */
-  public setGraphClient(client: MSGraphClientV3): void {
+  public setGraphClient(client: GraphClient): void {
     this.graphClient = client;
   }
 
@@ -95,45 +96,19 @@ export class PlannerTaskService {
         throw new Error('GraphClient not initialized');
       }
 
-      console.log('Fetching Planner plans via groups...');
-
-      // Get all groups the user is a member of
-      const groupsData = await this.graphClient
-        .api('/me/memberOf/microsoft.graph.group')
-        .select('id,displayName')
-        .top(100)
-        .get();
-
-      console.log(`Found ${groupsData.value?.length || 0} groups`);
-
+      const groups = await collectGraphPages<{ id: string }>(this.graphClient, '/me/memberOf/microsoft.graph.group',
+        request => request.select('id,displayName').top(100));
       const allPlans: IPlannerPlan[] = [];
-
-      // For each group, try to get its planner plans
-      for (const group of (groupsData.value || [])) {
+      for (const group of groups) {
         try {
-          const plansData = await this.graphClient
-            .api(`/groups/${group.id}/planner/plans`)
-            .get();
-
-          if (plansData.value && plansData.value.length > 0) {
-            console.log(`Found ${plansData.value.length} plan(s) in group: ${group.displayName}`);
-            
-            const plans = plansData.value.map((plan: IGraphPlannerPlan) => ({
-              id: plan.id,
-              title: plan.title,
-              owner: plan.owner || group.id,
-              createdDateTime: plan.createdDateTime
-            }));
-
-            allPlans.push(...plans);
-          }
-        } catch (groupError) {
-          // Some groups might not have Planner enabled, that's okay
-          console.log(`No Planner found for group ${group.displayName}:`, groupError);
+          const plans = await collectGraphPages<IGraphPlannerPlan>(this.graphClient, `/groups/${group.id}/planner/plans`);
+          allPlans.push(...plans.map(plan => ({ ...plan, owner: plan.owner || group.id })));
+        } catch (error) {
+          if (error instanceof GraphRequestCancelled) throw error;
+          // Some groups do not have Planner enabled.
+          console.debug('Could not read Planner plans for a group.');
         }
       }
-
-      console.log(`Total Planner plans found: ${allPlans.length}`);
       return allPlans;
     } catch (error) {
       console.error('Error fetching Planner plans:', error);
@@ -153,12 +128,14 @@ export class PlannerTaskService {
    */
   public async getTasks(
     planId: string,
-    startDate: Date,
-    endDate: Date,
+    startDate: Date | undefined,
+    endDate: Date | undefined,
     assignedToMeOnly: boolean = false,
     showCompleted: boolean = true,
     source: ICalendarSource,
-    showSourceLogo: boolean = true
+    showSourceLogo: boolean = true,
+    onPage?: (events: IEvent[]) => void,
+    getUserId: () => Promise<string | undefined> = async () => (await this.getCurrentUserId()) || undefined
   ): Promise<IEvent[]> {
     try {
       if (!this.graphClient) {
@@ -166,41 +143,21 @@ export class PlannerTaskService {
         return [];
       }
 
-      console.log('Fetching Planner tasks for plan:', planId);
-
-      const data = await this.graphClient
-        .api(`/planner/plans/${planId}/tasks`)
-        .get();
-
-      console.log('Planner tasks response:', data);
-
-      let tasks = data.value || [];
-
-      // Filter by assignment if requested
-      if (assignedToMeOnly) {
-        const userId = await this.getCurrentUserId();
-        if (userId) {
-          tasks = tasks.filter((task: IGraphPlannerTask) => {
-            return task.assignments && userId in task.assignments;
-          });
-        }
-      }
-
-      // Filter by completion status if requested
-      if (!showCompleted) {
-        tasks = tasks.filter((task: IGraphPlannerTask) => task.percentComplete < 100);
-      }
-
-      // Map to appointments and filter by date range
-      const appointments = tasks
-        .map((task: IGraphPlannerTask) => this.mapPlannerTaskToAppointment(task, planId, source, showSourceLogo))
-        .filter((apt: IEvent | null): apt is IEvent => apt !== null);
-
-      // Client-side date filtering (only include tasks with dates in range)
-      return appointments.filter((apt: IEvent) => {
-        const aptDate = new Date(apt.start);
-        return aptDate >= startDate && aptDate <= endDate;
+      const events: IEvent[] = [];
+      let user: Promise<string | undefined> | undefined;
+      await forEachGraphPage<IGraphPlannerTask>(this.graphClient, `/planner/plans/${planId}/tasks`, async page => {
+        if (assignedToMeOnly) user = user || getUserId();
+        const userId = await user;
+        const appointments = page
+          .filter(task => (!userId || !!task.assignments && userId in task.assignments) && (showCompleted || task.percentComplete < 100))
+          .map(task => this.mapPlannerTaskToAppointment(task, planId, source, showSourceLogo))
+          .filter((event): event is IEvent => event !== null)
+          .filter(event => (!startDate || Date.parse(event.start) >= startDate.getTime()) &&
+            (!endDate || Date.parse(event.start) < endDate.getTime()));
+        events.push(...appointments);
+        onPage?.(appointments);
       });
+      return events;
     } catch (error) {
       console.error('Error fetching Planner tasks:', error);
       throw error;
@@ -238,7 +195,6 @@ export class PlannerTaskService {
       startDate = new Date(endDate);
     } else {
       // No dates at all - skip this task
-      console.log('Skipping Planner task without dates:', task.title);
       return null;
     }
 

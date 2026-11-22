@@ -10,96 +10,32 @@ Read the common and applicable source section in [Sources and permissions](sourc
 
 ### Coordination contract
 
-- `MyCalendars` **MUST** coordinate source loading, range state, deduplication, source status, search state, and renderer selection.
-- Source families **MUST** load independently so a failure in one family does not remove valid results from another.
-- A failed source/month combination **MUST** remain eligible for retry.
-- A manual refresh **MUST** rediscover applicable Exchange mailbox rules before invalidating range state and forcing source retrieval. With administrator caching enabled, existing appointments **MUST** remain visible until successful replacements are available; without it, reset behavior clears them.
-- Loaded discovery and navigation-range data **MUST NOT** be persisted. When the administrator enables appointment caching, normalized events and successful source/month state for the initial seven-month range **MAY** be persisted in browser `localStorage` under DEC-017.
-- Results from an obsolete load generation **MUST NOT** be merged into current state.
+- The web part **MUST** share one scheduler for Graph retrieval, discovery and settings requests. Each HTTP operation takes one slot, including a continuation page or a batch envelope. The composition root applies the accepted administrator limit.
+- `CalendarRangeCoordinator` **MUST** schedule independent source/month work, reuse pending work, and let a failed source/month retry. Navigation changes priority without invalidating the source generation.
+- `MyCalendars` **MUST** keep the current date, view and search state when pages arrive. An obsolete configuration generation **MUST NOT** publish results or write to the current cache.
 
-### Initialization and settings hand-off
+### Initialization and navigation
 
-1. `MyCalendarsWebPart.onInit` creates `SettingsStorageService` and attempts to obtain an `MSGraphClientV3`.
-2. Administrator and personal settings are loaded, audiences are evaluated, applicable Exchange all-calendar rules are discovered, and `resolveCalendarSettings` produces deduplicated effective settings.
-3. SPFx calls `render`; React mounts only after `onInit` completes.
-4. `MyCalendars` creates source-service instances and starts enabled service-family loads independently.
-5. Source services map external values to `ICalendarEvent`.
-6. The coordinator adds source identity and presentation metadata, deduplicates events, and selects Day, Week, Month, or Search rendering.
+1. The web part loads administrator and personal settings, evaluates audiences, discovers applicable administrator Exchange mailbox rules, and resolves effective settings before React mounts.
+2. After mounting, the coordinator starts two normal-priority background jobs. Forward loading starts with the current month and includes 13 full months ahead. Backward loading starts with the previous month and includes 13 full months behind. The ranges share a boundary without overlapping. Dates use local months with an inclusive start and exclusive end.
+3. Exchange and Microsoft 365 Group retrieval sends one date window per month. SharePoint, Planner and Teams Shifts each retrieve a collection per source and reuse it across month consumers. Discovery and sources can progress independently. Results from each successful page become available progressively.
+4. Navigation prioritizes the selected month and adjacent months actually used by the renderer. The coordinator promotes queued and future pages of existing work, demotes obsolete visible work, and fills skipped months at normal priority. Empty successful results count as complete. Failed ranges remain eligible for retry.
 
-The detailed persistence and resolution flow is in [Settings and policy](settings-and-policy.md).
+### Browser appointment cache
 
-### Reset load
+- `enableCache` and `cacheDurationMinutes` are administrator controls. The cache defaults to enabled with a ten-minute freshness threshold. Duration is normalized to 1–60 minutes. Expiry by itself schedules no network activity.
+- IndexedDB stores all successfully obtained normalized appointments, including navigation ranges and results outside loaded months from a Graph collection. Each entry is isolated by tenant, user, web-part instance and a signature of result-affecting settings. Discovery data and personal settings have separate lifetimes and storage.
+- Fresh, complete results suppress retrieval. Stale or partial results remain available while their queries are fetched again. Each successful page can be stored independently. A request becomes complete only after the final page succeeds. A successful replacement can be empty; failure preserves usable previous and partial data.
+- Compatible legacy `localStorage` rows migrate on successful IndexedDB commit. Legacy rows from previously unpaged endpoints are used as stale display data. With storage disabled, the instance clears its browser appointment cache. Unavailable or full storage falls back to runtime appointments.
+- Manual refresh rediscovers applicable administrator Exchange mailbox rules first, then forces the initial and visible ranges. With caching enabled, results remain visible until successfully replaced. Without caching, refresh clears results first.
 
-For a reset load, the coordinator:
+### Identity and failures
 
-1. increments the load generation and load ID;
-2. clears runtime month/source caches, discovery promises, and the retained Teams Shifts service;
-3. hydrates compatible cached appointments before retrieval when administrator caching is enabled;
-4. creates source-service instances and calculates the initial seven-month request;
-5. starts one asynchronous task per enabled service family needing retrieval;
-6. loads independent configured sources in parallel where implemented;
-7. normalizes presentation metadata and merges results by `sourceId:eventId`;
-8. marks and optionally persists a source/month set only after that request succeeds; and
-9. ignores append or mark operations from an obsolete load ID or generation.
-
-**Fact:** Exchange is always considered enabled because current-user calendars are automatic. Other service families are enabled by configured enabled sources or their source-type automatic-loading flag.
-
-**Fact:** the initial range begins at the first day of the month three months before the current month and ends at the first day of the month four months after it.
-
-### Visible-range loading
-
-Navigation loads missing months that intersect the visible Day, Week, or Month range. Visible-range loads are serialized through `rangeLoadPromise`. A request includes only service families with at least one known source missing a visible month.
-
-Only successful source/month combinations enter the runtime range cache. Failed combinations remain unmarked and can therefore be retried by later navigation or refresh.
-
-### Administrator assignment identity
-
-CalendarSettingsService combines matching audience assignments by stable mailbox/calendar or site/list identity before loading. Each effective source has one ID, strongest visibility policy and combined provenance. Administrator sources supersede matching personal entries and automatic current-user Exchange rows, including disabled Available sources; personal records remain persisted. Automatic mailbox discovery errors remain visible in Exchange status and do not become successful range-cache entries.
-
-### Runtime-only caches
-
-| Cache/state | Owner | Lifetime/invalidation | Failure behavior |
-| --- | --- | --- | --- |
-| Appointments | `MyCalendars.state` | Component lifetime; replaced on settings reset and retained during manual refresh | Successful partial results remain |
-| Loaded months by source | `MyCalendars` | Component cache generation; cleared on reset/settings reload | Only successes are marked |
-| Known source IDs by service | `MyCalendars` | Component cache generation | Includes service sentinels for empty families |
-| Exchange calendar discovery promise | `MyCalendars` | Until reset; cleared after discovery failure | Later request can retry |
-| Planner plan discovery promise | `MyCalendars` | Until reset; cleared after discovery failure | Later request can retry |
-| Unified-group and joined-Team discovery promises | `MyCalendars` | Until reset; cleared after relevant failure | Later request can retry |
-| Joined Teams in `TeamsShiftsService` | Retained service instance | Until reset; rejected promise is cleared | Later request can retry |
-| Planner current user ID | One `PlannerTaskService` instance | One load invocation because the service is recreated | Failure returns `null`; assigned-only filtering is then not applied |
-| Search index text | Each in-memory event | Appointment lifetime | Recomputed on demand if absent |
-
-### Optional persistent appointment cache
-
-- Administrator settings `enableCache` and `cacheDurationMinutes` exclusively control the feature. Defaults are enabled and ten minutes; duration is normalized to 1–60 whole minutes.
-- The cache key includes normalized tenant, user, and web-part instance identity. New entries have no schema version; a schema-version field in an existing entry is ignored. The entry carries a stable signature of result-affecting effective settings and is validated structurally as one unit.
-- Cached canonical events are always reprocessed for presentation, search indexing, and deduplication. Fresh source/month segments suppress GET requests; stale segments remain visible while they refresh in the background.
-- Cache expiry by itself **MUST NOT** schedule retrieval while the component remains mounted. When a later load finds stale segments, that retrieval **MUST** use the existing loading and toolbar-status workflow.
-- A successful source GET replaces that source/month segment, including with an empty result. A failed GET retains the prior segment and remains visibly failed.
-- Persistent segments are restricted to the moving initial seven-month range. Visible months outside that range remain runtime-only.
-- Manual refresh keeps appointments visible, bypasses freshness, and refreshes the initial and currently visible ranges. Disabling cache removes the current identity's entry. Any read, parse, identity, signature, segment, or event validation failure rejects the entire entry and attempts to remove it; no partial data is hydrated. Normal source loading rebuilds the cache. Unavailable, read-only, or full storage degrades to uncached loading, and physical removal is best-effort.
-
-### Identity and partial failures
-
-**Fact:** results are deduplicated by `sourceId:event.id`.
-
-The coordinator exposes `loading`, `ready`, or `error` per service family, not per configured source. The displayed message is a generic family-level summary; detailed errors go to the browser console.
-
-Independent successes are retained, but isolation inside a family varies:
-
-- Exchange isolates individual automatic calendars and manual sources. Automatic calendar discovery and configured sources load independently, so discovery failure does not skip stored sources.
-- SharePoint isolates configured list sources.
-- Planner isolates plan task loads; automatic plan-discovery failure fails that service family.
-- Unified Groups isolates group event loads; group or Team discovery failure affects automatic mode.
-- Teams Shifts can lose earlier Team results when a later non-404 Team request fails.
-- ICS performs no runtime retrieval and is marked ready.
+The coordinator deduplicates appointments by source and event ID. Automatic discovery and configured sources load independently. Stable source identity, policy precedence and administrator assignment provenance are resolved by CalendarSettingsService. Source-family status is derived from pending and failed work. Relevant visible failures and discovery errors remain visible after the toolbar returns to Refresh.
 
 ### Loading verification focus
 
-Focused unit tests cover cache-duration normalization, fresh/stale boundaries, versionless persistence, successful empty segment replacement, structural rejection, compatibility with an existing version field, best-effort removal, and recovery after browser-storage failures. Source orchestration and host storage behavior still require manual verification.
-
-Pure Exchange orchestration tests cover failed automatic discovery alongside configured sources, individual event failures, retained successful results, and success-only completion callbacks. Settings-discovery helper tests cover failure completion and obsolete-response rejection. Full coordinator month caching, deduplication, other-family orchestration, UI wiring and host integration remain manual verification layers. `npm run build` is the production verification command.
+Heft/Jest covers scheduler queues, live limits, page boundaries, priority promotion, independent month jobs, stale or partial cache data, failed and empty months, and obsolete generations. Browser storage and live SPFx host behavior require browser and host verification.
 
 ## Rendering and interaction
 

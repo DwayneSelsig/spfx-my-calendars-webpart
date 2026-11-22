@@ -5,7 +5,8 @@ import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration
 } from '@microsoft/sp-property-pane';
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import { GraphRequestExecutor } from './services/GraphRequestExecutor';
+import { GraphRequestScheduler, GraphRequestScope } from './services/GraphRequestScheduler';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 
@@ -51,7 +52,12 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   private _matchedGroupIds: Set<string> = new Set<string>();
   private _storageService: SettingsStorageService | null = null;
   private _themeVariant: IReadonlyTheme | undefined;
-  private _graphClient: MSGraphClientV3 | undefined;
+  private readonly _scheduler = new GraphRequestScheduler();
+  private readonly _graphClient = new GraphRequestExecutor(() => this.context.msGraphClientFactory.getClient('3'), this._scheduler);
+  private readonly _graphLifetime = new GraphRequestScope();
+  private readonly _blockingSettingsScope = new GraphRequestScope();
+  private _discoveryScope?: GraphRequestScope;
+  private readonly _settingsGraph = this._graphClient.scoped(this._graphLifetime);
   private _audienceService: AudienceService | null = null;
   private _adminLoadNotice: string | undefined;
   private _mailboxDiscoveries: IExchangeMailboxDiscovery[] = [];
@@ -82,6 +88,8 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         onResetSettings: this.handleResetUserSettings,
         onRefreshAdminSources: this.handleRefreshAdminSources,
         context: this.context,
+        graph: this._graphClient,
+        settingsGraph: this._settingsGraph,
         tenantId: this.getAadContextId(this.context.pageContext.aadInfo?.tenantId),
         userId: this.getAadContextId(this.context.pageContext.aadInfo?.userId),
         webPartInstanceId: this.instanceId
@@ -93,20 +101,17 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   protected async onInit(): Promise<void> {
-    this._storageService = new SettingsStorageService(this.context.msGraphClientFactory);
-    try {
-      this._graphClient = await this.context.msGraphClientFactory.getClient('3');
-      this._audienceService = new AudienceService(this._graphClient);
-    } catch (error) {
-      console.error('Failed to initialize Microsoft Graph client:', error);
-    }
-
     const adminLoadResult = loadAdminWebPartSettings({
       current: this.properties.adminSettings,
       legacy: this.properties.settings
     });
     this._adminSettings = adminLoadResult.settings;
     this._adminLoadNotice = adminLoadResult.notice;
+    this._scheduler.setLimit(this._adminSettings.maxConcurrentGraphRequests);
+    this._blockingSettingsScope.setHigh(true);
+    const blockingSettingsGraph = this._graphClient.scoped(this._blockingSettingsScope);
+    this._storageService = new SettingsStorageService(blockingSettingsGraph);
+    this._audienceService = new AudienceService(blockingSettingsGraph);
 
     if (this._storageService) {
       const persistedUserSettings = await this._storageService.loadUserSettings();
@@ -162,6 +167,9 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   protected onDispose(): void {
     this._disposed = true;
     this._settingsGeneration++;
+    this._discoveryScope?.cancel();
+    this._blockingSettingsScope.cancel();
+    this._graphLifetime.cancel();
     this._root?.unmount();
     this._root = undefined;
   }
@@ -186,6 +194,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
                   getAdminSettings: () => this._adminSettings,
                   getAdminLoadNotice: () => this._adminLoadNotice,
                   context: this.context,
+                  graphClient: this._settingsGraph,
                   onSave: this.handleAdminSettingsSave
                 })
               ]
@@ -197,13 +206,19 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
   }
 
   private async rebuildResolvedSettings(): Promise<void> {
+    if (this._disposed) return;
     const generation = ++this._settingsGeneration;
+    this._discoveryScope?.cancel();
+    const scope = new GraphRequestScope();
+    scope.setHigh(true);
+    this._discoveryScope = scope;
     const matched = await this.resolveMatchedGroupIds();
+    if (generation !== this._settingsGeneration) return;
     const rules = (this._adminSettings.exchangeMailboxAssignments || []).filter(rule => audienceApplies(rule.audienceGroups, matched));
-    const service = this._graphClient ? new ExchangeCalendarService(this._graphClient) : undefined;
+    const service = new ExchangeCalendarService(this._graphClient.scoped(scope));
     const aliases = Array.from(new Set(this._adminSettings.assignedSources.filter(item => audienceApplies(item.audienceGroups, matched) && item.source.sourceType === 'exchange' && item.source.exchangeMailbox).map(item => item.source.exchangeMailbox as string)));
     const resolvedAliases = await Promise.all(aliases.map(async alias => {
-      try { return { alias, id: (await service?.resolveMailbox(alias))?.id }; }
+      try { return { alias, id: (await service.resolveMailbox(alias)).id }; }
       catch { return { alias, id: undefined }; }
     }));
     if (generation !== this._settingsGeneration) return;
@@ -211,7 +226,6 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     const mailboxIds = Array.from(new Set(rules.map(rule => rule.mailboxId)));
     const discoveries = await Promise.all(mailboxIds.map(async mailboxId => {
       try {
-        if (!service) throw new Error('GraphClient not initialized');
         const calendars = await service.getCalendars(mailboxId);
         return { mailboxId, sources: calendars.map(calendar => ({ sourceType: 'exchange' as const, exchangeMailbox: mailboxId,
           exchangeCalendarId: calendar.id, name: calendar.name, color: calendar.hexColor, isEnabled: true })) };
@@ -334,9 +348,10 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
     }
   }
 
-  private handleRefreshAdminSources = async (): Promise<void> => {
+  private handleRefreshAdminSources = async (): Promise<ICalendarSettings> => {
     await this.rebuildResolvedSettings();
     this.render();
+    return this._resolvedSettings;
   };
 
   private handleAdminSettingsSave = async (
@@ -371,6 +386,7 @@ export default class MyCalendarsWebPart extends BaseClientSideWebPart<IMyCalenda
         throw error;
       }
       this._adminSettings = normalized;
+      this._scheduler.setLimit(normalized.maxConcurrentGraphRequests);
       this._adminLoadNotice = undefined;
       // The SPFx hand-off succeeded. Runtime failures must not reject this save.
       try {

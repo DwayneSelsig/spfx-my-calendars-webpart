@@ -1,11 +1,11 @@
 import { defaultAdminWebPartSettings, defaultAllowedOverrides, defaultUserCalendarSettings } from '../models/ICalendarSettings';
-import { importAdminWebPartSettingsJson, normalizeAdminWebPartSettings, serializeAdminWebPartSettings } from './CalendarSettingsService';
+import { importAdminWebPartSettingsJson, normalizeAdminWebPartSettings, normalizeUserCalendarSettings, resolveCalendarSettings, serializeAdminWebPartSettings } from './CalendarSettingsService';
 
 describe('administrator configuration files', () => {
   const group = { groupId: 'group-one', displayName: 'Audience' };
   const configuration = {
     ...defaultAdminWebPartSettings,
-    organizationPrimaryColor: '#123456', plannerShowAllCalendars: false,
+    organizationPrimaryColor: '#123456', plannerShowAllCalendars: false, maxConcurrentGraphRequests: 17,
     assignedSources: [{
       assignmentId: 'assignment-one', adminSourceId: 'source-one',
       source: { name: 'Calendar', color: '#abcdef', isEnabled: true, sourceType: 'sharepoint' as const,
@@ -24,12 +24,21 @@ describe('administrator configuration files', () => {
     const json = serializeAdminWebPartSettings(configuration);
     const imported = importAdminWebPartSettingsJson(json);
     expect(imported).toEqual(normalizeAdminWebPartSettings(configuration));
+    expect(imported?.maxConcurrentGraphRequests).toBe(17);
     expect(serializeAdminWebPartSettings(imported!)).toBe(json);
   });
 
   it.each([2, 3, 4, 5, 6, 7])('accepts supported schema %s', schemaVersion => {
-    const imported = importAdminWebPartSettingsJson(JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion }));
+    const imported = importAdminWebPartSettingsJson(JSON.stringify({ ...defaultAdminWebPartSettings, schemaVersion, maxConcurrentGraphRequests: undefined }));
     expect(imported?.schemaVersion).toBe(7);
+    expect(imported?.maxConcurrentGraphRequests).toBe(10);
+  });
+
+  it('keeps the scheduler limit under administrator control', () => {
+    const personal = normalizeUserCalendarSettings({ ...defaultUserCalendarSettings, maxConcurrentGraphRequests: 20 });
+    expect(personal).not.toHaveProperty('maxConcurrentGraphRequests');
+    const settings = resolveCalendarSettings({ adminSettings: configuration, userSettings: personal!, matchedGroupIds: new Set<string>() });
+    expect(settings.maxConcurrentGraphRequests).toBe(17);
   });
 
   it.each(['{', 'null', '[]', '{}', JSON.stringify(defaultUserCalendarSettings),

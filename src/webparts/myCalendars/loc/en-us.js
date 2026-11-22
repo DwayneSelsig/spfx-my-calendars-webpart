@@ -118,6 +118,7 @@ define([], function() {
     ,"SlotDurationLabel": "Slot duration"
     ,"CacheDefaultsLabel": "Browser cache"
     ,"EnableCacheLabel": "Enable appointment cache"
+    ,"MaxConcurrentGraphRequestsLabel": "Maximum concurrent Graph requests"
     ,"CacheDurationMinutesLabel": "Cache duration (minutes)"
     ,"HomeLabel": "Home"
     ,"EditLabel": "Edit"

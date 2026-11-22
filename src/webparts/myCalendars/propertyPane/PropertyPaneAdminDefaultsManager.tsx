@@ -9,7 +9,7 @@ import { DefaultButton } from '@fluentui/react/lib/Button';
 import { Label } from '@fluentui/react/lib/Label';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { Stack } from '@fluentui/react/lib/Stack';
-import type { MSGraphClientV3 } from '@microsoft/sp-http';
+import type { GraphClient } from '../services/GraphRequestExecutor';
 import type { WebPartContext } from '@microsoft/sp-webpart-base';
 import type { IAdminWebPartSettings } from '../models/ICalendarSettings';
 import { AdminDefaultsPanel } from '../components/AdminDefaultsPanel';
@@ -22,6 +22,7 @@ export interface IPropertyPaneAdminDefaultsManagerProps {
   getAdminSettings: () => IAdminWebPartSettings;
   getAdminLoadNotice: () => string | undefined;
   context: WebPartContext;
+  graphClient?: GraphClient;
   onSave: (settings: IAdminWebPartSettings, commitProperty: (serialized: string | undefined) => void) => Promise<void>;
 }
 
@@ -33,7 +34,6 @@ interface IAdminDefaultsManagerControlProps extends IPropertyPaneAdminDefaultsMa
 interface IAdminDefaultsManagerControlState {
   isPanelOpen: boolean;
   isSaving: boolean;
-  graphClient: MSGraphClientV3 | undefined;
 }
 
 class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerControlProps, IAdminDefaultsManagerControlState> {
@@ -41,8 +41,7 @@ class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerC
     super(props);
     this.state = {
       isPanelOpen: false,
-      isSaving: false,
-      graphClient: undefined
+      isSaving: false
     };
   }
 
@@ -53,9 +52,7 @@ class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerC
 
   public componentDidMount(): void {
     this.mounted = true;
-    this.props.context.msGraphClientFactory.getClient('3')
-      .then(client => { if (this.mounted) this.setState({ graphClient: client }); })
-      .catch(error => console.error('Failed to create graph client for admin property pane:', error));
+
   }
 
   private handleSave = async (settings: IAdminWebPartSettings): Promise<void> => {
@@ -73,10 +70,10 @@ class AdminDefaultsManagerControl extends React.Component<IAdminDefaultsManagerC
   };
 
   public render(): React.ReactElement {
-    const { label, context } = this.props;
+    const { label, context, graphClient } = this.props;
     const adminSettings = this.props.getAdminSettings();
     const adminLoadNotice = this.props.getAdminLoadNotice();
-    const { isPanelOpen, graphClient, isSaving } = this.state;
+    const { isPanelOpen, isSaving } = this.state;
     const calendarLabels = getCalendarLabels();
     const defaultViewLabel = adminSettings.defaultView === 'day'
       ? calendarLabels.day

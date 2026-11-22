@@ -70,7 +70,6 @@ export class UserHelper {
       
       // Cache the result
       if (email) {
-        console.log('Fetched user id + principal name + mail from Graph API:', { email });
         this.setCachedUserEmail(email);
       }
       else {
@@ -125,7 +124,6 @@ export class UserHelper {
       if (mailboxSettings.workingHours || mailboxSettings.timeZone) {
         this.setCachedMailboxSettings(mailboxSettings);
       }
-      console.log('Fetched mailbox settings from Graph API:', { mailboxSettings });
       return mailboxSettings;
     } catch (error) {
       console.error('Failed to fetch current user mailbox settings:', error);

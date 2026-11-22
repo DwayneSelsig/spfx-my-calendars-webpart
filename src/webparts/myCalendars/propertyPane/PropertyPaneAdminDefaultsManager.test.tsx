@@ -52,8 +52,9 @@ describe('SPFx administrator defaults adapter', () => {
 
   it('preserves an open panel on rerender and creates a fresh tree after disposal', async () => {
     const getClient = jest.fn(async () => undefined);
+    const graphClient = { api: jest.fn() };
     const context = { msGraphClientFactory: { getClient }, pageContext: { cultureInfo: {} } } as unknown as WebPartContext;
-    const createField = (): ReturnType<typeof PropertyPaneAdminDefaultsManager> => PropertyPaneAdminDefaultsManager('adminSettings', { label: 'Defaults', context,
+    const createField = (): ReturnType<typeof PropertyPaneAdminDefaultsManager> => PropertyPaneAdminDefaultsManager('adminSettings', { label: 'Defaults', context, graphClient,
       getAdminSettings: () => defaultAdminWebPartSettings, getAdminLoadNotice: () => undefined,
       onSave: async () => undefined });
     let field = createField();
@@ -64,12 +65,14 @@ describe('SPFx administrator defaults adapter', () => {
     field = createField();
     await act(async () => { field.properties.onRender(host, undefined, commit); });
     expect(panelProps().isOpen).toBe(true);
-    expect(getClient).toHaveBeenCalledTimes(1);
+    expect(panelProps().graphClient).toBe(graphClient);
+    expect(getClient).not.toHaveBeenCalled();
     act(() => { dispose?.(); });
     expect(host.childElementCount).toBe(0);
     await act(async () => { field.properties.onRender(host, undefined, commit); });
     expect(panelProps().isOpen).toBe(false);
-    expect(getClient).toHaveBeenCalledTimes(2);
+    expect(panelProps().graphClient).toBe(graphClient);
+    expect(getClient).not.toHaveBeenCalled();
   });
 
   it('rejects missing SPFx callbacks instead of pretending a save succeeded', async () => {

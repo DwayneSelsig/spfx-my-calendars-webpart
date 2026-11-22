@@ -1,3 +1,4 @@
+import type { GraphClient, GraphRequestExecutor } from '../services/GraphRequestExecutor';
 import { CalendarViewType, ICalendarSettings } from '../models/ICalendarSettings';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 
@@ -15,8 +16,10 @@ export interface IMyCalendarsProps {
   isSettingsWritePending: boolean;
   onDefaultViewChange: (view: CalendarViewType) => Promise<void>;
   onResetSettings: () => Promise<void>;
-  onRefreshAdminSources?: () => Promise<void>;
+  onRefreshAdminSources?: () => Promise<ICalendarSettings | void>;
   context: WebPartContext;
+  graph?: GraphRequestExecutor;
+  settingsGraph?: GraphClient;
   tenantId?: string;
   userId?: string;
   webPartInstanceId: string;

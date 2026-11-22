@@ -43,12 +43,13 @@ An intention, deviation, technical-debt item, assumption, open question, or inac
 
 ## Architectural boundaries
 
-- `MyCalendarsWebPart` **MUST** own SPFx lifecycle, Graph-client composition, settings composition, audience evaluation, theme projection, and persistence callbacks.
+- `MyCalendarsWebPart` **MUST** own SPFx lifecycle, Graph-client and per-instance scheduler composition, settings composition, audience evaluation, theme projection, and persistence callbacks.
 - `CalendarSettingsService` **MUST** own settings validation, migration, normalization, precedence, and persisted/effective conversion.
 - `SettingsStorageService` **MUST** own OneDrive App Folder access and **MUST NOT** own policy resolution.
 - `AudienceService` **MUST** own audience discovery and membership evaluation and **MUST NOT** decide source-policy effects.
 - A source service **MUST** own external access and conversion to `ICalendarEvent`. It **MUST NOT** decide policy, persistence, or rendering.
-- `MyCalendars` **MUST** coordinate loading, range state, deduplication, service status, search state, renderer selection, and the optional administrator-controlled appointment cache.
+- Graph HTTP requests **MUST** use the per-instance `GraphRequestScheduler`, including continuation pages, discovery, batch envelopes and settings operations. The shared `GraphRequestExecutor` runs each scheduled operation on the delegated SPFx `MSGraphClientV3`. New Graph features receive a scheduled `GraphClient` from the web part's composition root.
+- `CalendarRangeCoordinator` **MUST** coordinate source/month work, deduplication, freshness, and optional IndexedDB appointment caching. `MyCalendars` **MUST** supply visible dates and own service-status presentation, search state, and renderer selection.
 - A renderer **MUST** display prepared local events and **MUST NOT** access storage or source APIs.
 - Administrator and personal settings panels **MAY** edit isolated drafts. The web part **MUST** own accepted persistence callbacks. SPFx is the sole administrator property writer; SettingsStorageService owns personal OneDrive I/O.
 - Lifecycle-dependent writes **MUST** be awaited. Personal edits **SHOULD** preview optimistically; failed storage **MUST** restore confirmed settings with visible feedback. Runtime failures after successful storage **MUST NOT** be labelled persistence failures.
