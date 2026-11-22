@@ -293,6 +293,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 - **Status:** Decision
 - Organization color, source-type logo defaults, automatic Planner/Group/Shifts loading defaults, and the Planner automatic assigned-to-me default are administrator-configurable product settings.
+- Automatic Group/Teams calendar and Teams Shifts loading default to off; explicit administrator and personal choices retain their existing precedence.
 - Presence only in model/default values does not satisfy the required administrator UI.
 
 ### DEC-021 — Persisted settings version compatibility

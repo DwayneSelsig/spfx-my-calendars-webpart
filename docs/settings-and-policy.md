@@ -64,8 +64,8 @@ Precedence is not uniform for every field:
 | Source-type `showSourceLogo` fields | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Event decoration | Five source types |
 | `plannerShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Planner auto mode | Suppresses explicit Planner sources |
 | `plannerShowAllAssignedToMeOnly` | Admin `false` | **No, deviation** | Yes in auto mode | Personal → admin → default | Planner auto filter | Does not affect explicit sources |
-| `unifiedGroupShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Group auto mode | Suppresses explicit sources |
-| `teamsShiftsShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Shifts auto mode | Suppresses explicit sources |
+| `unifiedGroupShowAllCalendars` | Admin `false` | **No, deviation** | Yes | Personal → admin → default | Group auto mode | Suppresses explicit sources |
+| `teamsShiftsShowAllCalendars` | Admin `false` | **No, deviation** | Yes | Personal → admin → default | Shifts auto mode | Suppresses explicit sources |
 | `assignedSources` | Admin list | Yes | Currently modifiable/removable | Audience → personal override | Resolver/coordinator | Per-assignment visibility and shared per-field override permissions are enforced |
 | `icsCatalog` | Admin list | Yes | Opens subscription flow directly | Audience filter only | Settings panel | Not a runtime event source |
 | `personalSources` | Personal list | No | Yes | Appended after admin sources | Resolver/coordinator | User-owned |

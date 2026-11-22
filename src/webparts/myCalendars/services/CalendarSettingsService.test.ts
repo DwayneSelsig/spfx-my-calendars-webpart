@@ -9,6 +9,21 @@ import {
 } from './CalendarSettingsService';
 
 describe('administrator settings normalization and loading', () => {
+  it('defaults group and shifts automatic loading off while preserving explicit choices', () => {
+    const fields = { unifiedGroupShowAllCalendars: false, teamsShiftsShowAllCalendars: false };
+    const admin = normalizeAdminWebPartSettings({ ...defaultAdminWebPartSettings, unifiedGroupShowAllCalendars: undefined, teamsShiftsShowAllCalendars: undefined });
+    const user = normalizeUserCalendarSettings({ ...defaultUserCalendarSettings });
+    if (!admin || !user) throw new Error('Expected settings to normalize.');
+    expect(admin).toMatchObject(fields);
+    expect(resolveCalendarSettings({ adminSettings: admin, userSettings: user, matchedGroupIds: new Set() })).toMatchObject(fields);
+
+    const enabledAdmin = normalizeAdminWebPartSettings({ ...admin, unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true });
+    if (!enabledAdmin) throw new Error('Expected administrator settings to normalize.');
+    expect(resolveCalendarSettings({ adminSettings: enabledAdmin, userSettings: user, matchedGroupIds: new Set() })).toMatchObject({ unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true });
+    expect(resolveCalendarSettings({ adminSettings: enabledAdmin, userSettings: { ...user, ...fields }, matchedGroupIds: new Set() })).toMatchObject(fields);
+    expect(resolveCalendarSettings({ adminSettings: admin, userSettings: { ...user, unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true }, matchedGroupIds: new Set() })).toMatchObject({ unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true });
+  });
+
   it('round-trips the same ICS URL for Everyone and distinct group audiences', () => {
     const url = 'https://example.com/calendar.ics';
     const catalog = [

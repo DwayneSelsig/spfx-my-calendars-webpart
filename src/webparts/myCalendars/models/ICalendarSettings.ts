@@ -254,8 +254,8 @@ export const defaultAdminWebPartSettings: IAdminWebPartSettings = {
   teamsShiftsShowSourceLogo: true,
   plannerShowAllCalendars: true,
   plannerShowAllAssignedToMeOnly: false,
-  unifiedGroupShowAllCalendars: true,
-  teamsShiftsShowAllCalendars: true,
+  unifiedGroupShowAllCalendars: false,
+  teamsShiftsShowAllCalendars: false,
   sourceCatalog: [],
   audienceGroups: [],
   exchangeMailboxAssignments: [],
@@ -292,6 +292,6 @@ export const defaultCalendarSettings: ICalendarSettings = {
   teamsShiftsShowSourceLogo: true,
   plannerShowAllCalendars: true,
   plannerShowAllAssignedToMeOnly: false,
-  unifiedGroupShowAllCalendars: true,
-  teamsShiftsShowAllCalendars: true
+  unifiedGroupShowAllCalendars: false,
+  teamsShiftsShowAllCalendars: false
 };
