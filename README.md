@@ -57,7 +57,13 @@ npm run start    # local development
 npm run build    # production package in sharepoint/solution/
 ```
 
-See [dependency compatibility](docs/dependency-compatibility.md) before changing the build environment. Bugs and contributions are welcome through [GitHub Issues](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/issues) and pull requests.
+See [dependency compatibility](docs/dependency-compatibility.md) before changing the build environment.
+
+## Contributing
+
+Contributions are welcome! Bug fixes, improvements, and new features are always appreciated. For larger changes, please [open an issue](https://github.com/DwayneSelsig/spfx-my-calendars-webpart/issues) first to discuss your idea.
+
+Documentation is maintained separately in [M365Wizard](https://github.com/DwayneSelsig/M365wizard). Corrections and improvements can be submitted there.
 
 ## License
 
