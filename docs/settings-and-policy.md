@@ -64,8 +64,8 @@ Precedence is not uniform for every field:
 | Source-type `showSourceLogo` fields | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Event decoration | Five source types |
 | `plannerShowAllCalendars` | Admin `true` | **No, deviation** | Yes | Personal → admin → default | Planner auto mode | Suppresses explicit Planner sources |
 | `plannerShowAllAssignedToMeOnly` | Admin `false` | **No, deviation** | Yes in auto mode | Personal → admin → default | Planner auto filter | Does not affect explicit sources |
-| `unifiedGroupShowAllCalendars` | Admin `false` | **No, deviation** | Yes | Personal → admin → default | Group auto mode | Suppresses explicit sources |
-| `teamsShiftsShowAllCalendars` | Admin `false` | **No, deviation** | Yes | Personal → admin → default | Shifts auto mode | Suppresses explicit sources |
+| `unifiedGroupShowAllCalendars` | Admin `false` | Yes | Yes | Personal → admin → default | Group auto mode | Suppresses explicit sources |
+| `teamsShiftsShowAllCalendars` | Admin `false` | Yes | Yes | Personal → admin → default | Shifts auto mode | Suppresses explicit sources |
 | `assignedSources` | Admin list | Yes | Currently modifiable/removable | Audience → personal override | Resolver/coordinator | Per-assignment visibility and shared per-field override permissions are enforced |
 | `icsCatalog` | Admin list | Yes | Opens subscription flow directly | Audience filter only | Settings panel | Not a runtime event source |
 | `personalSources` | Personal list | No | Yes | Appended after admin sources | Resolver/coordinator | User-owned |
@@ -270,6 +270,7 @@ The current administrator panel exposes:
 
 - default Day, Week, or Month;
 - weekend default;
+- automatic Group/Teams calendar and Teams Shifts loading defaults;
 - slot duration;
 - preferred start time;
 - visible-hour count;
@@ -284,7 +285,7 @@ The administrator and personal Exchange flows **MUST** use the same local Fluent
 
 Exchange mailbox group headings **MUST** show the resolved mailbox display name with its primary mail address alongside it. Existing assignments and mailbox rules resolve display metadata when the panel opens; new selections reuse their resolved metadata. UPN is the fallback address when primary mail is absent. Lookup failure retains the existing heading and does not block editing. Display metadata remains panel state and does not change persistence or source identities.
 
-Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, three automatic loading flags, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
+Confirmed administrator settings missing from the UI are organization color, five source-type logo defaults, the Planner automatic loading flag, and the Planner automatic assigned-to-me filter. Their current persisted/default values remain effective.
 
 `PropertyPaneAdminDefaultsManager` adapts the panel to the SPFx custom property-field lifecycle. The property field receives the web part’s shared Graph executor for discovery, mounts/unmounts its React subtree, forwards the accepted draft to the web part, and provides the sole SPFx property writer to the webpart and reads current values through getters.
 

@@ -375,7 +375,7 @@ Only decisions are confirmed choices. An intention, deviation, technical-debt it
 
 ### DEV-003 — Administrator settings UI is incomplete
 
-- **Current state:** the model contains DEC-014 fields, but the panel does not expose them.
+- **Current state:** the panel exposes the Group/Teams and Shifts automatic loading defaults; other DEC-014 fields remain unexposed.
 - **Current effect:** hardcoded, migrated, or manually serialized values can apply and users can override supported fields.
 - **Desired state:** provide controls without silently changing confirmed precedence.
 

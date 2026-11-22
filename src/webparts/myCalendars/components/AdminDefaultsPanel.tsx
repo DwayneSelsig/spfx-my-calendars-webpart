@@ -1891,6 +1891,21 @@ export class AdminDefaultsPanel extends React.Component<IAdminDefaultsPanelProps
               }))}
             />
 
+            <Toggle
+              label={strings.ShowAllGroupsAndTeamsLabel}
+              checked={settings.unifiedGroupShowAllCalendars}
+              onText={strings.OnLabel}
+              offText={strings.OffLabel}
+              onChange={(_, checked) => this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, unifiedGroupShowAllCalendars: !!checked } }))}
+            />
+            <Toggle
+              label={strings.ShowAllTeamsShiftsLabel}
+              checked={settings.teamsShiftsShowAllCalendars}
+              onText={strings.OnLabel}
+              offText={strings.OffLabel}
+              onChange={(_, checked) => this.setSessionState(this.editSession, prev => ({ settings: { ...prev.settings, teamsShiftsShowAllCalendars: !!checked } }))}
+            />
+
             <Label>{strings.CacheDefaultsLabel}</Label>
             <Toggle
               label={strings.EnableCacheLabel}

@@ -504,6 +504,33 @@ describe('settings panels awaited lifecycle', () => {
     expect(panel.state.settings.assignedSources[0].source.exchangeMailbox).toBe(id);
   });
 
+  it('edits and saves automatic group and shifts defaults independently', async () => {
+    const { panel, props } = admin();
+    const toggle = (label: string): HTMLButtonElement => {
+      const element = Array.from(document.querySelectorAll('label')).find(item => item.textContent === label);
+      const button = element?.closest('.ms-Toggle')?.querySelector<HTMLButtonElement>('button');
+      if (!button) throw new Error('Missing toggle: ' + label);
+      return button;
+    };
+    const groups = toggle('ShowAllGroupsAndTeamsLabel');
+    const shifts = toggle('ShowAllTeamsShiftsLabel');
+    expect(groups.getAttribute('aria-checked')).toBe('false');
+    expect(shifts.getAttribute('aria-checked')).toBe('false');
+    act(() => { Simulate.click(groups); });
+    expect(panel.state.settings).toMatchObject({ unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: false });
+    act(() => { Simulate.click(shifts); });
+    await act(async () => { click('SaveLabel'); });
+    const saved = (props.onSave as jest.Mock).mock.calls[0][0];
+    expect(saved).toMatchObject({ unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true });
+    expect(resolveCalendarSettings({ adminSettings: saved, userSettings: defaultUserCalendarSettings, matchedGroupIds: new Set() })).toMatchObject({ unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true });
+    expect(resolveCalendarSettings({ adminSettings: saved, userSettings: { ...defaultUserCalendarSettings, unifiedGroupShowAllCalendars: false, teamsShiftsShowAllCalendars: false }, matchedGroupIds: new Set() })).toMatchObject({ unifiedGroupShowAllCalendars: false, teamsShiftsShowAllCalendars: false });
+    act(() => { root.render(<AdminDefaultsPanel {...props} settings={saved} isOpen={false} />); });
+    act(() => { root.render(<AdminDefaultsPanel {...props} settings={saved} isOpen />); });
+    expect(panel.state.settings).toMatchObject({ unifiedGroupShowAllCalendars: true, teamsShiftsShowAllCalendars: true });
+    expect(toggle('ShowAllGroupsAndTeamsLabel').getAttribute('aria-checked')).toBe('true');
+    expect(toggle('ShowAllTeamsShiftsLabel').getAttribute('aria-checked')).toBe('true');
+  });
+
   it('blocks duplicate administrator Save and closes only after success', async () => {
     const pending = deferred();
     const { panel, props } = admin({ onSave: jest.fn(() => pending.promise) });
