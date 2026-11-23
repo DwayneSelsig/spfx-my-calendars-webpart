@@ -70,6 +70,7 @@ Also read [Loading, range, and cache](#loading-range-and-cache) only when a view
 - The active calendar stays mounted inside a hidden container during search.
 - Clearing search restores the previous calendar view and its scroll state.
 - `SearchResultsView` groups and renders already-filtered results; it performs no source loading.
+- Each date heading includes the year using the page culture. Selecting a result opens the same event-details dialog as Day, Week, and Month; dismissing it returns focus to the result.
 
 ### Navigation and preferences
 

@@ -20,7 +20,6 @@ Administrators can assign Exchange and SharePoint calendars to Microsoft Entra g
 - View Outlook and shared Exchange calendars, Microsoft 365 Group calendars, Planner tasks, SharePoint list events, and Teams Shifts together.
 - Switch between Day, Week, and Month views, search events, and open supported items in their original applications.
 - Choose calendars, colors, visibility, and display preferences. Personal settings follow you across SharePoint sites.
-- Administrators can set automatic Group/Teams calendar and Teams Shifts loading defaults; both start off and users can choose their own settings.
 - Administrators can assign Exchange or SharePoint calendars to Microsoft Entra security groups (or Everyone), and offer ICS subscriptions to those audiences through Outlook.
 
 ### Calendar assignments

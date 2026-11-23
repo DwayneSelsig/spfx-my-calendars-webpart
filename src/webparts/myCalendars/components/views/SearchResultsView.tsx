@@ -10,6 +10,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import * as strings from 'MyCalendarsWebPartStrings';
 import { formatLocalizedString } from '../../utils/localization';
 import { formatAppointmentDuration } from './searchFormatting';
+import { EventDetailsDialog } from './EventDetailsDialog';
 
 export interface ISearchResultsViewProps {
   appointments: IEvent[];
@@ -70,8 +71,13 @@ const styles = mergeStyleSets({
     rowGap: 12
   },
   scheduleAppointment: {
+    width: '100%',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
     padding: '14px 16px',
     borderRadius: 6,
+    border: 0,
     borderLeft: '5px solid',
     backgroundColor: 'var(--white, #ffffff)',
     boxSizing: 'border-box'
@@ -95,13 +101,19 @@ const styles = mergeStyleSets({
 
 export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
   const { appointments, isLoading, searchQuery, locale } = props;
+  const [selectedEvent, setSelectedEvent] = React.useState<IEvent>();
+  const restoreFocusRef = React.useRef<HTMLButtonElement>();
+  const dismiss = React.useCallback((): void => {
+    setSelectedEvent(undefined);
+    window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
+  }, []);
 
   const weekdayFormatter = React.useMemo(
     () => new Intl.DateTimeFormat(resolveCalendarLocale(locale), { weekday: 'long' }),
     [locale]
   );
   const dateFormatter = React.useMemo(
-    () => new Intl.DateTimeFormat(resolveCalendarLocale(locale), { day: 'numeric', month: 'long' }),
+    () => new Intl.DateTimeFormat(resolveCalendarLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' }),
     [locale]
   );
 
@@ -192,10 +204,12 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                 const color = apt.colorHex ?? '#0078d4';
                 const statusPresentation = getEventStatusPresentation(apt, color, 12);
                 return (
-                <div
+                <button
+                  type="button"
                   key={apt.id}
                   className={styles.scheduleAppointment}
                   aria-label={[apt.title, getEventStatusAriaText(apt)].filter(Boolean).join(', ')}
+                  onClick={(event) => { restoreFocusRef.current = event.currentTarget; setSelectedEvent(apt); }}
                   style={{
                     borderLeftColor: color,
                     ...statusPresentation.cardStyle
@@ -232,12 +246,13 @@ export const SearchResultsView: React.FC<ISearchResultsViewProps> = (props) => {
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               );})}
             </div>
           </div>
         );
       })}
+      <EventDetailsDialog event={selectedEvent} onDismiss={dismiss} locale={locale} />
     </div>
   );
 };
